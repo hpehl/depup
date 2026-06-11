@@ -1,0 +1,18 @@
+[package]
+name = "mvnup"
+version = "0.1.0"
+edition = "2024"
+description = "Check Maven version properties against upstream registries"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+clap = { version = "4", features = ["derive"] }
+colored = "3"
+comfy-table = "7"
+quick-xml = "0.37"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+walkdir = "2"
