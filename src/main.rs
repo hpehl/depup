@@ -17,7 +17,11 @@ use registry::{CheckResult, VersionChecker};
 const MAX_CONCURRENT_REQUESTS: usize = 10;
 
 #[derive(Parser)]
-#[command(name = "mvnup", version, about = "Check Maven version properties against upstream registries")]
+#[command(
+    name = "mvnup",
+    version,
+    about = "Check Maven version properties against upstream registries"
+)]
 struct Cli {
     /// Path to the Maven project root (defaults to current directory)
     #[arg(default_value = ".")]

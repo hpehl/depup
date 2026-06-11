@@ -101,10 +101,20 @@ fn split_qualifier(version: &str) -> (&str, Option<String>) {
 
 fn is_pre_release_qualifier(lower: &str) -> bool {
     let patterns = [
-        "alpha", "beta", "rc", "cr", "snapshot", "milestone", "preview", "dev", "incubating",
+        "alpha",
+        "beta",
+        "rc",
+        "cr",
+        "snapshot",
+        "milestone",
+        "preview",
+        "dev",
+        "incubating",
     ];
     patterns.iter().any(|p| lower.contains(p))
-        || (lower.starts_with('m') && lower.len() > 1 && lower[1..].chars().all(|c| c.is_ascii_digit()))
+        || (lower.starts_with('m')
+            && lower.len() > 1
+            && lower[1..].chars().all(|c| c.is_ascii_digit()))
 }
 
 pub fn is_newer(current: &str, latest: &str) -> bool {

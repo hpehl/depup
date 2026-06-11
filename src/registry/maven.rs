@@ -57,11 +57,7 @@ impl VersionChecker for MavenCentralChecker {
 }
 
 impl MavenCentralChecker {
-    async fn fetch_latest(
-        &self,
-        group_id: &str,
-        artifact_id: &str,
-    ) -> Result<String> {
+    async fn fetch_latest(&self, group_id: &str, artifact_id: &str) -> Result<String> {
         let query = format!("g:\"{}\" AND a:\"{}\"", group_id, artifact_id);
 
         let resp = self
@@ -84,10 +80,9 @@ impl MavenCentralChecker {
             anyhow::bail!("Maven Central returned HTTP {status}");
         }
 
-        let response: SearchResponse = serde_json::from_str(&body)
-            .with_context(|| {
-                format!("Failed to parse response for {}:{}", group_id, artifact_id)
-            })?;
+        let response: SearchResponse = serde_json::from_str(&body).with_context(|| {
+            format!("Failed to parse response for {}:{}", group_id, artifact_id)
+        })?;
 
         let versions = parse_versions(&response, self.include_pre_releases);
 

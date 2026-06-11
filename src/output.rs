@@ -40,10 +40,7 @@ pub fn print_table(results: &[CheckResult], verbose: bool) {
             Cell::new(&status_text),
         ];
         if verbose {
-            let artifact = r
-                .artifact
-                .as_deref()
-                .unwrap_or("");
+            let artifact = r.artifact.as_deref().unwrap_or("");
             row.push(Cell::new(artifact));
         }
         table.add_row(row);

@@ -34,12 +34,7 @@ pub fn discover(root: &Path) -> Result<Vec<ArtifactMapping>> {
 
     let mut mappings = Vec::new();
 
-    extract_mappings(
-        &root_project,
-        &root_pom_path,
-        &properties,
-        &mut mappings,
-    );
+    extract_mappings(&root_project, &root_pom_path, &properties, &mut mappings);
 
     for pom_path in &child_pom_files {
         let project = pom::parse_pom(pom_path)
@@ -171,19 +166,13 @@ mod tests {
     fn resolve_property_value() {
         let mut props = HashMap::new();
         props.insert("project.groupId".to_string(), "org.example".to_string());
-        assert_eq!(
-            resolve_value("${project.groupId}", &props),
-            "org.example"
-        );
+        assert_eq!(resolve_value("${project.groupId}", &props), "org.example");
     }
 
     #[test]
     fn resolve_missing_property_returns_raw() {
         let props = HashMap::new();
-        assert_eq!(
-            resolve_value("${missing.prop}", &props),
-            "${missing.prop}"
-        );
+        assert_eq!(resolve_value("${missing.prop}", &props), "${missing.prop}");
     }
 
     #[test]
@@ -200,7 +189,10 @@ mod tests {
         assert!(names.contains(&"version.compiler.plugin"));
         assert!(names.contains(&"version.junit"));
 
-        let junit = mappings.iter().find(|m| m.property.name == "version.junit").unwrap();
+        let junit = mappings
+            .iter()
+            .find(|m| m.property.name == "version.junit")
+            .unwrap();
         assert_eq!(junit.group_id, "org.junit.jupiter");
         assert_eq!(junit.artifact_id, "junit-jupiter");
         assert_eq!(junit.property.current_value, "5.10.0");

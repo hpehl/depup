@@ -36,8 +36,7 @@ impl std::fmt::Display for ArtifactKind {
 pub fn parse_pom(path: &Path) -> Result<Project> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read {}", path.display()))?;
-    parse_pom_str(&content)
-        .with_context(|| format!("Failed to parse {}", path.display()))
+    parse_pom_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 pub fn parse_pom_str(xml: &str) -> Result<Project> {
@@ -57,12 +56,20 @@ pub fn parse_pom_str(xml: &str) -> Result<Project> {
 
                 if is_dependency_element(&path_stack) {
                     artifact_stack.push((
-                        Artifact { group_id: None, artifact_id: None, version: None },
+                        Artifact {
+                            group_id: None,
+                            artifact_id: None,
+                            version: None,
+                        },
                         ArtifactKind::Dependency,
                     ));
                 } else if is_plugin_element(&path_stack) {
                     artifact_stack.push((
-                        Artifact { group_id: None, artifact_id: None, version: None },
+                        Artifact {
+                            group_id: None,
+                            artifact_id: None,
+                            version: None,
+                        },
                         ArtifactKind::Plugin,
                     ));
                 }
@@ -103,9 +110,7 @@ pub fn parse_pom_str(xml: &str) -> Result<Project> {
                 path_stack.pop();
             }
             Ok(Event::Text(e)) => {
-                let unescaped = e
-                    .unescape()
-                    .context("Failed to unescape XML text")?;
+                let unescaped = e.unescape().context("Failed to unescape XML text")?;
                 text_buf.push_str(&unescaped);
             }
             Ok(Event::Eof) => break,
@@ -185,7 +190,10 @@ mod tests {
         let project = parse_pom_str(xml).unwrap();
 
         assert_eq!(
-            project.properties.get("version.wildfly").map(|s| s.as_str()),
+            project
+                .properties
+                .get("version.wildfly")
+                .map(|s| s.as_str()),
             Some("35.0.0.Final")
         );
         assert_eq!(
@@ -289,10 +297,7 @@ mod tests {
         let project = parse_pom_str(xml).unwrap();
         assert_eq!(project.artifacts.len(), 2);
         assert_eq!(project.artifacts[0].1, ArtifactKind::Dependency);
-        assert_eq!(
-            project.artifacts[0].0.artifact_id.as_deref(),
-            Some("guava")
-        );
+        assert_eq!(project.artifacts[0].0.artifact_id.as_deref(), Some("guava"));
         assert_eq!(project.artifacts[1].1, ArtifactKind::Plugin);
     }
 }
