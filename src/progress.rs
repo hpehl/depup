@@ -3,10 +3,8 @@ use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
 use std::time::Duration;
 use tokio::time::Instant;
 
-use crate::pom::ArtifactKind;
-use crate::registry::CheckResult;
+use crate::registry::{CheckResult, CheckerKind};
 
-const KIND_WIDTH: usize = 12;
 const NAME_WIDTH: usize = 40;
 const ARTIFACT_WIDTH: usize = 50;
 const VERSION_WIDTH: usize = 14;
@@ -24,7 +22,7 @@ pub fn done(instant: Instant) {
 
 #[derive(Clone)]
 pub struct Progress {
-    kind: String,
+    kind: CheckerKind,
     name: String,
     artifact: String,
     current_version: String,
@@ -34,14 +32,14 @@ pub struct Progress {
 impl Progress {
     pub fn join(
         multi_progress: &MultiProgress,
-        kind: &ArtifactKind,
+        kind: CheckerKind,
         name: &str,
         artifact: &str,
         current_version: &str,
     ) -> Self {
         let bar = multi_progress.add(Self::spinner());
         let progress = Self {
-            kind: kind.to_string(),
+            kind,
             name: name.to_string(),
             artifact: artifact.to_string(),
             current_version: current_version.to_string(),
@@ -54,14 +52,9 @@ impl Progress {
         progress
     }
 
-    pub fn hidden(
-        kind: &ArtifactKind,
-        name: &str,
-        artifact: &str,
-        current_version: &str,
-    ) -> Self {
+    pub fn hidden(kind: CheckerKind, name: &str, artifact: &str, current_version: &str) -> Self {
         Self {
-            kind: kind.to_string(),
+            kind,
             name: name.to_string(),
             artifact: artifact.to_string(),
             current_version: current_version.to_string(),
@@ -97,6 +90,12 @@ impl Progress {
                 style("\u{2717}").red().bold(),
                 style(err).red()
             ));
+        } else if result.skipped {
+            self.bar.finish_with_message(format!(
+                "{} {columns}  {}",
+                style("-").dim().bold(),
+                style("skipped").dim()
+            ));
         } else if result.outdated {
             let latest = result.latest_version.as_deref().unwrap_or("?");
             self.bar.finish_with_message(format!(
@@ -118,23 +117,20 @@ impl Progress {
     }
 
     fn format_columns(&self) -> String {
-        let kind = truncate_pad(&self.kind, KIND_WIDTH);
-        let name = truncate_pad(&self.name, NAME_WIDTH);
-        let artifact = truncate_pad(&self.artifact, ARTIFACT_WIDTH);
-        let version = truncate_pad(&self.current_version, VERSION_WIDTH);
-        format!(
-            "{}  {}  {}  {}",
-            style(kind).dim(),
-            style(name).cyan(),
-            style(artifact).dim(),
-            style(version).white(),
-        )
+        let name = truncate_middle_pad(&self.name, NAME_WIDTH);
+        let artifact = truncate_middle_pad(&self.artifact, ARTIFACT_WIDTH);
+        let version = truncate_middle_pad(&self.current_version, VERSION_WIDTH);
+        let styled_name = self.kind.color().apply_to(name);
+        format!("{}  {}  {}", styled_name, artifact, style(version).white(),)
     }
 }
 
-fn truncate_pad(s: &str, width: usize) -> String {
+fn truncate_middle_pad(s: &str, width: usize) -> String {
     if s.len() > width {
-        format!("{}\u{2026}", &s[..width - 1])
+        let ellipsis = "\u{2026}";
+        let half = (width - 1) / 2;
+        let remainder = width - 1 - half;
+        format!("{}{ellipsis}{}", &s[..half], &s[s.len() - remainder..])
     } else {
         format!("{:<width$}", s, width = width)
     }

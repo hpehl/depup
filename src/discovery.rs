@@ -23,6 +23,7 @@ pub struct ArtifactMapping {
 
 pub struct DiscoveryResult {
     pub mappings: Vec<ArtifactMapping>,
+    pub orphan_properties: Vec<VersionProperty>,
     pub repositories: Vec<Repository>,
 }
 
@@ -55,19 +56,33 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     }
 
     deduplicate(&mut mappings);
-    mappings.sort_by(|a, b| a.kind.cmp(&b.kind).then(a.property.name.cmp(&b.property.name)));
+    mappings.sort_by(|a, b| {
+        a.kind
+            .cmp(&b.kind)
+            .then(a.property.name.cmp(&b.property.name))
+    });
     deduplicate_repos(&mut repositories);
+
+    let matched_names: std::collections::HashSet<&str> =
+        mappings.iter().map(|m| m.property.name.as_str()).collect();
+    let orphan_properties: Vec<VersionProperty> = properties
+        .iter()
+        .filter(|(name, _)| !matched_names.contains(name.as_str()))
+        .filter(|(name, _)| !name.starts_with("project."))
+        .map(|(name, value)| VersionProperty {
+            name: name.clone(),
+            current_value: resolve_value(value, &properties),
+        })
+        .collect();
 
     Ok(DiscoveryResult {
         mappings,
+        orphan_properties,
         repositories,
     })
 }
 
-fn inject_project_properties(
-    project: &pom::Project,
-    properties: &mut HashMap<String, String>,
-) {
+fn inject_project_properties(project: &pom::Project, properties: &mut HashMap<String, String>) {
     if let Some(gid) = &project.group_id {
         properties.insert("project.groupId".to_string(), gid.clone());
     }

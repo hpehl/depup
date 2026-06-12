@@ -7,17 +7,17 @@ use crate::constants::{HTTP_TIMEOUT_SECS, MAVEN_CENTRAL_URL};
 use crate::discovery::ArtifactMapping;
 use crate::error::MvnupError;
 use crate::pom::{ArtifactKind, Repository, RepositoryKind};
-use crate::registry::CheckResult;
+use crate::registry::{CheckResult, CheckerKind};
 use crate::version::{self, Version};
 
 pub struct MavenChecker {
     client: reqwest::Client,
-    include_pre_releases: bool,
+    releases_only: bool,
     repositories: Vec<Repository>,
 }
 
 impl MavenChecker {
-    pub fn new(include_pre_releases: bool, repositories: Vec<Repository>) -> Self {
+    pub fn new(releases_only: bool, repositories: Vec<Repository>) -> Self {
         let client = reqwest::Client::builder()
             .user_agent(format!("mvnup/{}", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
@@ -25,7 +25,7 @@ impl MavenChecker {
             .expect("Failed to create HTTP client");
         Self {
             client,
-            include_pre_releases,
+            releases_only,
             repositories,
         }
     }
@@ -51,9 +51,33 @@ impl MavenChecker {
     }
 }
 
+fn checker_kind(kind: ArtifactKind) -> CheckerKind {
+    match kind {
+        ArtifactKind::Dependency => CheckerKind::Dependency,
+        ArtifactKind::Plugin => CheckerKind::Plugin,
+    }
+}
+
 impl MavenChecker {
     pub async fn check(&self, mapping: &ArtifactMapping) -> Result<CheckResult> {
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
+        let kind = checker_kind(mapping.kind);
+
+        if self.releases_only
+            && let Some(parsed) = Version::parse(&mapping.property.current_value)
+            && parsed.is_pre_release()
+        {
+            return Ok(CheckResult {
+                property_name: mapping.property.name.clone(),
+                current_version: mapping.property.current_value.clone(),
+                latest_version: None,
+                outdated: false,
+                skipped: true,
+                error: None,
+                artifact: Some(artifact),
+                kind,
+            });
+        }
 
         // Try Maven Central first
         let central_result = self
@@ -72,19 +96,23 @@ impl MavenChecker {
                             current_version: mapping.property.current_value.clone(),
                             latest_version: None,
                             outdated: false,
+                            skipped: false,
                             error: Some(e.to_string()),
                             artifact: Some(artifact),
+                            kind,
                         }),
                         Ok(_) => Ok(CheckResult {
                             property_name: mapping.property.name.clone(),
                             current_version: mapping.property.current_value.clone(),
                             latest_version: None,
                             outdated: false,
+                            skipped: false,
                             error: Some(format!(
                                 "No versions found for {}:{}",
                                 mapping.group_id, mapping.artifact_id
                             )),
                             artifact: Some(artifact),
+                            kind,
                         }),
                     };
                 }
@@ -113,11 +141,13 @@ impl MavenChecker {
                         current_version: mapping.property.current_value.clone(),
                         latest_version: None,
                         outdated: false,
+                        skipped: false,
                         error: Some(format!(
                             "No versions found for {}:{}",
                             mapping.group_id, mapping.artifact_id
                         )),
                         artifact: Some(artifact),
+                        kind,
                     });
                 }
 
@@ -127,18 +157,20 @@ impl MavenChecker {
             }
         };
 
-        let filtered = filter_versions(&all_versions, self.include_pre_releases);
+        let filtered = filter_versions(&all_versions, self.releases_only);
         if filtered.is_empty() {
             return Ok(CheckResult {
                 property_name: mapping.property.name.clone(),
                 current_version: mapping.property.current_value.clone(),
                 latest_version: None,
                 outdated: false,
+                skipped: false,
                 error: Some(format!(
                     "No release versions found for {}:{}",
                     mapping.group_id, mapping.artifact_id
                 )),
                 artifact: Some(artifact),
+                kind,
             });
         }
 
@@ -148,8 +180,10 @@ impl MavenChecker {
             current_version: mapping.property.current_value.clone(),
             latest_version: Some(latest.clone()),
             outdated: version::is_newer(&mapping.property.current_value, &latest),
+            skipped: false,
             error: None,
             artifact: Some(artifact),
+            kind,
         })
     }
 }
@@ -230,14 +264,14 @@ fn parse_metadata_versions(xml: &str) -> Vec<String> {
     versions
 }
 
-fn filter_versions(versions: &[String], include_pre_releases: bool) -> Vec<String> {
+fn filter_versions(versions: &[String], releases_only: bool) -> Vec<String> {
     versions
         .iter()
         .filter_map(|v| {
             if v.to_lowercase().contains("snapshot") {
                 return None;
             }
-            if !include_pre_releases
+            if releases_only
                 && let Some(parsed) = Version::parse(v)
                 && parsed.is_pre_release()
             {
@@ -309,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn filters_snapshots() {
+    fn filters_snapshots_by_default() {
         let versions = vec![
             "1.0.0".to_string(),
             "2.0.0-SNAPSHOT".to_string(),
@@ -320,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn filters_pre_releases() {
+    fn includes_pre_releases_by_default() {
         let versions = vec![
             "1.0.0".to_string(),
             "2.0.0-alpha1".to_string(),
@@ -328,24 +362,28 @@ mod tests {
             "2.0.0-RC1".to_string(),
         ];
         let filtered = filter_versions(&versions, false);
-        assert_eq!(filtered, vec!["1.0.0", "1.5.0"]);
+        assert_eq!(
+            filtered,
+            vec!["1.0.0", "2.0.0-alpha1", "1.5.0", "2.0.0-RC1"]
+        );
     }
 
     #[test]
-    fn includes_pre_releases_when_flag_set() {
+    fn filters_pre_releases_when_releases_only() {
         let versions = vec![
             "1.0.0".to_string(),
             "2.0.0-alpha1".to_string(),
             "1.5.0".to_string(),
+            "2.0.0-RC1".to_string(),
         ];
         let filtered = filter_versions(&versions, true);
-        assert_eq!(filtered, vec!["1.0.0", "2.0.0-alpha1", "1.5.0"]);
+        assert_eq!(filtered, vec!["1.0.0", "1.5.0"]);
     }
 
     #[test]
-    fn snapshots_always_filtered_even_with_pre_release_flag() {
+    fn snapshots_always_filtered_even_when_not_releases_only() {
         let versions = vec!["1.0.0".to_string(), "2.0.0-SNAPSHOT".to_string()];
-        let filtered = filter_versions(&versions, true);
+        let filtered = filter_versions(&versions, false);
         assert_eq!(filtered, vec!["1.0.0"]);
     }
 
