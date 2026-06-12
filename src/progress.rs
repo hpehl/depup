@@ -39,18 +39,18 @@ impl Progress {
         artifact: &str,
         current_version: &str,
     ) -> Self {
+        let bar = multi_progress.add(Self::spinner());
         let progress = Self {
             kind: kind.to_string(),
             name: name.to_string(),
             artifact: artifact.to_string(),
             current_version: current_version.to_string(),
-            bar: Self::spinner(),
+            bar,
         };
-        progress.bar.enable_steady_tick(Duration::from_millis(100));
-        multi_progress.add(progress.bar.clone());
         let columns = progress.format_columns();
         let status = style("checking...").dim().to_string();
         progress.bar.set_message(format!("{columns}  {status}"));
+        progress.bar.enable_steady_tick(Duration::from_millis(100));
         progress
     }
 
