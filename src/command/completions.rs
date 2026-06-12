@@ -100,11 +100,11 @@ fn home_dir() -> Option<PathBuf> {
 
 fn completion_path_for_home(home: &Path, shell: &str) -> Result<PathBuf> {
     match shell {
-        "fish" => Ok(home.join(".config/fish/completions/mvnup.fish")),
-        "zsh" => Ok(home.join(".zsh/completions/_mvnup")),
-        "bash" => Ok(home.join(".local/share/bash-completion/completions/mvnup")),
-        "elvish" => Ok(home.join(".config/elvish/lib/mvnup.elv")),
-        "powershell" => Ok(home.join(".config/powershell/mvnup.ps1")),
+        "fish" => Ok(home.join(".config/fish/completions/depup.fish")),
+        "zsh" => Ok(home.join(".zsh/completions/_depup")),
+        "bash" => Ok(home.join(".local/share/bash-completion/completions/depup")),
+        "elvish" => Ok(home.join(".config/elvish/lib/depup.elv")),
+        "powershell" => Ok(home.join(".config/powershell/depup.ps1")),
         _ => bail!("Unsupported shell: {shell}"),
     }
 }
@@ -117,7 +117,7 @@ fn print_post_install_instructions(shell: &str) {
         "bash" => {
             println!(
                 "\nIf completions are not loaded automatically, add this to your ~/.bashrc:\n  \
-                 source ~/.local/share/bash-completion/completions/mvnup"
+                 source ~/.local/share/bash-completion/completions/depup"
             );
         }
         "zsh" => {
@@ -128,10 +128,10 @@ fn print_post_install_instructions(shell: &str) {
             );
         }
         "elvish" => {
-            println!("\nAdd this to your ~/.config/elvish/rc.elv:\n  use mvnup");
+            println!("\nAdd this to your ~/.config/elvish/rc.elv:\n  use depup");
         }
         "powershell" => {
-            println!("\nAdd this to your PowerShell profile:\n  . ~/.config/powershell/mvnup.ps1");
+            println!("\nAdd this to your PowerShell profile:\n  . ~/.config/powershell/depup.ps1");
         }
         _ => {}
     }
@@ -147,7 +147,7 @@ mod tests {
         let path = completion_path_for_home(&home, "fish").unwrap();
         assert_eq!(
             path,
-            PathBuf::from("/home/user/.config/fish/completions/mvnup.fish")
+            PathBuf::from("/home/user/.config/fish/completions/depup.fish")
         );
     }
 
@@ -155,7 +155,7 @@ mod tests {
     fn completion_path_zsh() {
         let home = PathBuf::from("/home/user");
         let path = completion_path_for_home(&home, "zsh").unwrap();
-        assert_eq!(path, PathBuf::from("/home/user/.zsh/completions/_mvnup"));
+        assert_eq!(path, PathBuf::from("/home/user/.zsh/completions/_depup"));
     }
 
     #[test]
@@ -164,7 +164,7 @@ mod tests {
         let path = completion_path_for_home(&home, "bash").unwrap();
         assert_eq!(
             path,
-            PathBuf::from("/home/user/.local/share/bash-completion/completions/mvnup")
+            PathBuf::from("/home/user/.local/share/bash-completion/completions/depup")
         );
     }
 
@@ -174,7 +174,7 @@ mod tests {
         let path = completion_path_for_home(&home, "elvish").unwrap();
         assert_eq!(
             path,
-            PathBuf::from("/home/user/.config/elvish/lib/mvnup.elv")
+            PathBuf::from("/home/user/.config/elvish/lib/depup.elv")
         );
     }
 
@@ -184,7 +184,7 @@ mod tests {
         let path = completion_path_for_home(&home, "powershell").unwrap();
         assert_eq!(
             path,
-            PathBuf::from("/home/user/.config/powershell/mvnup.ps1")
+            PathBuf::from("/home/user/.config/powershell/depup.ps1")
         );
     }
 

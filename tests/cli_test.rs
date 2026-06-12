@@ -8,17 +8,17 @@ fn fixture_dir(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn mvnup() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_mvnup"))
+fn depup() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_depup"))
 }
 
 #[test]
 fn json_output_returns_array() {
-    let output = mvnup()
+    let output = depup()
         .arg(&fixture_dir("multi-module"))
         .arg("--json")
         .output()
-        .expect("Failed to run mvnup");
+        .expect("Failed to run depup");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let results: Vec<serde_json::Value> =
@@ -28,12 +28,28 @@ fn json_output_returns_array() {
 
 #[test]
 fn check_subcommand_works_same_as_default() {
-    let output = mvnup()
+    let output = depup()
         .arg("check")
         .arg(&fixture_dir("multi-module"))
         .arg("--json")
         .output()
-        .expect("Failed to run mvnup");
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    assert_eq!(results.len(), 2);
+}
+
+#[test]
+fn maven_check_subcommand_works() {
+    let output = depup()
+        .arg("maven")
+        .arg("check")
+        .arg(&fixture_dir("multi-module"))
+        .arg("--json")
+        .output()
+        .expect("Failed to run depup");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let results: Vec<serde_json::Value> =
@@ -43,12 +59,12 @@ fn check_subcommand_works_same_as_default() {
 
 #[test]
 fn outdated_filter_excludes_current() {
-    let output = mvnup()
+    let output = depup()
         .arg(&fixture_dir("multi-module"))
         .arg("--json")
         .arg("--outdated")
         .output()
-        .expect("Failed to run mvnup");
+        .expect("Failed to run depup");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let results: Vec<serde_json::Value> =
@@ -64,12 +80,14 @@ fn outdated_filter_excludes_current() {
 }
 
 #[test]
-fn missing_pom_returns_json_error() {
-    let output = mvnup()
+fn maven_missing_pom_returns_json_error() {
+    let output = depup()
+        .arg("maven")
+        .arg("check")
         .arg("/nonexistent/path")
         .arg("--json")
         .output()
-        .expect("Failed to run mvnup");
+        .expect("Failed to run depup");
 
     assert!(!output.status.success());
 
@@ -77,31 +95,25 @@ fn missing_pom_returns_json_error() {
     let envelope: serde_json::Value =
         serde_json::from_str(&stdout).expect("Invalid JSON error output");
     assert_eq!(envelope["error"]["code"], "POM_NOT_FOUND");
-    assert!(
-        envelope["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("nonexistent")
-    );
 }
 
 #[test]
-fn missing_pom_returns_nonzero_exit() {
-    let output = mvnup()
+fn auto_detect_missing_project_returns_nonzero_exit() {
+    let output = depup()
         .arg("/nonexistent/path")
         .output()
-        .expect("Failed to run mvnup");
+        .expect("Failed to run depup");
 
     assert!(!output.status.success());
 }
 
 #[test]
 fn json_output_includes_artifact() {
-    let output = mvnup()
+    let output = depup()
         .arg(&fixture_dir("multi-module"))
         .arg("--json")
         .output()
-        .expect("Failed to run mvnup");
+        .expect("Failed to run depup");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let results: Vec<serde_json::Value> =

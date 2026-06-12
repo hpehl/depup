@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::error::MvnupError;
-use crate::pom::{self, ArtifactKind, Repository};
+use crate::error::DepupError;
+use crate::maven::pom::{self, ArtifactKind, Repository};
 
 #[derive(Debug, Clone)]
 pub struct VersionProperty {
@@ -30,7 +30,7 @@ pub struct DiscoveryResult {
 pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     let root_pom_path = root.join("pom.xml");
     if !root_pom_path.exists() {
-        return Err(MvnupError::pom_not_found(&root.display().to_string()).into());
+        return Err(DepupError::pom_not_found(&root.display().to_string()).into());
     }
 
     let root_project = pom::parse_pom(&root_pom_path)?;
@@ -138,6 +138,9 @@ fn extract_mappings(
         let Some(prop_name) = extract_property_reference(version_str) else {
             continue;
         };
+        if prop_name.starts_with("project.") {
+            continue;
+        }
         let Some(group_id) = &artifact.group_id else {
             continue;
         };
@@ -307,7 +310,7 @@ mod tests {
 
     #[test]
     fn deduplicate_repos_by_url() {
-        use crate::pom::{Repository, RepositoryKind};
+        use crate::maven::pom::{Repository, RepositoryKind};
 
         let mut repos = vec![
             Repository {

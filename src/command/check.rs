@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::ArgMatches;
 use indicatif::MultiProgress;
 use tokio::sync::Semaphore;
@@ -9,16 +9,52 @@ use tokio::time::Instant;
 
 use crate::args;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::discovery::{ArtifactMapping, VersionProperty};
-use crate::pom::ArtifactKind;
+use crate::maven::discovery::{ArtifactMapping, VersionProperty};
+use crate::maven::node::NodeChecker;
+use crate::maven::npm::NpmChecker;
+use crate::maven::pom::ArtifactKind;
+use crate::maven::registry::MavenChecker;
+use crate::maven::discovery;
+use crate::output;
 use crate::progress::{self, Progress};
-use crate::registry::maven::MavenChecker;
-use crate::registry::node::NodeChecker;
-use crate::registry::npm::NpmChecker;
 use crate::registry::{CheckResult, CheckerKind};
-use crate::{discovery, output};
 
-enum CheckTask {
+pub async fn auto_check(matches: &ArgMatches) -> Result<()> {
+    let path = args::path_argument(matches);
+    let root = path.canonicalize().unwrap_or_else(|_| path.clone());
+
+    if root.join("pom.xml").exists() {
+        return maven_check(matches).await;
+    }
+    if has_pnpm_signals(&root) {
+        return pnpm_check(matches).await;
+    }
+
+    bail!(
+        "No supported project found in {}. \
+         Expected pom.xml (Maven) or pnpm-lock.yaml/package.json (pnpm).",
+        root.display()
+    );
+}
+
+fn has_pnpm_signals(root: &std::path::Path) -> bool {
+    if root.join("pnpm-lock.yaml").exists() {
+        return true;
+    }
+    if root.join("package.json").exists()
+        && let Ok(content) = std::fs::read_to_string(root.join("package.json"))
+        && content.contains("\"pnpm@")
+    {
+        return true;
+    }
+    false
+}
+
+// ------------------------------------------------------------------
+// Maven check
+// ------------------------------------------------------------------
+
+enum MavenCheckTask {
     Maven {
         mapping: ArtifactMapping,
         checker: Arc<MavenChecker>,
@@ -34,7 +70,7 @@ enum CheckTask {
     },
 }
 
-impl CheckTask {
+impl MavenCheckTask {
     fn kind(&self) -> CheckerKind {
         match self {
             Self::Maven { mapping, .. } => match mapping.kind {
@@ -71,7 +107,7 @@ impl CheckTask {
     }
 }
 
-pub async fn check(matches: &ArgMatches) -> Result<()> {
+pub async fn maven_check(matches: &ArgMatches) -> Result<()> {
     let path = args::path_argument(matches);
     let json = args::is_json(matches);
     let outdated = args::is_outdated(matches);
@@ -92,10 +128,10 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     let node_checker = Arc::new(NodeChecker::new(releases_only));
     let npm_checker = Arc::new(NpmChecker::new(releases_only));
 
-    let mut tasks: Vec<CheckTask> = discovery_result
+    let mut tasks: Vec<MavenCheckTask> = discovery_result
         .mappings
         .into_iter()
-        .map(|mapping| CheckTask::Maven {
+        .map(|mapping| MavenCheckTask::Maven {
             mapping,
             checker: Arc::clone(&maven_checker),
         })
@@ -103,12 +139,12 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
 
     for property in discovery_result.orphan_properties {
         if NodeChecker::matches(&property.name) {
-            tasks.push(CheckTask::Node {
+            tasks.push(MavenCheckTask::Node {
                 property,
                 checker: Arc::clone(&node_checker),
             });
         } else if let Some(package) = NpmChecker::matches(&property.name) {
-            tasks.push(CheckTask::Npm {
+            tasks.push(MavenCheckTask::Npm {
                 property,
                 package,
                 checker: Arc::clone(&npm_checker),
@@ -132,7 +168,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         );
     }
 
-    let results_with_progress = check_all(tasks, json).await;
+    let results_with_progress = maven_check_all(tasks, json).await;
 
     if outdated {
         for (result, progress) in &results_with_progress {
@@ -165,7 +201,10 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-async fn check_all(tasks: Vec<CheckTask>, json: bool) -> Vec<(CheckResult, Progress)> {
+async fn maven_check_all(
+    tasks: Vec<MavenCheckTask>,
+    json: bool,
+) -> Vec<(CheckResult, Progress)> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let multi_progress = MultiProgress::new();
     let mut join_set = JoinSet::new();
@@ -192,7 +231,7 @@ async fn check_all(tasks: Vec<CheckTask>, json: bool) -> Vec<(CheckResult, Progr
         join_set.spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
             let result = match task {
-                CheckTask::Maven {
+                MavenCheckTask::Maven {
                     ref mapping,
                     ref checker,
                 } => checker
@@ -208,7 +247,7 @@ async fn check_all(tasks: Vec<CheckTask>, json: bool) -> Vec<(CheckResult, Progr
                         artifact: Some(format!("{}:{}", mapping.group_id, mapping.artifact_id)),
                         kind,
                     }),
-                CheckTask::Node {
+                MavenCheckTask::Node {
                     ref property,
                     ref checker,
                 } => checker
@@ -224,7 +263,7 @@ async fn check_all(tasks: Vec<CheckTask>, json: bool) -> Vec<(CheckResult, Progr
                         artifact: Some("nodejs.org".to_string()),
                         kind,
                     }),
-                CheckTask::Npm {
+                MavenCheckTask::Npm {
                     ref property,
                     package,
                     ref checker,
@@ -248,4 +287,140 @@ async fn check_all(tasks: Vec<CheckTask>, json: bool) -> Vec<(CheckResult, Progr
     }
 
     join_set.join_all().await
+}
+
+// ------------------------------------------------------------------
+// pnpm check
+// ------------------------------------------------------------------
+
+pub async fn pnpm_check(matches: &ArgMatches) -> Result<()> {
+    let path = args::path_argument(matches);
+    let json = args::is_json(matches);
+
+    let instant = Instant::now();
+    let root = path.canonicalize().unwrap_or_else(|_| path.clone());
+
+    if !json {
+        progress::step("\u{1f50d}", "Discovering pnpm projects...");
+    }
+    let projects = crate::pnpm::discovery::discover(&root);
+
+    if projects.is_empty() {
+        if json {
+            println!("[]");
+        } else {
+            println!("No pnpm projects found.");
+        }
+        return Ok(());
+    }
+
+    if !json {
+        progress::step(
+            "\u{2699}\u{fe0f}",
+            &format!("Checking {} project(s)...", projects.len()),
+        );
+    }
+
+    let results = pnpm_check_all(&projects, json).await;
+
+    if json {
+        output::print_json(&results);
+    } else {
+        println!();
+        output::print_summary(&results);
+        progress::done(instant);
+    }
+
+    let has_outdated = results.iter().any(|r| r.outdated);
+    if has_outdated {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+async fn pnpm_check_all(
+    projects: &[crate::pnpm::discovery::PnpmProject],
+    json: bool,
+) -> Vec<CheckResult> {
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
+    let multi_progress = MultiProgress::new();
+    let mut join_set = JoinSet::new();
+
+    for project in projects {
+        let semaphore = Arc::clone(&semaphore);
+        let project_path = project.path.clone();
+        let project_name = project.name.clone();
+
+        let progress = if json {
+            Progress::hidden(CheckerKind::Pnpm, &project_name, "", "")
+        } else {
+            Progress::join(
+                &multi_progress,
+                CheckerKind::Pnpm,
+                &project_name,
+                &project_path.display().to_string(),
+                "",
+            )
+        };
+
+        join_set.spawn(async move {
+            let _permit = semaphore.acquire().await.unwrap();
+            let results = crate::pnpm::check_project(&project_path).await;
+            match results {
+                Ok(check_results) => {
+                    let count = check_results.len();
+                    let outdated = check_results.iter().filter(|r| r.outdated).count();
+                    if outdated > 0 {
+                        progress.finish_with_result(&CheckResult {
+                            property_name: project_name,
+                            current_version: String::new(),
+                            latest_version: None,
+                            outdated: true,
+                            skipped: false,
+                            error: None,
+                            artifact: Some(format!("{outdated}/{count} outdated")),
+                            kind: CheckerKind::Pnpm,
+                        });
+                    } else {
+                        progress.finish_with_result(&CheckResult {
+                            property_name: project_name,
+                            current_version: String::new(),
+                            latest_version: None,
+                            outdated: false,
+                            skipped: false,
+                            error: None,
+                            artifact: Some(format!("{count} packages")),
+                            kind: CheckerKind::Pnpm,
+                        });
+                    }
+                    check_results
+                }
+                Err(e) => {
+                    progress.finish_with_result(&CheckResult {
+                        property_name: project_name.clone(),
+                        current_version: String::new(),
+                        latest_version: None,
+                        outdated: false,
+                        skipped: false,
+                        error: Some(e.to_string()),
+                        artifact: None,
+                        kind: CheckerKind::Pnpm,
+                    });
+                    vec![CheckResult {
+                        property_name: project_name,
+                        current_version: String::new(),
+                        latest_version: None,
+                        outdated: false,
+                        skipped: false,
+                        error: Some(e.to_string()),
+                        artifact: None,
+                        kind: CheckerKind::Pnpm,
+                    }]
+                }
+            }
+        });
+    }
+
+    join_set.join_all().await.into_iter().flatten().collect()
 }

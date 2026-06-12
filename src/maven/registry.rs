@@ -4,9 +4,9 @@ use quick_xml::reader::Reader;
 use std::time::Duration;
 
 use crate::constants::{HTTP_TIMEOUT_SECS, MAVEN_CENTRAL_URL};
-use crate::discovery::ArtifactMapping;
-use crate::error::MvnupError;
-use crate::pom::{ArtifactKind, Repository, RepositoryKind};
+use crate::error::DepupError;
+use crate::maven::discovery::ArtifactMapping;
+use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
 use crate::registry::{CheckResult, CheckerKind};
 use crate::version::{self, Version};
 
@@ -19,7 +19,7 @@ pub struct MavenChecker {
 impl MavenChecker {
     pub fn new(releases_only: bool, repositories: Vec<Repository>) -> Self {
         let client = reqwest::Client::builder()
-            .user_agent(format!("mvnup/{}", env!("CARGO_PKG_VERSION")))
+            .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
             .build()
             .expect("Failed to create HTTP client");
@@ -206,18 +206,18 @@ async fn fetch_versions(
         .get(&url)
         .send()
         .await
-        .map_err(|e| MvnupError::http_request_failed(&url, &e.to_string()))?;
+        .map_err(|e| DepupError::http_request_failed(&url, &e.to_string()))?;
 
     if !resp.status().is_success() {
         return Err(
-            MvnupError::http_request_failed(&url, &format!("HTTP {}", resp.status())).into(),
+            DepupError::http_request_failed(&url, &format!("HTTP {}", resp.status())).into(),
         );
     }
 
     let body = resp
         .text()
         .await
-        .map_err(|e| MvnupError::http_request_failed(&url, &e.to_string()))?;
+        .map_err(|e| DepupError::http_request_failed(&url, &e.to_string()))?;
 
     Ok(parse_metadata_versions(&body))
 }

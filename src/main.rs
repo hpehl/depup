@@ -2,18 +2,18 @@ mod app;
 mod args;
 mod command;
 mod constants;
-mod discovery;
 mod error;
 mod json;
+mod maven;
 mod output;
-mod pom;
+mod pnpm;
 mod progress;
 mod registry;
 mod version;
 
 use anyhow::Result;
 
-use crate::error::{JsonErrorEnvelope, MvnupError};
+use crate::error::{JsonErrorEnvelope, DepupError};
 
 #[tokio::main]
 async fn main() {
@@ -40,9 +40,17 @@ async fn run() -> Result<()> {
         .map_err(classify_clap_error)?;
 
     match matches.subcommand() {
+        Some(("maven", m)) => match m.subcommand() {
+            Some(("check", m)) => command::check::maven_check(m).await,
+            _ => command::check::maven_check(m).await,
+        },
+        Some(("pnpm", m)) => match m.subcommand() {
+            Some(("check", m)) => command::check::pnpm_check(m).await,
+            _ => command::check::pnpm_check(m).await,
+        },
         Some(("completions", m)) => command::completions::completions(m),
-        Some(("check", m)) => command::check::check(m).await,
-        _ => command::check::check(&matches).await,
+        Some(("check", m)) => command::check::auto_check(m).await,
+        _ => command::check::auto_check(&matches).await,
     }
 }
 
@@ -52,6 +60,6 @@ fn classify_clap_error(err: clap::Error) -> anyhow::Error {
         clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
             err.exit();
         }
-        _ => MvnupError::clap_parse_error(err.to_string().trim()).into(),
+        _ => DepupError::clap_parse_error(err.to_string().trim()).into(),
     }
 }

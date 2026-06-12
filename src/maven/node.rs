@@ -3,8 +3,8 @@ use serde::Deserialize;
 use std::time::Duration;
 
 use crate::constants::{HTTP_TIMEOUT_SECS, NODEJS_DIST_URL};
-use crate::discovery::VersionProperty;
-use crate::error::MvnupError;
+use crate::maven::discovery::VersionProperty;
+use crate::error::DepupError;
 use crate::registry::{CheckResult, CheckerKind};
 use crate::version::{self, Version};
 
@@ -42,7 +42,7 @@ impl LtsField {
 impl NodeChecker {
     pub fn new(releases_only: bool) -> Self {
         let client = reqwest::Client::builder()
-            .user_agent(format!("mvnup/{}", env!("CARGO_PKG_VERSION")))
+            .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
             .build()
             .expect("Failed to create HTTP client");
@@ -62,10 +62,10 @@ impl NodeChecker {
             .get(NODEJS_DIST_URL)
             .send()
             .await
-            .map_err(|e| MvnupError::http_request_failed(NODEJS_DIST_URL, &e.to_string()))?;
+            .map_err(|e| DepupError::http_request_failed(NODEJS_DIST_URL, &e.to_string()))?;
 
         if !resp.status().is_success() {
-            return Err(MvnupError::http_request_failed(
+            return Err(DepupError::http_request_failed(
                 NODEJS_DIST_URL,
                 &format!("HTTP {}", resp.status()),
             )
@@ -75,7 +75,7 @@ impl NodeChecker {
         let releases: Vec<NodeRelease> = resp
             .json()
             .await
-            .map_err(|e| MvnupError::http_request_failed(NODEJS_DIST_URL, &e.to_string()))?;
+            .map_err(|e| DepupError::http_request_failed(NODEJS_DIST_URL, &e.to_string()))?;
 
         let versions: Vec<String> = releases
             .iter()

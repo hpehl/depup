@@ -1,13 +1,10 @@
-pub mod maven;
-pub mod node;
-pub mod npm;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CheckerKind {
     Dependency,
     Plugin,
     Node,
     Npm,
+    Pnpm,
 }
 
 impl std::fmt::Display for CheckerKind {
@@ -17,6 +14,7 @@ impl std::fmt::Display for CheckerKind {
             Self::Plugin => write!(f, "Plugin"),
             Self::Node => write!(f, "Node"),
             Self::Npm => write!(f, "npm"),
+            Self::Pnpm => write!(f, "pnpm"),
         }
     }
 }
@@ -28,6 +26,7 @@ impl CheckerKind {
             Self::Plugin => console::Style::new().magenta(),
             Self::Node => console::Style::new().green(),
             Self::Npm => console::Style::new().yellow(),
+            Self::Pnpm => console::Style::new().blue(),
         }
     }
 
@@ -37,6 +36,7 @@ impl CheckerKind {
             Self::Plugin => "\u{25a0}",
             Self::Node => "\u{25a0}",
             Self::Npm => "\u{25a0}",
+            Self::Pnpm => "\u{25a0}",
         }
     }
 }

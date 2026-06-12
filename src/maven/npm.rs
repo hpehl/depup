@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::time::Duration;
 
 use crate::constants::{HTTP_TIMEOUT_SECS, NPM_REGISTRY_URL};
-use crate::discovery::VersionProperty;
-use crate::error::MvnupError;
+use crate::maven::discovery::VersionProperty;
+use crate::error::DepupError;
 use crate::registry::{CheckResult, CheckerKind};
 use crate::version;
 
@@ -18,7 +18,7 @@ pub struct NpmChecker {
 impl NpmChecker {
     pub fn new(releases_only: bool) -> Self {
         let client = reqwest::Client::builder()
-            .user_agent(format!("mvnup/{}", env!("CARGO_PKG_VERSION")))
+            .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
             .build()
             .expect("Failed to create HTTP client");
@@ -47,18 +47,18 @@ impl NpmChecker {
             .get(&url)
             .send()
             .await
-            .map_err(|e| MvnupError::http_request_failed(&url, &e.to_string()))?;
+            .map_err(|e| DepupError::http_request_failed(&url, &e.to_string()))?;
 
         if !resp.status().is_success() {
             return Err(
-                MvnupError::http_request_failed(&url, &format!("HTTP {}", resp.status())).into(),
+                DepupError::http_request_failed(&url, &format!("HTTP {}", resp.status())).into(),
             );
         }
 
         let body: serde_json::Value = resp
             .json()
             .await
-            .map_err(|e| MvnupError::http_request_failed(&url, &e.to_string()))?;
+            .map_err(|e| DepupError::http_request_failed(&url, &e.to_string()))?;
 
         let latest = body["dist-tags"]["latest"]
             .as_str()

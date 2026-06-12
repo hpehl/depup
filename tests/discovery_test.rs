@@ -13,11 +13,11 @@ fn discovers_multi_module_properties() {
 
     // We can't directly call discovery::discover from integration tests
     // without a library target. Let's test via the CLI binary instead.
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_mvnup"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_depup"))
         .arg(&fixture_dir)
         .arg("--json")
         .output()
-        .expect("Failed to run mvnup");
+        .expect("Failed to run depup");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let results: Vec<serde_json::Value> =

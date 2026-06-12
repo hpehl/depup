@@ -3,7 +3,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[allow(dead_code)]
-pub enum MvnupErrorCode {
+pub enum DepupErrorCode {
     PomNotFound,
     PomParseFailed,
     RegistryLookupFailed,
@@ -16,15 +16,15 @@ pub enum MvnupErrorCode {
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
 #[must_use]
-pub struct MvnupError {
-    pub code: MvnupErrorCode,
+pub struct DepupError {
+    pub code: DepupErrorCode,
     pub message: String,
 }
 
-impl MvnupError {
+impl DepupError {
     pub fn pom_not_found(path: &str) -> Self {
         Self {
-            code: MvnupErrorCode::PomNotFound,
+            code: DepupErrorCode::PomNotFound,
             message: format!("No pom.xml found in {path}"),
         }
     }
@@ -32,7 +32,7 @@ impl MvnupError {
     #[cfg(test)]
     pub fn pom_parse_failed(path: &str, detail: &str) -> Self {
         Self {
-            code: MvnupErrorCode::PomParseFailed,
+            code: DepupErrorCode::PomParseFailed,
             message: format!("Failed to parse {path}: {detail}"),
         }
     }
@@ -40,7 +40,7 @@ impl MvnupError {
     #[cfg(test)]
     pub fn registry_lookup_failed(artifact: &str, detail: &str) -> Self {
         Self {
-            code: MvnupErrorCode::RegistryLookupFailed,
+            code: DepupErrorCode::RegistryLookupFailed,
             message: format!("Registry lookup failed for {artifact}: {detail}"),
         }
     }
@@ -48,29 +48,29 @@ impl MvnupError {
     #[cfg(test)]
     pub fn no_versions_found(artifact: &str) -> Self {
         Self {
-            code: MvnupErrorCode::NoVersionsFound,
+            code: DepupErrorCode::NoVersionsFound,
             message: format!("No versions found for {artifact}"),
         }
     }
 
     pub fn http_request_failed(url: &str, detail: &str) -> Self {
         Self {
-            code: MvnupErrorCode::HttpRequestFailed,
+            code: DepupErrorCode::HttpRequestFailed,
             message: format!("HTTP request failed for {url}: {detail}"),
         }
     }
 
     pub fn clap_parse_error(detail: &str) -> Self {
         Self {
-            code: MvnupErrorCode::ClapParseError,
+            code: DepupErrorCode::ClapParseError,
             message: detail.to_string(),
         }
     }
 
     #[cfg(test)]
-    pub fn error_code(err: &anyhow::Error) -> MvnupErrorCode {
+    pub fn error_code(err: &anyhow::Error) -> DepupErrorCode {
         err.downcast_ref::<Self>()
-            .map_or(MvnupErrorCode::Internal, |e| e.code)
+            .map_or(DepupErrorCode::Internal, |e| e.code)
     }
 }
 
@@ -81,12 +81,12 @@ pub struct JsonErrorEnvelope {
 
 #[derive(Serialize)]
 pub struct JsonErrorBody {
-    pub code: MvnupErrorCode,
+    pub code: DepupErrorCode,
     pub message: String,
 }
 
 impl JsonErrorEnvelope {
-    pub fn from_mvnup_error(err: &MvnupError) -> Self {
+    pub fn from_depup_error(err: &DepupError) -> Self {
         Self {
             error: JsonErrorBody {
                 code: err.code,
@@ -96,14 +96,14 @@ impl JsonErrorEnvelope {
     }
 
     pub fn from_anyhow(err: &anyhow::Error) -> Self {
-        err.downcast_ref::<MvnupError>().map_or_else(
+        err.downcast_ref::<DepupError>().map_or_else(
             || Self {
                 error: JsonErrorBody {
-                    code: MvnupErrorCode::Internal,
+                    code: DepupErrorCode::Internal,
                     message: err.to_string(),
                 },
             },
-            Self::from_mvnup_error,
+            Self::from_depup_error,
         )
     }
 }
@@ -114,25 +114,25 @@ mod tests {
 
     #[test]
     fn error_code_serializes_as_screaming_snake_case() {
-        let json = serde_json::to_string(&MvnupErrorCode::PomNotFound).unwrap();
+        let json = serde_json::to_string(&DepupErrorCode::PomNotFound).unwrap();
         assert_eq!(json, "\"POM_NOT_FOUND\"");
     }
 
     #[test]
     fn error_code_http_request_failed() {
-        let json = serde_json::to_string(&MvnupErrorCode::HttpRequestFailed).unwrap();
+        let json = serde_json::to_string(&DepupErrorCode::HttpRequestFailed).unwrap();
         assert_eq!(json, "\"HTTP_REQUEST_FAILED\"");
     }
 
     #[test]
-    fn mvnup_error_display_uses_message() {
-        let err = MvnupError::pom_not_found("/some/path");
+    fn depup_error_display_uses_message() {
+        let err = DepupError::pom_not_found("/some/path");
         assert_eq!(err.to_string(), "No pom.xml found in /some/path");
     }
 
     #[test]
-    fn mvnup_error_parameterized_message() {
-        let err = MvnupError::http_request_failed("https://repo.example.com", "timeout");
+    fn depup_error_parameterized_message() {
+        let err = DepupError::http_request_failed("https://repo.example.com", "timeout");
         assert_eq!(
             err.to_string(),
             "HTTP request failed for https://repo.example.com: timeout"
@@ -140,9 +140,9 @@ mod tests {
     }
 
     #[test]
-    fn json_error_envelope_from_mvnup_error() {
-        let err = MvnupError::no_versions_found("org.example:my-lib");
-        let envelope = JsonErrorEnvelope::from_mvnup_error(&err);
+    fn json_error_envelope_from_depup_error() {
+        let err = DepupError::no_versions_found("org.example:my-lib");
+        let envelope = JsonErrorEnvelope::from_depup_error(&err);
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
         assert_eq!(json["error"]["code"], "NO_VERSIONS_FOUND");
@@ -155,8 +155,8 @@ mod tests {
     }
 
     #[test]
-    fn json_error_envelope_from_anyhow_with_mvnup_error() {
-        let err: anyhow::Error = MvnupError::pom_parse_failed("pom.xml", "invalid XML").into();
+    fn json_error_envelope_from_anyhow_with_depup_error() {
+        let err: anyhow::Error = DepupError::pom_parse_failed("pom.xml", "invalid XML").into();
         let envelope = JsonErrorEnvelope::from_anyhow(&err);
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
@@ -170,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn json_error_envelope_from_anyhow_without_mvnup_error() {
+    fn json_error_envelope_from_anyhow_without_depup_error() {
         let err = anyhow::anyhow!("something unexpected");
         let envelope = JsonErrorEnvelope::from_anyhow(&err);
         let json: serde_json::Value =
@@ -182,16 +182,16 @@ mod tests {
     #[test]
     fn error_code_extracts_from_anyhow() {
         let err: anyhow::Error =
-            MvnupError::registry_lookup_failed("org.example:lib", "connection refused").into();
+            DepupError::registry_lookup_failed("org.example:lib", "connection refused").into();
         assert_eq!(
-            MvnupError::error_code(&err),
-            MvnupErrorCode::RegistryLookupFailed
+            DepupError::error_code(&err),
+            DepupErrorCode::RegistryLookupFailed
         );
     }
 
     #[test]
     fn error_code_falls_back_to_internal() {
         let err = anyhow::anyhow!("plain error");
-        assert_eq!(MvnupError::error_code(&err), MvnupErrorCode::Internal);
+        assert_eq!(DepupError::error_code(&err), DepupErrorCode::Internal);
     }
 }

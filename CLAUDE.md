@@ -4,36 +4,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-`mvnup` is a Rust CLI that discovers version properties (`${version.*}`) across multi-module Maven projects and checks them against upstream registries. It solves a gap where Maven's `versions:display-property-updates` fails when properties are defined in a parent POM but referenced in child POMs.
+`depup` is a Rust CLI that checks dependency versions across multiple ecosystems. It currently supports:
 
-See `VERSION_CHECKER_PLAN.md` for the full design and Phase 2 roadmap (npm/Node.js checks, TOML config).
+- **Maven** — Discovers version properties (`${version.*}`) across multi-module Maven projects and checks them against Maven Central and custom repositories.
+- **pnpm** — Discovers pnpm projects in a directory tree and checks for outdated packages via `pnpm outdated`.
+
+Auto-detection picks the ecosystem based on project files (`pom.xml` → Maven, `pnpm-lock.yaml` → pnpm).
 
 ## Build & Test
 
 ```bash
-cargo build                    # compile
-cargo build --release          # release build (uses LTO)
-cargo test                     # all unit + integration tests
-cargo test pom::tests          # run tests in a specific module
-cargo test -- --nocapture      # show println output during tests
-cargo run -- check /path       # check a Maven project
-cargo run -- check --json /path  # JSON output mode
-cargo run -- completions       # generate shell completions
-cargo clippy                   # lint
-cargo fmt                      # format
+cargo build                              # compile
+cargo build --release                     # release build (uses LTO)
+cargo test                                # all unit + integration tests
+cargo test maven::pom::tests             # run tests in a specific module
+cargo test -- --nocapture                 # show println output during tests
+cargo run -- check /path                  # auto-detect ecosystem and check
+cargo run -- maven check /path            # explicit Maven check
+cargo run -- maven check --json /path     # Maven check with JSON output
+cargo run -- pnpm check /path             # pnpm outdated check
+cargo run -- pnpm check --json /path      # pnpm check with JSON output
+cargo run -- completions                  # generate shell completions
+cargo clippy                              # lint
+cargo fmt                                 # format
 ```
 
 The integration test (`tests/discovery_test.rs`) hits Maven Central — it requires network access.
 
 ## Architecture
 
-The pipeline flows: **Discovery → Registry Lookup → Comparison → Output**.
+The pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking.
 
 ### CLI Layer
 
-- **`app.rs`** — Defines the clap `Command` tree using the builder API (not derive macros). Subcommands: `check` (default), `completions`. Global `--json` flag. Styled help text. Separated from `main.rs` so the completion system can build the command tree independently.
+- **`app.rs`** — Defines the clap `Command` tree using the builder API (not derive macros). Subcommands: `maven check`, `pnpm check`, `check` (auto-detect), `completions`. Global `--json` flag. Styled help text. Separated from `main.rs` so the completion system can build the command tree independently.
 
-- **`main.rs`** — Entry point. Wires `CompleteEnv` for dynamic shell completions, dispatches subcommands, handles top-level error reporting with JSON error envelope support.
+- **`main.rs`** — Entry point. Wires `CompleteEnv` for dynamic shell completions, dispatches subcommands (`maven`, `pnpm`, `check`, `completions`), handles top-level error reporting with JSON error envelope support.
 
 - **`args.rs`** — Helper functions to extract typed arguments from clap `ArgMatches`.
 
@@ -41,31 +47,41 @@ The pipeline flows: **Discovery → Registry Lookup → Comparison → Output**.
 
 ### Command Layer (`src/command/`)
 
-- **`check.rs`** — The main check pipeline: discover POM modules, check versions concurrently with progress spinners, sort/filter results, output table or JSON. Uses `tokio::task::JoinSet` for parallel registry checks with semaphore-based rate limiting.
+- **`check.rs`** — Orchestrates check pipelines for each ecosystem:
+  - `auto_check()` — Sniffs for `pom.xml` or `pnpm-lock.yaml` to pick the ecosystem.
+  - `maven_check()` — Discover POM modules, check versions concurrently with progress spinners, sort/filter results, output table or JSON.
+  - `pnpm_check()` — Discover pnpm projects, run `pnpm outdated --format json` on each, aggregate results.
+  - Both use `tokio::task::JoinSet` for parallel checks with semaphore-based rate limiting.
 
-- **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell. Auto-detects shell, installs to standard paths.
+- **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
 
-### Core Layer
+### Maven Ecosystem (`src/maven/`)
 
 - **`pom.rs`** — Parses POM XML using quick-xml's event-based reader (not serde). This is intentional: serde can't handle `<properties>` blocks with arbitrary child element names as a `HashMap<String, String>`. Handles XML namespaces.
 
-- **`discovery.rs`** — Walks the module tree starting from root `pom.xml`, follows `<modules>` declarations recursively. For each artifact with a `${version.*}` version reference, maps it back to the property value in the root POM's `<properties>`. Also collects `<repositories>` and `<pluginRepositories>` from all POMs, deduplicates by URL, and returns them in `DiscoveryResult`.
+- **`discovery.rs`** — Walks the module tree starting from root `pom.xml`, follows `<modules>` declarations recursively. For each artifact with a `${version.*}` version reference, maps it back to the property value in the root POM's `<properties>`. Also collects `<repositories>` and `<pluginRepositories>` from all POMs, deduplicates by URL.
 
-- **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver. A version without a qualifier sorts higher than one with a qualifier (e.g., `1.0.0` > `1.0.0.Final`).
+- **`registry.rs`** — Unified Maven repository checker using `maven-metadata.xml`. Tries Maven Central first; if not found, queries custom repositories in parallel. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default.
 
-### Registry Layer (`src/registry/`)
+- **`node.rs`** / **`npm.rs`** — Checkers for Node.js and npm/pnpm/yarn version properties found in Maven POMs (orphan properties like `version.node`).
 
-- **`mod.rs`** — Defines `CheckResult` struct.
+### pnpm Ecosystem (`src/pnpm/`)
 
-- **`maven.rs`** — Unified Maven repository checker using `maven-metadata.xml`. Tries Maven Central (`repo1.maven.org/maven2`) first; if not found, queries all POM-defined custom repositories in parallel using `JoinSet`. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default (alpha, beta, RC, milestone, SNAPSHOT).
+- **`discovery.rs`** — Walks a directory tree finding pnpm projects. Detects via `pnpm-lock.yaml` or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (detected via `pnpm-workspace.yaml`).
 
-### Output & Error Layer
+- **`mod.rs`** — `check_project()` runs `pnpm outdated --format json` on a project directory, parses the JSON output into `Vec<CheckResult>`.
 
-- **`error.rs`** — Structured error types with `thiserror`. `MvnupError` carries a stable `MvnupErrorCode` for machine consumption and a human-readable message. `JsonErrorEnvelope` provides structured JSON error output when `--json` is active.
+### Shared Layer
+
+- **`registry.rs`** — `CheckResult` struct and `CheckerKind` enum (Dependency, Plugin, Node, Npm, Pnpm) used by all ecosystems. Each kind has a display color and symbol.
+
+- **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver.
+
+- **`error.rs`** — Structured error types with `thiserror`. `DepupError` carries a stable `DepupErrorCode` for machine consumption. `JsonErrorEnvelope` provides structured JSON error output when `--json` is active.
 
 - **`json.rs`** — Serializable output types (`JsonResult`) for JSON mode.
 
-- **`output.rs`** — Table (colored via `console` crate) and JSON formatters.
+- **`output.rs`** — Summary table (colored via `console` crate) and JSON formatters.
 
 - **`progress.rs`** — Progress bars using `indicatif`. Braille spinner with `MultiProgress` for concurrent checks. Hidden in JSON mode.
 
@@ -83,8 +99,9 @@ These patterns are shared with the `mgt` and `wado` CLI tools:
 
 ## Known Quirks
 
-- Maven Central requires a `User-Agent` header or returns 403. The client sets `mvnup/{version}`.
-- Artifacts not on Maven Central that also aren't in any POM-defined repository will show as errors. Phase 2 will add a skip list via TOML config.
+- Maven Central requires a `User-Agent` header or returns 403. The client sets `depup/{version}`.
+- Artifacts not on Maven Central that also aren't in any POM-defined repository will show as errors.
+- pnpm check requires `pnpm` to be installed and on PATH.
 
 ## Release
 
