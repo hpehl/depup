@@ -16,6 +16,6 @@ pub fn is_outdated(matches: &ArgMatches) -> bool {
     matches.get_flag("outdated")
 }
 
-pub fn include_pre_releases(matches: &ArgMatches) -> bool {
-    matches.get_flag("include-pre-releases")
+pub fn releases_only(matches: &ArgMatches) -> bool {
+    !matches.get_flag("include-pre-releases")
 }

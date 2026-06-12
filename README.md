@@ -25,7 +25,7 @@ mvnup check --json
 # Only show outdated versions
 mvnup check --outdated
 
-# Include alpha, beta, RC, milestone versions
+# Include pre-release versions (alpha, beta, CR, RC, milestone)
 mvnup check --include-pre-releases
 
 # Verbose output (show artifact coordinates)
@@ -93,15 +93,14 @@ Error codes: `POM_NOT_FOUND`, `POM_PARSE_FAILED`, `REGISTRY_LOOKUP_FAILED`, `NO_
 
 ## Version Filtering
 
-By default, `mvnup` only considers stable releases. Pre-release versions matching these patterns are excluded:
+By default, `mvnup` excludes pre-release versions and SNAPSHOTs. Use `--include-pre-releases` to also show pre-release versions matching these patterns:
 
-- `*-SNAPSHOT`
 - `*-alpha*`, `*-beta*`
 - `*-RC*`, `*-CR*`
 - `*-M*` (milestones)
 - `*-preview*`, `*-dev*`, `*-incubating*`
 
-Use `--include-pre-releases` to include them (SNAPSHOTs are always excluded).
+SNAPSHOTs are always excluded regardless of flags.
 
 ## Shell Completions
 

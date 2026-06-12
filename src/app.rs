@@ -59,6 +59,6 @@ fn check_args(cmd: Command) -> Command {
         Arg::new("include-pre-releases")
             .long("include-pre-releases")
             .action(ArgAction::SetTrue)
-            .help("Include pre-release versions (alpha, beta, RC, milestone)"),
+            .help("Include pre-release versions (alpha, beta, CR, RC, milestone)"),
     )
 }

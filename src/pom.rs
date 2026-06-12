@@ -142,7 +142,12 @@ pub fn parse_pom_str(xml: &str) -> Result<Project> {
                     project.modules.push(text_buf.trim().to_string());
                 }
 
-                if let Some((artifact, _)) = artifact_stack.last_mut() {
+                let in_nested_block = path_stack
+                    .iter()
+                    .any(|s| s == "exclusions" || s == "configuration");
+                if !in_nested_block
+                    && let Some((artifact, _)) = artifact_stack.last_mut()
+                {
                     if current_path.ends_with("/groupId") {
                         artifact.group_id = Some(text_buf.trim().to_string());
                     } else if current_path.ends_with("/artifactId") {
@@ -486,6 +491,74 @@ mod tests {
         assert_eq!(project.artifact_id.as_deref(), Some("my-lib"));
         assert_eq!(project.version.as_deref(), Some("1.0.0"));
         assert_eq!(project.packaging, None);
+    }
+
+    #[test]
+    fn exclusions_do_not_overwrite_dependency_coordinates() {
+        let xml = r#"<project>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.jboss.elemento</groupId>
+                <artifactId>elemento-core</artifactId>
+                <version>${version.elemento}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.junit.jupiter</groupId>
+                        <artifactId>junit-jupiter</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>"#;
+
+        let project = parse_pom_str(xml).unwrap();
+        assert_eq!(project.artifacts.len(), 1);
+        let (artifact, kind) = &project.artifacts[0];
+        assert_eq!(artifact.group_id.as_deref(), Some("org.jboss.elemento"));
+        assert_eq!(artifact.artifact_id.as_deref(), Some("elemento-core"));
+        assert_eq!(artifact.version.as_deref(), Some("${version.elemento}"));
+        assert_eq!(*kind, ArtifactKind::Dependency);
+    }
+
+    #[test]
+    fn configuration_version_does_not_overwrite_plugin_coordinates() {
+        let xml = r#"<project>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${version.enforcer.plugin}</version>
+                <configuration>
+                    <rules>
+                        <requireJavaVersion>
+                            <version>${maven.compiler.source}</version>
+                        </requireJavaVersion>
+                    </rules>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>"#;
+
+        let project = parse_pom_str(xml).unwrap();
+        assert_eq!(project.artifacts.len(), 1);
+        let (artifact, kind) = &project.artifacts[0];
+        assert_eq!(
+            artifact.group_id.as_deref(),
+            Some("org.apache.maven.plugins")
+        );
+        assert_eq!(
+            artifact.artifact_id.as_deref(),
+            Some("maven-enforcer-plugin")
+        );
+        assert_eq!(
+            artifact.version.as_deref(),
+            Some("${version.enforcer.plugin}")
+        );
+        assert_eq!(*kind, ArtifactKind::Plugin);
     }
 
     #[test]
