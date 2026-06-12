@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::pom::{self, ArtifactKind};
+use crate::error::MvnupError;
+use crate::pom::{self, ArtifactKind, Repository};
 
 #[derive(Debug, Clone)]
 pub struct VersionProperty {
@@ -20,10 +21,15 @@ pub struct ArtifactMapping {
     pub referenced_in: PathBuf,
 }
 
-pub fn discover(root: &Path) -> Result<Vec<ArtifactMapping>> {
+pub struct DiscoveryResult {
+    pub mappings: Vec<ArtifactMapping>,
+    pub repositories: Vec<Repository>,
+}
+
+pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     let root_pom_path = root.join("pom.xml");
     if !root_pom_path.exists() {
-        anyhow::bail!("No pom.xml found in {}", root.display());
+        return Err(MvnupError::pom_not_found(&root.display().to_string()).into());
     }
 
     let root_project = pom::parse_pom(&root_pom_path)?;
@@ -33,18 +39,26 @@ pub fn discover(root: &Path) -> Result<Vec<ArtifactMapping>> {
     collect_module_poms(root, &root_project, &mut child_pom_files)?;
 
     let mut mappings = Vec::new();
+    let mut repositories = Vec::new();
 
     extract_mappings(&root_project, &root_pom_path, &properties, &mut mappings);
+    repositories.extend(root_project.repositories);
 
     for pom_path in &child_pom_files {
         let project = pom::parse_pom(pom_path)
             .with_context(|| format!("Failed to parse {}", pom_path.display()))?;
         extract_mappings(&project, pom_path, &properties, &mut mappings);
+        repositories.extend(project.repositories);
     }
 
     deduplicate(&mut mappings);
     mappings.sort_by(|a, b| a.property.name.cmp(&b.property.name));
-    Ok(mappings)
+    deduplicate_repos(&mut repositories);
+
+    Ok(DiscoveryResult {
+        mappings,
+        repositories,
+    })
 }
 
 fn extract_mappings(
@@ -132,6 +146,14 @@ fn deduplicate(mappings: &mut Vec<ArtifactMapping>) {
     mappings.retain(|m| seen.insert(m.property.name.clone()));
 }
 
+fn deduplicate_repos(repos: &mut Vec<Repository>) {
+    let mut seen = std::collections::HashSet::new();
+    repos.retain(|r| {
+        let normalized = r.url.trim_end_matches('/').to_string();
+        seen.insert(normalized)
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,14 +204,19 @@ mod tests {
             .join("fixtures")
             .join("multi-module");
 
-        let mappings = discover(&fixture_dir).unwrap();
-        assert_eq!(mappings.len(), 2);
+        let result = discover(&fixture_dir).unwrap();
+        assert_eq!(result.mappings.len(), 2);
 
-        let names: Vec<&str> = mappings.iter().map(|m| m.property.name.as_str()).collect();
+        let names: Vec<&str> = result
+            .mappings
+            .iter()
+            .map(|m| m.property.name.as_str())
+            .collect();
         assert!(names.contains(&"version.compiler.plugin"));
         assert!(names.contains(&"version.junit"));
 
-        let junit = mappings
+        let junit = result
+            .mappings
             .iter()
             .find(|m| m.property.name == "version.junit")
             .unwrap();
@@ -202,5 +229,36 @@ mod tests {
     fn discover_missing_pom_fails() {
         let result = discover(Path::new("/nonexistent/path"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn deduplicate_repos_by_url() {
+        use crate::pom::{Repository, RepositoryKind};
+
+        let mut repos = vec![
+            Repository {
+                id: Some("r1".into()),
+                name: None,
+                url: "https://repo.example.com/maven2/".into(),
+                kind: RepositoryKind::Standard,
+            },
+            Repository {
+                id: Some("r2".into()),
+                name: None,
+                url: "https://repo.example.com/maven2".into(),
+                kind: RepositoryKind::Plugin,
+            },
+            Repository {
+                id: Some("r3".into()),
+                name: None,
+                url: "https://other.example.com/repo".into(),
+                kind: RepositoryKind::Standard,
+            },
+        ];
+
+        deduplicate_repos(&mut repos);
+        assert_eq!(repos.len(), 2);
+        assert_eq!(repos[0].id.as_deref(), Some("r1"));
+        assert_eq!(repos[1].id.as_deref(), Some("r3"));
     }
 }

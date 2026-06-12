@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>custom-repo-test</artifactId>
+    <version>1.0.0</version>
+
+    <properties>
+        <version.wildfly.bom>35.0.0.Final</version.wildfly.bom>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>jboss-public</id>
+            <url>https://repository.jboss.org/nexus/content/groups/public</url>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.wildfly.bom</groupId>
+                <artifactId>wildfly-ee</artifactId>
+                <version>${version.wildfly.bom}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

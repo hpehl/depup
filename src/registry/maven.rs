@@ -1,106 +1,240 @@
-use anyhow::{Context, Result};
-use async_trait::async_trait;
-use serde::Deserialize;
+use anyhow::Result;
+use quick_xml::events::Event;
+use quick_xml::reader::Reader;
 use std::time::Duration;
 
+use crate::constants::{HTTP_TIMEOUT_SECS, MAVEN_CENTRAL_URL};
 use crate::discovery::ArtifactMapping;
-use crate::registry::{CheckResult, VersionChecker};
+use crate::error::MvnupError;
+use crate::pom::{ArtifactKind, Repository, RepositoryKind};
+use crate::registry::CheckResult;
 use crate::version::{self, Version};
 
-pub struct MavenCentralChecker {
+pub struct MavenChecker {
     client: reqwest::Client,
     include_pre_releases: bool,
+    repositories: Vec<Repository>,
 }
 
-impl MavenCentralChecker {
-    pub fn new(include_pre_releases: bool) -> Self {
+impl MavenChecker {
+    pub fn new(include_pre_releases: bool, repositories: Vec<Repository>) -> Self {
         let client = reqwest::Client::builder()
             .user_agent(format!("mvnup/{}", env!("CARGO_PKG_VERSION")))
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
             .build()
             .expect("Failed to create HTTP client");
         Self {
             client,
             include_pre_releases,
+            repositories,
         }
+    }
+
+    fn repo_urls_for(&self, kind: ArtifactKind) -> Vec<&str> {
+        self.repositories
+            .iter()
+            .filter(|r| match kind {
+                ArtifactKind::Dependency => r.kind == RepositoryKind::Standard,
+                ArtifactKind::Plugin => r.kind == RepositoryKind::Plugin,
+            })
+            .map(|r| r.url.as_str())
+            .collect()
+    }
+
+    async fn fetch_from_repo(
+        &self,
+        base_url: &str,
+        group_id: &str,
+        artifact_id: &str,
+    ) -> Result<Vec<String>> {
+        fetch_versions(&self.client, base_url, group_id, artifact_id).await
     }
 }
 
-#[async_trait]
-impl VersionChecker for MavenCentralChecker {
-    async fn check(&self, mapping: &ArtifactMapping) -> Result<CheckResult> {
-        let result = self
-            .fetch_latest(&mapping.group_id, &mapping.artifact_id)
-            .await;
-
+impl MavenChecker {
+    pub async fn check(&self, mapping: &ArtifactMapping) -> Result<CheckResult> {
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
 
-        match result {
-            Ok(latest) => Ok(CheckResult {
-                property_name: mapping.property.name.clone(),
-                current_version: mapping.property.current_value.clone(),
-                latest_version: Some(latest.clone()),
-                outdated: version::is_newer(&mapping.property.current_value, &latest),
-                error: None,
-                artifact: Some(artifact),
-            }),
-            Err(e) => Ok(CheckResult {
+        // Try Maven Central first
+        let central_result = self
+            .fetch_from_repo(MAVEN_CENTRAL_URL, &mapping.group_id, &mapping.artifact_id)
+            .await;
+
+        let all_versions = match central_result {
+            Ok(versions) if !versions.is_empty() => versions,
+            _ => {
+                // Maven Central failed or empty — try custom repos in parallel
+                let custom_urls = self.repo_urls_for(mapping.kind);
+                if custom_urls.is_empty() {
+                    return match central_result {
+                        Err(e) => Ok(CheckResult {
+                            property_name: mapping.property.name.clone(),
+                            current_version: mapping.property.current_value.clone(),
+                            latest_version: None,
+                            outdated: false,
+                            error: Some(e.to_string()),
+                            artifact: Some(artifact),
+                        }),
+                        Ok(_) => Ok(CheckResult {
+                            property_name: mapping.property.name.clone(),
+                            current_version: mapping.property.current_value.clone(),
+                            latest_version: None,
+                            outdated: false,
+                            error: Some(format!(
+                                "No versions found for {}:{}",
+                                mapping.group_id, mapping.artifact_id
+                            )),
+                            artifact: Some(artifact),
+                        }),
+                    };
+                }
+
+                let mut repo_tasks = tokio::task::JoinSet::new();
+                for url in custom_urls {
+                    let client = self.client.clone();
+                    let group_id = mapping.group_id.clone();
+                    let artifact_id = mapping.artifact_id.clone();
+                    let url = url.to_string();
+                    repo_tasks.spawn(async move {
+                        fetch_versions(&client, &url, &group_id, &artifact_id).await
+                    });
+                }
+
+                let repo_results = repo_tasks.join_all().await;
+                let mut merged: Vec<String> = repo_results
+                    .into_iter()
+                    .filter_map(|r| r.ok())
+                    .flatten()
+                    .collect();
+
+                if merged.is_empty() {
+                    return Ok(CheckResult {
+                        property_name: mapping.property.name.clone(),
+                        current_version: mapping.property.current_value.clone(),
+                        latest_version: None,
+                        outdated: false,
+                        error: Some(format!(
+                            "No versions found for {}:{}",
+                            mapping.group_id, mapping.artifact_id
+                        )),
+                        artifact: Some(artifact),
+                    });
+                }
+
+                merged.sort();
+                merged.dedup();
+                merged
+            }
+        };
+
+        let filtered = filter_versions(&all_versions, self.include_pre_releases);
+        if filtered.is_empty() {
+            return Ok(CheckResult {
                 property_name: mapping.property.name.clone(),
                 current_version: mapping.property.current_value.clone(),
                 latest_version: None,
                 outdated: false,
-                error: Some(e.to_string()),
+                error: Some(format!(
+                    "No release versions found for {}:{}",
+                    mapping.group_id, mapping.artifact_id
+                )),
                 artifact: Some(artifact),
-            }),
+            });
         }
+
+        let latest = find_latest(&filtered);
+        Ok(CheckResult {
+            property_name: mapping.property.name.clone(),
+            current_version: mapping.property.current_value.clone(),
+            latest_version: Some(latest.clone()),
+            outdated: version::is_newer(&mapping.property.current_value, &latest),
+            error: None,
+            artifact: Some(artifact),
+        })
     }
 }
 
-impl MavenCentralChecker {
-    async fn fetch_latest(&self, group_id: &str, artifact_id: &str) -> Result<String> {
-        let query = format!("g:\"{}\" AND a:\"{}\"", group_id, artifact_id);
+async fn fetch_versions(
+    client: &reqwest::Client,
+    base_url: &str,
+    group_id: &str,
+    artifact_id: &str,
+) -> Result<Vec<String>> {
+    let group_path = group_id.replace('.', "/");
+    let url = format!(
+        "{}/{}/{}/maven-metadata.xml",
+        base_url.trim_end_matches('/'),
+        group_path,
+        artifact_id
+    );
 
-        let resp = self
-            .client
-            .get("https://search.maven.org/solrsearch/select")
-            .query(&[
-                ("q", query.as_str()),
-                ("rows", "100"),
-                ("wt", "json"),
-                ("core", "gav"),
-            ])
-            .send()
-            .await
-            .context("Maven Central request failed")?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| MvnupError::http_request_failed(&url, &e.to_string()))?;
 
-        let status = resp.status();
-        let body = resp.text().await.context("Failed to read response body")?;
-
-        if !status.is_success() {
-            anyhow::bail!("Maven Central returned HTTP {status}");
-        }
-
-        let response: SearchResponse = serde_json::from_str(&body).with_context(|| {
-            format!("Failed to parse response for {}:{}", group_id, artifact_id)
-        })?;
-
-        let versions = parse_versions(&response, self.include_pre_releases);
-
-        if versions.is_empty() {
-            anyhow::bail!("No versions found for {}:{}", group_id, artifact_id);
-        }
-
-        Ok(find_latest(&versions))
+    if !resp.status().is_success() {
+        return Err(
+            MvnupError::http_request_failed(&url, &format!("HTTP {}", resp.status())).into(),
+        );
     }
+
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| MvnupError::http_request_failed(&url, &e.to_string()))?;
+
+    parse_metadata_versions(&body)
 }
 
-fn parse_versions(response: &SearchResponse, include_pre_releases: bool) -> Vec<String> {
-    response
-        .response
-        .docs
+fn parse_metadata_versions(xml: &str) -> Result<Vec<String>> {
+    let mut reader = Reader::from_str(xml);
+    let mut versions = Vec::new();
+    let mut path_stack: Vec<String> = Vec::new();
+    let mut text_buf = String::new();
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) => {
+                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                let local = name.split(':').next_back().unwrap_or(&name).to_string();
+                path_stack.push(local);
+                text_buf.clear();
+            }
+            Ok(Event::End(_)) => {
+                let is_version_element = path_stack.len() >= 3
+                    && path_stack.last().map(|s| s.as_str()) == Some("version")
+                    && path_stack.iter().any(|s| s == "versions");
+
+                if is_version_element {
+                    let v = text_buf.trim().to_string();
+                    if !v.is_empty() {
+                        versions.push(v);
+                    }
+                }
+
+                text_buf.clear();
+                path_stack.pop();
+            }
+            Ok(Event::Text(e)) => {
+                if let Ok(unescaped) = e.unescape() {
+                    text_buf.push_str(&unescaped);
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+    }
+
+    Ok(versions)
+}
+
+fn filter_versions(versions: &[String], include_pre_releases: bool) -> Vec<String> {
+    versions
         .iter()
-        .filter_map(|doc| {
-            let v = &doc.v;
+        .filter_map(|v| {
             if v.to_lowercase().contains("snapshot") {
                 return None;
             }
@@ -124,64 +258,97 @@ fn find_latest(versions: &[String]) -> String {
         .unwrap_or_else(|| versions[0].clone())
 }
 
-#[derive(Debug, Deserialize)]
-struct SearchResponse {
-    response: SearchResponseBody,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SearchResponseBody {
-    #[serde(default)]
-    docs: Vec<SearchDoc>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SearchDoc {
-    v: String,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn make_response(versions: &[&str]) -> SearchResponse {
-        SearchResponse {
-            response: SearchResponseBody {
-                docs: versions
-                    .iter()
-                    .map(|v| SearchDoc { v: v.to_string() })
-                    .collect(),
-            },
-        }
+    #[test]
+    fn parse_metadata_xml() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <groupId>org.example</groupId>
+  <artifactId>my-lib</artifactId>
+  <versioning>
+    <latest>2.0.0</latest>
+    <release>2.0.0</release>
+    <versions>
+      <version>1.0.0</version>
+      <version>1.1.0</version>
+      <version>2.0.0</version>
+    </versions>
+  </versioning>
+</metadata>"#;
+
+        let versions = parse_metadata_versions(xml).unwrap();
+        assert_eq!(versions, vec!["1.0.0", "1.1.0", "2.0.0"]);
+    }
+
+    #[test]
+    fn parse_metadata_with_snapshots_and_qualifiers() {
+        let xml = r#"<metadata>
+  <versioning>
+    <versions>
+      <version>1.0.0</version>
+      <version>1.1.0-SNAPSHOT</version>
+      <version>2.0.0-alpha1</version>
+      <version>2.0.0.Final</version>
+    </versions>
+  </versioning>
+</metadata>"#;
+
+        let versions = parse_metadata_versions(xml).unwrap();
+        assert_eq!(
+            versions,
+            vec!["1.0.0", "1.1.0-SNAPSHOT", "2.0.0-alpha1", "2.0.0.Final"]
+        );
+    }
+
+    #[test]
+    fn parse_empty_metadata() {
+        let xml = r#"<metadata><versioning><versions></versions></versioning></metadata>"#;
+        let versions = parse_metadata_versions(xml).unwrap();
+        assert!(versions.is_empty());
     }
 
     #[test]
     fn filters_snapshots() {
-        let resp = make_response(&["1.0.0", "2.0.0-SNAPSHOT", "1.5.0"]);
-        let versions = parse_versions(&resp, false);
-        assert_eq!(versions, vec!["1.0.0", "1.5.0"]);
+        let versions = vec![
+            "1.0.0".to_string(),
+            "2.0.0-SNAPSHOT".to_string(),
+            "1.5.0".to_string(),
+        ];
+        let filtered = filter_versions(&versions, false);
+        assert_eq!(filtered, vec!["1.0.0", "1.5.0"]);
     }
 
     #[test]
     fn filters_pre_releases() {
-        let resp = make_response(&["1.0.0", "2.0.0-alpha1", "1.5.0", "2.0.0-RC1"]);
-        let versions = parse_versions(&resp, false);
-        assert_eq!(versions, vec!["1.0.0", "1.5.0"]);
+        let versions = vec![
+            "1.0.0".to_string(),
+            "2.0.0-alpha1".to_string(),
+            "1.5.0".to_string(),
+            "2.0.0-RC1".to_string(),
+        ];
+        let filtered = filter_versions(&versions, false);
+        assert_eq!(filtered, vec!["1.0.0", "1.5.0"]);
     }
 
     #[test]
     fn includes_pre_releases_when_flag_set() {
-        let resp = make_response(&["1.0.0", "2.0.0-alpha1", "1.5.0"]);
-        let versions = parse_versions(&resp, true);
-        assert_eq!(versions, vec!["1.0.0", "2.0.0-alpha1", "1.5.0"]);
+        let versions = vec![
+            "1.0.0".to_string(),
+            "2.0.0-alpha1".to_string(),
+            "1.5.0".to_string(),
+        ];
+        let filtered = filter_versions(&versions, true);
+        assert_eq!(filtered, vec!["1.0.0", "2.0.0-alpha1", "1.5.0"]);
     }
 
     #[test]
     fn snapshots_always_filtered_even_with_pre_release_flag() {
-        let resp = make_response(&["1.0.0", "2.0.0-SNAPSHOT"]);
-        let versions = parse_versions(&resp, true);
-        assert_eq!(versions, vec!["1.0.0"]);
+        let versions = vec!["1.0.0".to_string(), "2.0.0-SNAPSHOT".to_string()];
+        let filtered = filter_versions(&versions, true);
+        assert_eq!(filtered, vec!["1.0.0"]);
     }
 
     #[test]
@@ -202,5 +369,47 @@ mod tests {
             "2.5.0.Final".to_string(),
         ];
         assert_eq!(find_latest(&versions), "3.1.0.Final");
+    }
+
+    #[test]
+    fn repo_urls_for_dependency() {
+        let repos = vec![
+            Repository {
+                id: None,
+                name: None,
+                url: "https://dep-repo.example.com".into(),
+                kind: RepositoryKind::Standard,
+            },
+            Repository {
+                id: None,
+                name: None,
+                url: "https://plugin-repo.example.com".into(),
+                kind: RepositoryKind::Plugin,
+            },
+        ];
+        let checker = MavenChecker::new(false, repos);
+        let urls = checker.repo_urls_for(ArtifactKind::Dependency);
+        assert_eq!(urls, vec!["https://dep-repo.example.com"]);
+    }
+
+    #[test]
+    fn repo_urls_for_plugin() {
+        let repos = vec![
+            Repository {
+                id: None,
+                name: None,
+                url: "https://dep-repo.example.com".into(),
+                kind: RepositoryKind::Standard,
+            },
+            Repository {
+                id: None,
+                name: None,
+                url: "https://plugin-repo.example.com".into(),
+                kind: RepositoryKind::Plugin,
+            },
+        ];
+        let checker = MavenChecker::new(false, repos);
+        let urls = checker.repo_urls_for(ArtifactKind::Plugin);
+        assert_eq!(urls, vec!["https://plugin-repo.example.com"]);
     }
 }

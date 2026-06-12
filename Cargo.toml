@@ -6,13 +6,17 @@ description = "Check Maven version properties against upstream registries"
 
 [dependencies]
 anyhow = "1"
-async-trait = "0.1"
-clap = { version = "4", features = ["derive"] }
-colored = "3"
+clap = { version = "4", features = ["cargo"] }
+clap_complete = { version = "4", features = ["unstable-dynamic"] }
 comfy-table = "7"
+console = "0.16"
+indicatif = "0.18"
 quick-xml = "0.37"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+thiserror = "2"
 tokio = { version = "1", features = ["full"] }
-walkdir = "2"
+
+[profile.release]
+lto = true

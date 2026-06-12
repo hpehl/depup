@@ -1,24 +1,12 @@
-use colored::Colorize;
 use comfy_table::{Cell, ContentArrangement, Table};
-use serde::Serialize;
+use console::style;
 
+use crate::json::JsonResult;
 use crate::registry::CheckResult;
-
-#[derive(Debug, Serialize)]
-struct JsonResult {
-    property: String,
-    current: String,
-    latest: Option<String>,
-    status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    artifact: Option<String>,
-}
 
 pub fn print_table(results: &[CheckResult], verbose: bool) {
     if results.is_empty() {
-        println!("{}", "No version properties found.".yellow());
+        println!("{}", style("No version properties found.").yellow());
         return;
     }
 
@@ -84,26 +72,30 @@ fn status_label(result: &CheckResult) -> &'static str {
 
 fn format_status(result: &CheckResult) -> (String, String) {
     if let Some(err) = &result.error {
-        let status = "ERROR".red().to_string();
-        let latest = err.red().to_string();
+        let status = style("ERROR").red().to_string();
+        let latest = style(err).red().to_string();
         (status, latest)
     } else if result.outdated {
-        let status = "OUTDATED".yellow().to_string();
-        let latest = result
-            .latest_version
-            .as_deref()
-            .unwrap_or("?")
-            .yellow()
-            .to_string();
+        let status = style("OUTDATED").yellow().to_string();
+        let latest = style(
+            result
+                .latest_version
+                .as_deref()
+                .unwrap_or("?"),
+        )
+        .yellow()
+        .to_string();
         (status, latest)
     } else {
-        let status = "OK".green().to_string();
-        let latest = result
-            .latest_version
-            .as_deref()
-            .unwrap_or(&result.current_version)
-            .green()
-            .to_string();
+        let status = style("OK").green().to_string();
+        let latest = style(
+            result
+                .latest_version
+                .as_deref()
+                .unwrap_or(&result.current_version),
+        )
+        .green()
+        .to_string();
         (status, latest)
     }
 }
@@ -116,12 +108,12 @@ fn print_summary(results: &[CheckResult]) {
 
     println!();
     print!("{} properties checked: ", total);
-    print!("{}", format!("{current} current").green());
+    print!("{}", style(format!("{current} current")).green());
     if outdated > 0 {
-        print!(", {}", format!("{outdated} outdated").yellow());
+        print!(", {}", style(format!("{outdated} outdated")).yellow());
     }
     if errors > 0 {
-        print!(", {}", format!("{errors} errors").red());
+        print!(", {}", style(format!("{errors} errors")).red());
     }
     println!();
 }
