@@ -12,12 +12,12 @@ pub struct VersionProperty {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ArtifactMapping {
     pub property: VersionProperty,
     pub group_id: String,
     pub artifact_id: String,
     pub kind: ArtifactKind,
+    #[allow(dead_code)]
     pub referenced_in: PathBuf,
 }
 
@@ -68,35 +68,29 @@ fn extract_mappings(
     mappings: &mut Vec<ArtifactMapping>,
 ) {
     for (artifact, kind) in &project.artifacts {
-        let version_str = match &artifact.version {
-            Some(v) => v,
-            None => continue,
+        let Some(version_str) = &artifact.version else {
+            continue;
+        };
+        let Some(prop_name) = extract_property_reference(version_str) else {
+            continue;
+        };
+        let Some(group_id) = &artifact.group_id else {
+            continue;
+        };
+        let Some(artifact_id) = &artifact.artifact_id else {
+            continue;
+        };
+        let Some(current_value) = properties.get(&prop_name) else {
+            continue;
         };
 
-        let prop_name = match extract_property_reference(version_str) {
-            Some(name) => name,
-            None => continue,
-        };
-
-        let group_id = match &artifact.group_id {
-            Some(g) => resolve_value(g, properties),
-            None => continue,
-        };
-
-        let artifact_id = match &artifact.artifact_id {
-            Some(a) => resolve_value(a, properties),
-            None => continue,
-        };
-
-        let current_value = match properties.get(&prop_name) {
-            Some(v) => v.to_string(),
-            None => continue,
-        };
+        let group_id = resolve_value(group_id, properties);
+        let artifact_id = resolve_value(artifact_id, properties);
 
         mappings.push(ArtifactMapping {
             property: VersionProperty {
                 name: prop_name,
-                current_value,
+                current_value: current_value.clone(),
             },
             group_id,
             artifact_id,
@@ -127,18 +121,20 @@ fn extract_property_reference(version: &str) -> Option<String> {
         .trim()
         .strip_prefix("${")
         .and_then(|s| s.strip_suffix('}'))
-        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
 }
 
 fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
-    if let Some(prop_name) = extract_property_reference(value) {
-        properties
-            .get(&prop_name)
-            .cloned()
-            .unwrap_or_else(|| value.to_string())
-    } else {
-        value.to_string()
-    }
+    extract_property_reference(value).map_or_else(
+        || value.to_string(),
+        |prop_name| {
+            properties
+                .get(&prop_name)
+                .cloned()
+                .unwrap_or_else(|| value.to_string())
+        },
+    )
 }
 
 fn deduplicate(mappings: &mut Vec<ArtifactMapping>) {
@@ -167,7 +163,7 @@ mod tests {
         assert_eq!(extract_property_reference("1.0.0"), None);
         assert_eq!(extract_property_reference("${incomplete"), None);
         assert_eq!(extract_property_reference(""), None);
-        assert_eq!(extract_property_reference("${}"), Some("".to_string()));
+        assert_eq!(extract_property_reference("${}"), None);
     }
 
     #[test]

@@ -21,7 +21,6 @@ pub struct MvnupError {
     pub message: String,
 }
 
-#[allow(dead_code)]
 impl MvnupError {
     pub fn pom_not_found(path: &str) -> Self {
         Self {
@@ -30,6 +29,7 @@ impl MvnupError {
         }
     }
 
+    #[cfg(test)]
     pub fn pom_parse_failed(path: &str, detail: &str) -> Self {
         Self {
             code: MvnupErrorCode::PomParseFailed,
@@ -37,6 +37,7 @@ impl MvnupError {
         }
     }
 
+    #[cfg(test)]
     pub fn registry_lookup_failed(artifact: &str, detail: &str) -> Self {
         Self {
             code: MvnupErrorCode::RegistryLookupFailed,
@@ -44,6 +45,7 @@ impl MvnupError {
         }
     }
 
+    #[cfg(test)]
     pub fn no_versions_found(artifact: &str) -> Self {
         Self {
             code: MvnupErrorCode::NoVersionsFound,
@@ -65,10 +67,10 @@ impl MvnupError {
         }
     }
 
+    #[cfg(test)]
     pub fn error_code(err: &anyhow::Error) -> MvnupErrorCode {
-        err.downcast_ref::<MvnupError>()
-            .map(|e| e.code)
-            .unwrap_or(MvnupErrorCode::Internal)
+        err.downcast_ref::<Self>()
+            .map_or(MvnupErrorCode::Internal, |e| e.code)
     }
 }
 
@@ -94,15 +96,15 @@ impl JsonErrorEnvelope {
     }
 
     pub fn from_anyhow(err: &anyhow::Error) -> Self {
-        match err.downcast_ref::<MvnupError>() {
-            Some(e) => Self::from_mvnup_error(e),
-            None => Self {
+        err.downcast_ref::<MvnupError>().map_or_else(
+            || Self {
                 error: JsonErrorBody {
                     code: MvnupErrorCode::Internal,
                     message: err.to_string(),
                 },
             },
-        }
+            Self::from_mvnup_error,
+        )
     }
 }
 
@@ -144,10 +146,12 @@ mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
         assert_eq!(json["error"]["code"], "NO_VERSIONS_FOUND");
-        assert!(json["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("org.example:my-lib"));
+        assert!(
+            json["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("org.example:my-lib")
+        );
     }
 
     #[test]
@@ -157,10 +161,12 @@ mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
         assert_eq!(json["error"]["code"], "POM_PARSE_FAILED");
-        assert!(json["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("invalid XML"));
+        assert!(
+            json["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("invalid XML")
+        );
     }
 
     #[test]

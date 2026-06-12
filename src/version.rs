@@ -42,13 +42,9 @@ impl Version {
     }
 
     pub fn is_pre_release(&self) -> bool {
-        match &self.qualifier {
-            None => false,
-            Some(q) => {
-                let lower = q.to_lowercase();
-                is_pre_release_qualifier(&lower)
-            }
-        }
+        self.qualifier
+            .as_ref()
+            .is_some_and(|q| is_pre_release_qualifier(&q.to_lowercase()))
     }
 }
 

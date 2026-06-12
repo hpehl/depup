@@ -5,8 +5,7 @@ use clap::ArgMatches;
 pub fn path_argument(matches: &ArgMatches) -> PathBuf {
     matches
         .get_one::<String>("path")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
+        .map_or_else(|| PathBuf::from("."), PathBuf::from)
 }
 
 pub fn is_json(matches: &ArgMatches) -> bool {

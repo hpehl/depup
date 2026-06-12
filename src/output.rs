@@ -60,7 +60,7 @@ pub fn print_json(results: &[CheckResult]) {
     );
 }
 
-fn status_label(result: &CheckResult) -> &'static str {
+const fn status_label(result: &CheckResult) -> &'static str {
     if result.error.is_some() {
         "error"
     } else if result.outdated {
@@ -70,6 +70,7 @@ fn status_label(result: &CheckResult) -> &'static str {
     }
 }
 
+#[allow(clippy::option_if_let_else)]
 fn format_status(result: &CheckResult) -> (String, String) {
     if let Some(err) = &result.error {
         let status = style("ERROR").red().to_string();
@@ -77,14 +78,9 @@ fn format_status(result: &CheckResult) -> (String, String) {
         (status, latest)
     } else if result.outdated {
         let status = style("OUTDATED").yellow().to_string();
-        let latest = style(
-            result
-                .latest_version
-                .as_deref()
-                .unwrap_or("?"),
-        )
-        .yellow()
-        .to_string();
+        let latest = style(result.latest_version.as_deref().unwrap_or("?"))
+            .yellow()
+            .to_string();
         (status, latest)
     } else {
         let status = style("OK").green().to_string();
@@ -107,7 +103,7 @@ fn print_summary(results: &[CheckResult]) {
     let current = total - outdated - errors;
 
     println!();
-    print!("{} properties checked: ", total);
+    print!("{total} properties checked: ");
     print!("{}", style(format!("{current} current")).green());
     if outdated > 0 {
         print!(", {}", style(format!("{outdated} outdated")).yellow());

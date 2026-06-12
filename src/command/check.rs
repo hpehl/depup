@@ -22,7 +22,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     let include_pre_releases = args::include_pre_releases(matches);
 
     let instant = Instant::now();
-    let root = path.canonicalize().unwrap_or(path.clone());
+    let root = path.canonicalize().unwrap_or_else(|_| path.clone());
 
     if !json {
         progress::step("\u{1f50d}", "Discovering POM modules...");

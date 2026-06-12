@@ -46,6 +46,7 @@ async fn run() -> Result<()> {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn classify_clap_error(err: clap::Error) -> anyhow::Error {
     match err.kind() {
         clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {

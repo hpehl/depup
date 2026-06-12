@@ -13,6 +13,7 @@ pub struct Project {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_field_names)]
 pub struct Artifact {
     pub group_id: Option<String>,
     pub artifact_id: Option<String>,
@@ -54,6 +55,7 @@ pub fn parse_pom(path: &Path) -> Result<Project> {
     parse_pom_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn parse_pom_str(xml: &str) -> Result<Project> {
     let mut reader = Reader::from_str(xml);
     let mut project = Project::default();
@@ -152,8 +154,7 @@ pub fn parse_pom_str(xml: &str) -> Result<Project> {
                     project.artifacts.push((artifact, kind));
                 }
 
-                if (is_repository_element(&path_stack)
-                    || is_plugin_repository_element(&path_stack))
+                if (is_repository_element(&path_stack) || is_plugin_repository_element(&path_stack))
                     && let Some((repo, _)) = repo_stack.pop()
                     && !repo.url.is_empty()
                 {
@@ -190,27 +191,27 @@ fn is_module_element(stack: &[String]) -> bool {
 }
 
 fn is_dependency_element(stack: &[String]) -> bool {
-    stack.last().map(|s| s.as_str()) == Some("dependency")
+    stack.last().map(String::as_str) == Some("dependency")
         && stack
             .iter()
             .any(|s| s == "dependencies" || s == "dependencyManagement")
 }
 
 fn is_plugin_element(stack: &[String]) -> bool {
-    stack.last().map(|s| s.as_str()) == Some("plugin")
+    stack.last().map(String::as_str) == Some("plugin")
         && stack
             .iter()
             .any(|s| s == "plugins" || s == "pluginManagement")
 }
 
 fn is_repository_element(stack: &[String]) -> bool {
-    stack.last().map(|s| s.as_str()) == Some("repository")
+    stack.last().map(String::as_str) == Some("repository")
         && stack.iter().any(|s| s == "repositories")
         && !stack.iter().any(|s| s == "pluginRepositories")
 }
 
 fn is_plugin_repository_element(stack: &[String]) -> bool {
-    stack.last().map(|s| s.as_str()) == Some("pluginRepository")
+    stack.last().map(String::as_str) == Some("pluginRepository")
         && stack.iter().any(|s| s == "pluginRepositories")
 }
 
@@ -258,11 +259,11 @@ mod tests {
             project
                 .properties
                 .get("version.wildfly")
-                .map(|s| s.as_str()),
+                .map(String::as_str),
             Some("35.0.0.Final")
         );
         assert_eq!(
-            project.properties.get("version.lombok").map(|s| s.as_str()),
+            project.properties.get("version.lombok").map(String::as_str),
             Some("1.18.30")
         );
 
@@ -300,7 +301,7 @@ mod tests {
 
         let project = parse_pom_str(xml).unwrap();
         assert_eq!(
-            project.properties.get("version.junit").map(|s| s.as_str()),
+            project.properties.get("version.junit").map(String::as_str),
             Some("5.10.0")
         );
     }

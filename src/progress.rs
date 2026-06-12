@@ -6,7 +6,7 @@ use tokio::time::Instant;
 const NAME_WIDTH: usize = 40;
 
 pub fn step(emoji: &str, message: &str) {
-    println!("{} {}", emoji, message);
+    println!("{emoji} {message}");
 }
 
 pub fn done(instant: Instant) {
@@ -23,21 +23,19 @@ pub struct Progress {
 }
 
 impl Progress {
-    pub fn join(multi_progress: &MultiProgress, name: &str) -> Progress {
-        let progress = Progress {
+    pub fn join(multi_progress: &MultiProgress, name: &str) -> Self {
+        let progress = Self {
             name: name.to_string(),
             bar: Self::spinner(),
         };
         progress.bar.enable_steady_tick(Duration::from_millis(100));
         multi_progress.add(progress.bar.clone());
-        progress
-            .bar
-            .set_message(style(name).cyan().to_string());
+        progress.bar.set_message(style(name).cyan().to_string());
         progress
     }
 
-    pub fn hidden(name: &str) -> Progress {
-        Progress {
+    pub fn hidden(name: &str) -> Self {
+        Self {
             name: name.to_string(),
             bar: ProgressBar::hidden(),
         }

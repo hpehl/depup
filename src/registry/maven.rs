@@ -103,7 +103,7 @@ impl MavenChecker {
                 let repo_results = repo_tasks.join_all().await;
                 let mut merged: Vec<String> = repo_results
                     .into_iter()
-                    .filter_map(|r| r.ok())
+                    .filter_map(Result::ok)
                     .flatten()
                     .collect();
 
@@ -185,10 +185,10 @@ async fn fetch_versions(
         .await
         .map_err(|e| MvnupError::http_request_failed(&url, &e.to_string()))?;
 
-    parse_metadata_versions(&body)
+    Ok(parse_metadata_versions(&body))
 }
 
-fn parse_metadata_versions(xml: &str) -> Result<Vec<String>> {
+fn parse_metadata_versions(xml: &str) -> Vec<String> {
     let mut reader = Reader::from_str(xml);
     let mut versions = Vec::new();
     let mut path_stack: Vec<String> = Vec::new();
@@ -204,7 +204,7 @@ fn parse_metadata_versions(xml: &str) -> Result<Vec<String>> {
             }
             Ok(Event::End(_)) => {
                 let is_version_element = path_stack.len() >= 3
-                    && path_stack.last().map(|s| s.as_str()) == Some("version")
+                    && path_stack.last().map(String::as_str) == Some("version")
                     && path_stack.iter().any(|s| s == "versions");
 
                 if is_version_element {
@@ -222,13 +222,12 @@ fn parse_metadata_versions(xml: &str) -> Result<Vec<String>> {
                     text_buf.push_str(&unescaped);
                 }
             }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
+            Ok(Event::Eof) | Err(_) => break,
             _ => {}
         }
     }
 
-    Ok(versions)
+    versions
 }
 
 fn filter_versions(versions: &[String], include_pre_releases: bool) -> Vec<String> {
@@ -254,8 +253,7 @@ fn find_latest(versions: &[String]) -> String {
     parsed.sort();
     parsed
         .last()
-        .map(|v| v.raw.clone())
-        .unwrap_or_else(|| versions[0].clone())
+        .map_or_else(|| versions[0].clone(), |v| v.raw.clone())
 }
 
 #[cfg(test)]
@@ -279,7 +277,7 @@ mod tests {
   </versioning>
 </metadata>"#;
 
-        let versions = parse_metadata_versions(xml).unwrap();
+        let versions = parse_metadata_versions(xml);
         assert_eq!(versions, vec!["1.0.0", "1.1.0", "2.0.0"]);
     }
 
@@ -296,7 +294,7 @@ mod tests {
   </versioning>
 </metadata>"#;
 
-        let versions = parse_metadata_versions(xml).unwrap();
+        let versions = parse_metadata_versions(xml);
         assert_eq!(
             versions,
             vec!["1.0.0", "1.1.0-SNAPSHOT", "2.0.0-alpha1", "2.0.0.Final"]
@@ -306,7 +304,7 @@ mod tests {
     #[test]
     fn parse_empty_metadata() {
         let xml = r#"<metadata><versioning><versions></versions></versioning></metadata>"#;
-        let versions = parse_metadata_versions(xml).unwrap();
+        let versions = parse_metadata_versions(xml);
         assert!(versions.is_empty());
     }
 
