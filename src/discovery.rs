@@ -33,7 +33,8 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     }
 
     let root_project = pom::parse_pom(&root_pom_path)?;
-    let properties = root_project.properties.clone();
+    let mut properties = root_project.properties.clone();
+    inject_project_properties(&root_project, &mut properties);
 
     let mut child_pom_files = Vec::new();
     collect_module_poms(root, &root_project, &mut child_pom_files)?;
@@ -42,12 +43,14 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     let mut repositories = Vec::new();
 
     extract_mappings(&root_project, &root_pom_path, &properties, &mut mappings);
-    repositories.extend(root_project.repositories);
+    repositories.extend(root_project.repositories.clone());
 
     for pom_path in &child_pom_files {
         let project = pom::parse_pom(pom_path)
             .with_context(|| format!("Failed to parse {}", pom_path.display()))?;
-        extract_mappings(&project, pom_path, &properties, &mut mappings);
+        let mut child_properties = properties.clone();
+        inject_project_properties_with_fallback(&project, &root_project, &mut child_properties);
+        extract_mappings(&project, pom_path, &child_properties, &mut mappings);
         repositories.extend(project.repositories);
     }
 
@@ -59,6 +62,52 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
         mappings,
         repositories,
     })
+}
+
+fn inject_project_properties(
+    project: &pom::Project,
+    properties: &mut HashMap<String, String>,
+) {
+    if let Some(gid) = &project.group_id {
+        properties.insert("project.groupId".to_string(), gid.clone());
+    }
+    if let Some(aid) = &project.artifact_id {
+        properties.insert("project.artifactId".to_string(), aid.clone());
+    }
+    if let Some(ver) = &project.version {
+        properties.insert("project.version".to_string(), ver.clone());
+    }
+    properties.insert(
+        "project.packaging".to_string(),
+        project
+            .packaging
+            .clone()
+            .unwrap_or_else(|| "jar".to_string()),
+    );
+}
+
+fn inject_project_properties_with_fallback(
+    child: &pom::Project,
+    parent: &pom::Project,
+    properties: &mut HashMap<String, String>,
+) {
+    if let Some(gid) = child.group_id.as_ref().or(parent.group_id.as_ref()) {
+        properties.insert("project.groupId".to_string(), gid.clone());
+    }
+    if let Some(aid) = &child.artifact_id {
+        properties.insert("project.artifactId".to_string(), aid.clone());
+    }
+    if let Some(ver) = child.version.as_ref().or(parent.version.as_ref()) {
+        properties.insert("project.version".to_string(), ver.clone());
+    }
+    properties.insert(
+        "project.packaging".to_string(),
+        child
+            .packaging
+            .clone()
+            .or_else(|| parent.packaging.clone())
+            .unwrap_or_else(|| "jar".to_string()),
+    );
 }
 
 fn extract_mappings(
@@ -80,9 +129,10 @@ fn extract_mappings(
         let Some(artifact_id) = &artifact.artifact_id else {
             continue;
         };
-        let Some(current_value) = properties.get(&prop_name) else {
+        let Some(raw_value) = properties.get(&prop_name) else {
             continue;
         };
+        let current_value = resolve_value(raw_value, properties);
 
         let group_id = resolve_value(group_id, properties);
         let artifact_id = resolve_value(artifact_id, properties);
@@ -126,15 +176,17 @@ fn extract_property_reference(version: &str) -> Option<String> {
 }
 
 fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
-    extract_property_reference(value).map_or_else(
-        || value.to_string(),
-        |prop_name| {
-            properties
-                .get(&prop_name)
-                .cloned()
-                .unwrap_or_else(|| value.to_string())
-        },
-    )
+    let mut current = value.to_string();
+    for _ in 0..10 {
+        match extract_property_reference(&current) {
+            Some(prop_name) => match properties.get(&prop_name) {
+                Some(resolved) => current = resolved.clone(),
+                None => return current,
+            },
+            None => return current,
+        }
+    }
+    current
 }
 
 fn deduplicate(mappings: &mut Vec<ArtifactMapping>) {
@@ -185,6 +237,17 @@ mod tests {
         let mut props = HashMap::new();
         props.insert("project.groupId".to_string(), "org.example".to_string());
         assert_eq!(resolve_value("${project.groupId}", &props), "org.example");
+    }
+
+    #[test]
+    fn resolve_chained_property_value() {
+        let mut props = HashMap::new();
+        props.insert("project.groupId".to_string(), "org.wildfly".to_string());
+        props.insert(
+            "ee.maven.groupId".to_string(),
+            "${project.groupId}".to_string(),
+        );
+        assert_eq!(resolve_value("${ee.maven.groupId}", &props), "org.wildfly");
     }
 
     #[test]
@@ -256,5 +319,83 @@ mod tests {
         assert_eq!(repos.len(), 2);
         assert_eq!(repos[0].id.as_deref(), Some("r1"));
         assert_eq!(repos[1].id.as_deref(), Some("r3"));
+    }
+
+    #[test]
+    fn inject_project_properties_sets_all_fields() {
+        let project = pom::Project {
+            group_id: Some("org.wildfly".into()),
+            artifact_id: Some("wildfly-parent".into()),
+            version: Some("35.0.0.Final".into()),
+            packaging: Some("pom".into()),
+            ..Default::default()
+        };
+        let mut props = HashMap::new();
+        inject_project_properties(&project, &mut props);
+
+        assert_eq!(props.get("project.groupId").unwrap(), "org.wildfly");
+        assert_eq!(props.get("project.artifactId").unwrap(), "wildfly-parent");
+        assert_eq!(props.get("project.version").unwrap(), "35.0.0.Final");
+        assert_eq!(props.get("project.packaging").unwrap(), "pom");
+    }
+
+    #[test]
+    fn inject_project_properties_defaults_packaging_to_jar() {
+        let project = pom::Project {
+            group_id: Some("org.example".into()),
+            artifact_id: Some("my-lib".into()),
+            version: Some("1.0.0".into()),
+            ..Default::default()
+        };
+        let mut props = HashMap::new();
+        inject_project_properties(&project, &mut props);
+
+        assert_eq!(props.get("project.packaging").unwrap(), "jar");
+    }
+
+    #[test]
+    fn inject_child_properties_uses_child_values() {
+        let parent = pom::Project {
+            group_id: Some("org.parent".into()),
+            artifact_id: Some("parent".into()),
+            version: Some("1.0.0".into()),
+            ..Default::default()
+        };
+        let child = pom::Project {
+            group_id: Some("org.child".into()),
+            artifact_id: Some("child-mod".into()),
+            version: Some("2.0.0".into()),
+            packaging: Some("war".into()),
+            ..Default::default()
+        };
+        let mut props = HashMap::new();
+        inject_project_properties_with_fallback(&child, &parent, &mut props);
+
+        assert_eq!(props.get("project.groupId").unwrap(), "org.child");
+        assert_eq!(props.get("project.artifactId").unwrap(), "child-mod");
+        assert_eq!(props.get("project.version").unwrap(), "2.0.0");
+        assert_eq!(props.get("project.packaging").unwrap(), "war");
+    }
+
+    #[test]
+    fn inject_child_properties_falls_back_to_parent() {
+        let parent = pom::Project {
+            group_id: Some("org.parent".into()),
+            artifact_id: Some("parent".into()),
+            version: Some("1.0.0".into()),
+            packaging: Some("pom".into()),
+            ..Default::default()
+        };
+        let child = pom::Project {
+            artifact_id: Some("child-mod".into()),
+            ..Default::default()
+        };
+        let mut props = HashMap::new();
+        inject_project_properties_with_fallback(&child, &parent, &mut props);
+
+        assert_eq!(props.get("project.groupId").unwrap(), "org.parent");
+        assert_eq!(props.get("project.artifactId").unwrap(), "child-mod");
+        assert_eq!(props.get("project.version").unwrap(), "1.0.0");
+        assert_eq!(props.get("project.packaging").unwrap(), "pom");
     }
 }

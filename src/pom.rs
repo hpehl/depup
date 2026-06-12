@@ -6,6 +6,10 @@ use std::path::Path;
 
 #[derive(Debug, Default)]
 pub struct Project {
+    pub group_id: Option<String>,
+    pub artifact_id: Option<String>,
+    pub version: Option<String>,
+    pub packaging: Option<String>,
     pub modules: Vec<String>,
     pub properties: HashMap<String, String>,
     pub artifacts: Vec<(Artifact, ArtifactKind)>,
@@ -114,6 +118,16 @@ pub fn parse_pom_str(xml: &str) -> Result<Project> {
             }
             Ok(Event::End(_)) => {
                 let current_path = path_stack.join("/");
+
+                if path_stack.len() == 2 && path_stack[0] == "project" {
+                    match path_stack[1].as_str() {
+                        "groupId" => project.group_id = Some(text_buf.trim().to_string()),
+                        "artifactId" => project.artifact_id = Some(text_buf.trim().to_string()),
+                        "version" => project.version = Some(text_buf.trim().to_string()),
+                        "packaging" => project.packaging = Some(text_buf.trim().to_string()),
+                        _ => {}
+                    }
+                }
 
                 if is_in_properties(&path_stack)
                     && path_stack.len() > 2
@@ -441,5 +455,57 @@ mod tests {
         assert_eq!(project.artifacts[0].1, ArtifactKind::Dependency);
         assert_eq!(project.artifacts[0].0.artifact_id.as_deref(), Some("guava"));
         assert_eq!(project.artifacts[1].1, ArtifactKind::Plugin);
+    }
+
+    #[test]
+    fn parse_project_coordinates() {
+        let xml = r#"<project>
+    <groupId>org.wildfly</groupId>
+    <artifactId>wildfly-parent</artifactId>
+    <version>35.0.0.Final</version>
+    <packaging>pom</packaging>
+</project>"#;
+
+        let project = parse_pom_str(xml).unwrap();
+        assert_eq!(project.group_id.as_deref(), Some("org.wildfly"));
+        assert_eq!(project.artifact_id.as_deref(), Some("wildfly-parent"));
+        assert_eq!(project.version.as_deref(), Some("35.0.0.Final"));
+        assert_eq!(project.packaging.as_deref(), Some("pom"));
+    }
+
+    #[test]
+    fn parse_project_coordinates_missing_packaging() {
+        let xml = r#"<project>
+    <groupId>org.example</groupId>
+    <artifactId>my-lib</artifactId>
+    <version>1.0.0</version>
+</project>"#;
+
+        let project = parse_pom_str(xml).unwrap();
+        assert_eq!(project.group_id.as_deref(), Some("org.example"));
+        assert_eq!(project.artifact_id.as_deref(), Some("my-lib"));
+        assert_eq!(project.version.as_deref(), Some("1.0.0"));
+        assert_eq!(project.packaging, None);
+    }
+
+    #[test]
+    fn parse_project_coordinates_not_confused_with_dependency() {
+        let xml = r#"<project>
+    <groupId>org.example</groupId>
+    <artifactId>parent</artifactId>
+    <version>1.0.0</version>
+    <dependencies>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>33.0.0-jre</version>
+        </dependency>
+    </dependencies>
+</project>"#;
+
+        let project = parse_pom_str(xml).unwrap();
+        assert_eq!(project.group_id.as_deref(), Some("org.example"));
+        assert_eq!(project.artifact_id.as_deref(), Some("parent"));
+        assert_eq!(project.version.as_deref(), Some("1.0.0"));
     }
 }
