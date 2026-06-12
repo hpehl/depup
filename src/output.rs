@@ -1,42 +1,7 @@
-use comfy_table::{Cell, ContentArrangement, Table};
 use console::style;
 
 use crate::json::JsonResult;
 use crate::registry::CheckResult;
-
-pub fn print_table(results: &[CheckResult], verbose: bool) {
-    if results.is_empty() {
-        println!("{}", style("No version properties found.").yellow());
-        return;
-    }
-
-    let mut table = Table::new();
-    table.set_content_arrangement(ContentArrangement::Dynamic);
-
-    let mut headers = vec!["Property", "Current", "Latest", "Status"];
-    if verbose {
-        headers.push("Artifact");
-    }
-    table.set_header(headers);
-
-    for r in results {
-        let (status_text, latest_text) = format_status(r);
-        let mut row = vec![
-            Cell::new(&r.property_name),
-            Cell::new(&r.current_version),
-            Cell::new(&latest_text),
-            Cell::new(&status_text),
-        ];
-        if verbose {
-            let artifact = r.artifact.as_deref().unwrap_or("");
-            row.push(Cell::new(artifact));
-        }
-        table.add_row(row);
-    }
-
-    println!("{table}");
-    print_summary(results);
-}
 
 pub fn print_json(results: &[CheckResult]) {
     let json_results: Vec<JsonResult> = results
@@ -60,49 +25,12 @@ pub fn print_json(results: &[CheckResult]) {
     );
 }
 
-const fn status_label(result: &CheckResult) -> &'static str {
-    if result.error.is_some() {
-        "error"
-    } else if result.outdated {
-        "outdated"
-    } else {
-        "up-to-date"
-    }
-}
-
-#[allow(clippy::option_if_let_else)]
-fn format_status(result: &CheckResult) -> (String, String) {
-    if let Some(err) = &result.error {
-        let status = style("ERROR").red().to_string();
-        let latest = style(err).red().to_string();
-        (status, latest)
-    } else if result.outdated {
-        let status = style("OUTDATED").yellow().to_string();
-        let latest = style(result.latest_version.as_deref().unwrap_or("?"))
-            .yellow()
-            .to_string();
-        (status, latest)
-    } else {
-        let status = style("OK").green().to_string();
-        let latest = style(
-            result
-                .latest_version
-                .as_deref()
-                .unwrap_or(&result.current_version),
-        )
-        .green()
-        .to_string();
-        (status, latest)
-    }
-}
-
-fn print_summary(results: &[CheckResult]) {
+pub fn print_summary(results: &[CheckResult]) {
     let total = results.len();
     let outdated = results.iter().filter(|r| r.outdated).count();
     let errors = results.iter().filter(|r| r.error.is_some()).count();
     let current = total - outdated - errors;
 
-    println!();
     print!("{total} properties checked: ");
     print!("{}", style(format!("{current} current")).green());
     if outdated > 0 {
@@ -112,6 +40,16 @@ fn print_summary(results: &[CheckResult]) {
         print!(", {}", style(format!("{errors} errors")).red());
     }
     println!();
+}
+
+const fn status_label(result: &CheckResult) -> &'static str {
+    if result.error.is_some() {
+        "error"
+    } else if result.outdated {
+        "outdated"
+    } else {
+        "up-to-date"
+    }
 }
 
 #[cfg(test)]

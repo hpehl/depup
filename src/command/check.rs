@@ -18,7 +18,6 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     let path = args::path_argument(matches);
     let json = args::is_json(matches);
     let outdated = args::is_outdated(matches);
-    let verbose = args::is_verbose(matches);
     let include_pre_releases = args::include_pre_releases(matches);
 
     let instant = Instant::now();
@@ -50,9 +49,20 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         include_pre_releases,
         discovery_result.repositories,
     ));
-    let mut results = check_all(checker, &mappings, json).await;
-    results.sort_by(|a, b| a.property_name.cmp(&b.property_name));
+    let results_with_progress = check_all(checker, &mappings, json).await;
 
+    if outdated {
+        for (result, progress) in &results_with_progress {
+            if !result.outdated {
+                progress.clear();
+            }
+        }
+    }
+
+    let results: Vec<CheckResult> = results_with_progress
+        .into_iter()
+        .map(|(r, _)| r)
+        .collect();
     let filtered: Vec<CheckResult> = if outdated {
         results.into_iter().filter(|r| r.outdated).collect()
     } else {
@@ -63,7 +73,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         output::print_json(&filtered);
     } else {
         println!();
-        output::print_table(&filtered, verbose);
+        output::print_summary(&filtered);
         progress::done(instant);
     }
 
@@ -79,7 +89,7 @@ async fn check_all(
     checker: Arc<MavenChecker>,
     mappings: &[discovery::ArtifactMapping],
     json: bool,
-) -> Vec<CheckResult> {
+) -> Vec<(CheckResult, Progress)> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let multi_progress = MultiProgress::new();
     let mut tasks = JoinSet::new();
@@ -88,10 +98,22 @@ async fn check_all(
         let checker = Arc::clone(&checker);
         let semaphore = Arc::clone(&semaphore);
         let mapping = mapping.clone();
+        let artifact_str = format!("{}:{}", mapping.group_id, mapping.artifact_id);
         let progress = if json {
-            Progress::hidden(&mapping.property.name)
+            Progress::hidden(
+                &mapping.kind,
+                &mapping.property.name,
+                &artifact_str,
+                &mapping.property.current_value,
+            )
         } else {
-            Progress::join(&multi_progress, &mapping.property.name)
+            Progress::join(
+                &multi_progress,
+                &mapping.kind,
+                &mapping.property.name,
+                &artifact_str,
+                &mapping.property.current_value,
+            )
         };
 
         tasks.spawn(async move {
@@ -107,12 +129,8 @@ async fn check_all(
                     artifact: Some(format!("{}:{}", mapping.group_id, mapping.artifact_id)),
                 },
             };
-            if result.error.is_some() {
-                progress.finish_error(result.error.as_deref().unwrap_or("unknown error"));
-            } else {
-                progress.finish_success();
-            }
-            result
+            progress.finish_with_result(&result);
+            (result, progress)
         });
     }
 

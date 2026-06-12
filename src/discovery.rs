@@ -52,7 +52,7 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     }
 
     deduplicate(&mut mappings);
-    mappings.sort_by(|a, b| a.property.name.cmp(&b.property.name));
+    mappings.sort_by(|a, b| a.kind.cmp(&b.kind).then(a.property.name.cmp(&b.property.name)));
     deduplicate_repos(&mut repositories);
 
     Ok(DiscoveryResult {

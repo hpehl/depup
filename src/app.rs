@@ -61,11 +61,4 @@ fn check_args(cmd: Command) -> Command {
             .action(ArgAction::SetTrue)
             .help("Include pre-release versions (alpha, beta, RC, milestone)"),
     )
-    .arg(
-        Arg::new("verbose")
-            .short('v')
-            .long("verbose")
-            .action(ArgAction::SetTrue)
-            .help("Show artifact coordinates"),
-    )
 }

@@ -96,11 +96,10 @@ fn missing_pom_returns_nonzero_exit() {
 }
 
 #[test]
-fn verbose_flag_includes_artifact() {
+fn json_output_includes_artifact() {
     let output = mvnup()
         .arg(&fixture_dir("multi-module"))
         .arg("--json")
-        .arg("--verbose")
         .output()
         .expect("Failed to run mvnup");
 
@@ -111,7 +110,7 @@ fn verbose_flag_includes_artifact() {
     for result in &results {
         assert!(
             result["artifact"].as_str().is_some(),
-            "Artifact should be present in output"
+            "Artifact should be present in JSON output"
         );
     }
 }

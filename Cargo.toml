@@ -8,7 +8,6 @@ description = "Check Maven version properties against upstream registries"
 anyhow = "1"
 clap = { version = "4", features = ["cargo"] }
 clap_complete = { version = "4", features = ["unstable-dynamic"] }
-comfy-table = "7"
 console = "0.16"
 indicatif = "0.18"
 quick-xml = "0.37"

@@ -20,7 +20,7 @@ pub struct Artifact {
     pub version: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ArtifactKind {
     Dependency,
     Plugin,
@@ -29,8 +29,8 @@ pub enum ArtifactKind {
 impl std::fmt::Display for ArtifactKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Dependency => write!(f, "dependency"),
-            Self::Plugin => write!(f, "plugin"),
+            Self::Dependency => write!(f, "Dependency"),
+            Self::Plugin => write!(f, "Plugin"),
         }
     }
 }
