@@ -139,7 +139,12 @@ fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
 
 fn deduplicate(mappings: &mut Vec<ArtifactMapping>) {
     let mut seen = std::collections::HashSet::new();
-    mappings.retain(|m| seen.insert(m.property.name.clone()));
+    mappings.retain(|m| {
+        seen.insert(format!(
+            "{}:{}:{}",
+            m.property.name, m.group_id, m.artifact_id
+        ))
+    });
 }
 
 fn deduplicate_repos(repos: &mut Vec<Repository>) {
