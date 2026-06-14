@@ -1,7 +1,9 @@
+use std::collections::BTreeSet;
+
 use console::style;
 
 use crate::json::JsonResult;
-use crate::registry::{CheckResult, CheckerKind};
+use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 
 pub fn print_json(results: &[CheckResult]) {
     let json_results: Vec<JsonResult> = results
@@ -27,7 +29,39 @@ pub fn print_json(results: &[CheckResult]) {
     );
 }
 
-pub fn print_summary(results: &[CheckResult]) {
+fn print_ecosystem_header(ecosystem: Ecosystem) {
+    let label = ecosystem.to_string();
+    let line = "\u{2500}".repeat(3);
+    println!(
+        "{} {} {}",
+        style(line.clone()).dim(),
+        style(label).bold(),
+        style(line).dim()
+    );
+}
+
+pub fn print_results(results: &[CheckResult]) {
+    let ecosystems: Vec<Ecosystem> = results
+        .iter()
+        .map(|r| r.ecosystem)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+
+    let multiple = ecosystems.len() > 1;
+    for ecosystem in &ecosystems {
+        let group: Vec<&CheckResult> = results
+            .iter()
+            .filter(|r| r.ecosystem == *ecosystem)
+            .collect();
+        if multiple {
+            print_ecosystem_header(*ecosystem);
+        }
+        print_summary(&group);
+    }
+}
+
+fn print_summary(results: &[&CheckResult]) {
     let total = results.len();
     let outdated = results.iter().filter(|r| r.outdated).count();
     let skipped = results.iter().filter(|r| r.skipped).count();
@@ -71,7 +105,42 @@ const fn status_label(result: &CheckResult) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::Ecosystem;
+
+    #[test]
+    fn print_table_groups_by_ecosystem() {
+        let results = vec![
+            CheckResult {
+                ecosystem: Ecosystem::Maven,
+                property_name: "version.junit".to_string(),
+                current_version: "5.10.0".to_string(),
+                latest_version: Some("5.12.0".to_string()),
+                outdated: true,
+                skipped: false,
+                error: None,
+                artifact: Some("org.junit.jupiter:junit-jupiter".to_string()),
+                kind: CheckerKind::Dependency,
+            },
+            CheckResult {
+                ecosystem: Ecosystem::Pnpm,
+                property_name: "react".to_string(),
+                current_version: "18.0.0".to_string(),
+                latest_version: Some("19.0.0".to_string()),
+                outdated: true,
+                skipped: false,
+                error: None,
+                artifact: Some("react".to_string()),
+                kind: CheckerKind::Pnpm,
+            },
+        ];
+
+        let ecosystems: Vec<Ecosystem> = results
+            .iter()
+            .map(|r| r.ecosystem)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        assert_eq!(ecosystems, vec![Ecosystem::Maven, Ecosystem::Pnpm]);
+    }
 
     #[test]
     fn status_label_error() {

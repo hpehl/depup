@@ -62,7 +62,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         output::print_json(&filtered);
     } else {
         println!();
-        output::print_summary(&filtered);
+        output::print_results(&filtered);
         progress::done(instant);
     }
 
