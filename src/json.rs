@@ -2,6 +2,7 @@ use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub struct JsonResult {
+    pub ecosystem: String,
     pub property: String,
     pub current: String,
     pub latest: Option<String>,

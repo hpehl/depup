@@ -9,6 +9,7 @@ pub fn print_json(results: &[CheckResult]) {
         .map(|r| {
             let status = status_label(r);
             JsonResult {
+                ecosystem: r.ecosystem.to_string().to_lowercase(),
                 property: r.property_name.clone(),
                 current: r.current_version.clone(),
                 latest: r.latest_version.clone(),
@@ -137,6 +138,7 @@ mod tests {
         let json_results: Vec<JsonResult> = results
             .iter()
             .map(|r| JsonResult {
+                ecosystem: r.ecosystem.to_string().to_lowercase(),
                 property: r.property_name.clone(),
                 current: r.current_version.clone(),
                 latest: r.latest_version.clone(),
@@ -152,5 +154,38 @@ mod tests {
         assert_eq!(parsed[0]["status"], "outdated");
         assert_eq!(parsed[0]["kind"], "dependency");
         assert_eq!(parsed[0]["artifact"], "org.junit.jupiter:junit-jupiter");
+    }
+
+    #[test]
+    fn json_output_includes_ecosystem() {
+        let results = vec![CheckResult {
+            ecosystem: Ecosystem::Maven,
+            property_name: "version.junit".to_string(),
+            current_version: "5.10.0".to_string(),
+            latest_version: Some("5.12.0".to_string()),
+            outdated: true,
+            skipped: false,
+            error: None,
+            artifact: Some("org.junit.jupiter:junit-jupiter".to_string()),
+            kind: CheckerKind::Dependency,
+        }];
+
+        let json_results: Vec<JsonResult> = results
+            .iter()
+            .map(|r| JsonResult {
+                ecosystem: r.ecosystem.to_string().to_lowercase(),
+                property: r.property_name.clone(),
+                current: r.current_version.clone(),
+                latest: r.latest_version.clone(),
+                status: "outdated".to_string(),
+                kind: r.kind.to_string().to_lowercase(),
+                error: r.error.clone(),
+                artifact: r.artifact.clone(),
+            })
+            .collect();
+
+        let json_str = serde_json::to_string(&json_results).unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed[0]["ecosystem"], "maven");
     }
 }
