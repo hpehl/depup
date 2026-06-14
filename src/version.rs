@@ -113,6 +113,12 @@ fn is_pre_release_qualifier(lower: &str) -> bool {
             && lower[1..].chars().all(|c| c.is_ascii_digit()))
 }
 
+pub fn find_latest(versions: &[String]) -> Option<String> {
+    let mut parsed: Vec<_> = versions.iter().filter_map(|v| Version::parse(v)).collect();
+    parsed.sort();
+    parsed.last().map(|v| v.raw.clone())
+}
+
 pub fn is_newer(current: &str, latest: &str) -> bool {
     match (Version::parse(current), Version::parse(latest)) {
         (Some(c), Some(l)) => l > c,
@@ -222,5 +228,31 @@ mod tests {
     fn is_newer_unparseable_falls_back_to_string_compare() {
         assert!(is_newer("abc", "def"));
         assert!(!is_newer("abc", "abc"));
+    }
+
+    #[test]
+    fn find_latest_returns_highest() {
+        let versions = vec![
+            "1.0.0".to_string(),
+            "2.3.1".to_string(),
+            "2.1.0".to_string(),
+        ];
+        assert_eq!(find_latest(&versions), Some("2.3.1".to_string()));
+    }
+
+    #[test]
+    fn find_latest_with_qualifiers() {
+        let versions = vec![
+            "3.0.0.Final".to_string(),
+            "3.1.0.Final".to_string(),
+            "2.5.0.Final".to_string(),
+        ];
+        assert_eq!(find_latest(&versions), Some("3.1.0.Final".to_string()));
+    }
+
+    #[test]
+    fn find_latest_empty_returns_none() {
+        let versions: Vec<String> = vec![];
+        assert_eq!(find_latest(&versions), None);
     }
 }

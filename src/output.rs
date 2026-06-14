@@ -90,7 +90,7 @@ fn print_summary(results: &[&CheckResult]) {
     println!("  ({})", legend.join(", "));
 }
 
-const fn status_label(result: &CheckResult) -> &'static str {
+fn status_label(result: &CheckResult) -> &'static str {
     if result.error.is_some() {
         "error"
     } else if result.skipped {

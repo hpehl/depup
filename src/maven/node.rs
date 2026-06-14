@@ -1,12 +1,11 @@
 use anyhow::Result;
 use serde::Deserialize;
-use std::time::Duration;
 
-use crate::constants::{HTTP_TIMEOUT_SECS, NODEJS_DIST_URL};
+use crate::constants::{self, NODEJS_DIST_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
-use crate::version::{self, Version};
+use crate::version;
 
 const NODE_PATTERNS: &[&str] = &[
     "version.node",
@@ -41,13 +40,8 @@ impl LtsField {
 
 impl NodeChecker {
     pub fn new(releases_only: bool) -> Self {
-        let client = reqwest::Client::builder()
-            .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
-            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-            .build()
-            .expect("Failed to create HTTP client");
         Self {
-            client,
+            client: constants::http_client(),
             releases_only,
         }
     }
@@ -88,46 +82,44 @@ impl NodeChecker {
             })
             .collect();
 
+        let artifact = Some("nodejs.org".to_string());
+        let prop_name = property.name.clone();
+        let current = property.current_value.clone();
+
         if versions.is_empty() {
-            return Ok(CheckResult {
-                ecosystem: Ecosystem::Maven,
-                property_name: property.name.clone(),
-                current_version: property.current_value.clone(),
-                latest_version: None,
-                outdated: false,
-                skipped: false,
-                error: Some("No Node.js versions found".to_string()),
-                artifact: Some("nodejs.org".to_string()),
-                kind: CheckerKind::Node,
-            });
+            return Ok(CheckResult::error(
+                Ecosystem::Maven,
+                CheckerKind::Node,
+                prop_name,
+                current,
+                artifact,
+                "No Node.js versions found".to_string(),
+            ));
         }
 
-        let latest = find_latest(&versions);
-        let current_normalized = property
-            .current_value
-            .strip_prefix('v')
-            .unwrap_or(&property.current_value);
+        let Some(latest) = version::find_latest(&versions) else {
+            return Ok(CheckResult::error(
+                Ecosystem::Maven,
+                CheckerKind::Node,
+                prop_name,
+                current,
+                artifact,
+                "Could not determine latest Node.js version".to_string(),
+            ));
+        };
 
-        Ok(CheckResult {
-            ecosystem: Ecosystem::Maven,
-            property_name: property.name.clone(),
-            current_version: property.current_value.clone(),
-            latest_version: Some(latest.clone()),
-            outdated: version::is_newer(current_normalized, &latest),
-            skipped: false,
-            error: None,
-            artifact: Some("nodejs.org".to_string()),
-            kind: CheckerKind::Node,
-        })
+        let current_normalized = current.strip_prefix('v').unwrap_or(&current);
+        let is_outdated = version::is_newer(current_normalized, &latest);
+        Ok(CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Node,
+            prop_name,
+            current,
+            latest,
+            is_outdated,
+            artifact,
+        ))
     }
-}
-
-fn find_latest(versions: &[String]) -> String {
-    let mut parsed: Vec<_> = versions.iter().filter_map(|v| Version::parse(v)).collect();
-    parsed.sort();
-    parsed
-        .last()
-        .map_or_else(|| versions[0].clone(), |v| v.raw.clone())
 }
 
 #[cfg(test)]

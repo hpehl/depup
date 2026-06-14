@@ -59,131 +59,17 @@ pub fn parse_pom(path: &Path) -> Result<Project> {
     parse_pom_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
-#[allow(clippy::too_many_lines)]
 pub fn parse_pom_str(xml: &str) -> Result<Project> {
     let mut reader = Reader::from_str(xml);
-    let mut project = Project::default();
-    let mut path_stack: Vec<String> = Vec::new();
-    let mut text_buf = String::new();
-
-    let mut artifact_stack: Vec<(Artifact, ArtifactKind)> = Vec::new();
-    let mut repo_stack: Vec<(Repository, bool)> = Vec::new(); // (repo, is_building)
+    let mut state = ParseState::default();
 
     loop {
         match reader.read_event() {
-            Ok(Event::Start(e)) => {
-                let name = local_name(&e);
-                path_stack.push(name.clone());
-                text_buf.clear();
-
-                if is_dependency_element(&path_stack) {
-                    artifact_stack.push((
-                        Artifact {
-                            group_id: None,
-                            artifact_id: None,
-                            version: None,
-                        },
-                        ArtifactKind::Dependency,
-                    ));
-                } else if is_plugin_element(&path_stack) {
-                    artifact_stack.push((
-                        Artifact {
-                            group_id: None,
-                            artifact_id: None,
-                            version: None,
-                        },
-                        ArtifactKind::Plugin,
-                    ));
-                } else if is_repository_element(&path_stack) {
-                    repo_stack.push((
-                        Repository {
-                            id: None,
-                            name: None,
-                            url: String::new(),
-                            kind: RepositoryKind::Standard,
-                        },
-                        true,
-                    ));
-                } else if is_plugin_repository_element(&path_stack) {
-                    repo_stack.push((
-                        Repository {
-                            id: None,
-                            name: None,
-                            url: String::new(),
-                            kind: RepositoryKind::Plugin,
-                        },
-                        true,
-                    ));
-                }
-            }
-            Ok(Event::End(_)) => {
-                let current_path = path_stack.join("/");
-
-                if path_stack.len() == 2 && path_stack[0] == "project" {
-                    match path_stack[1].as_str() {
-                        "groupId" => project.group_id = Some(text_buf.trim().to_string()),
-                        "artifactId" => project.artifact_id = Some(text_buf.trim().to_string()),
-                        "version" => project.version = Some(text_buf.trim().to_string()),
-                        "packaging" => project.packaging = Some(text_buf.trim().to_string()),
-                        _ => {}
-                    }
-                }
-
-                if is_in_properties(&path_stack)
-                    && path_stack.len() > 2
-                    && let Some(prop_name) = path_stack.last()
-                {
-                    project
-                        .properties
-                        .insert(prop_name.clone(), text_buf.trim().to_string());
-                }
-
-                if is_module_element(&path_stack) {
-                    project.modules.push(text_buf.trim().to_string());
-                }
-
-                let in_nested_block = path_stack
-                    .iter()
-                    .any(|s| s == "exclusions" || s == "configuration");
-                if !in_nested_block && let Some((artifact, _)) = artifact_stack.last_mut() {
-                    if current_path.ends_with("/groupId") {
-                        artifact.group_id = Some(text_buf.trim().to_string());
-                    } else if current_path.ends_with("/artifactId") {
-                        artifact.artifact_id = Some(text_buf.trim().to_string());
-                    } else if current_path.ends_with("/version") {
-                        artifact.version = Some(text_buf.trim().to_string());
-                    }
-                }
-
-                if let Some((repo, true)) = repo_stack.last_mut() {
-                    if current_path.ends_with("/id") {
-                        repo.id = Some(text_buf.trim().to_string());
-                    } else if current_path.ends_with("/name") {
-                        repo.name = Some(text_buf.trim().to_string());
-                    } else if current_path.ends_with("/url") {
-                        repo.url = text_buf.trim().to_string();
-                    }
-                }
-
-                if (is_dependency_element(&path_stack) || is_plugin_element(&path_stack))
-                    && let Some((artifact, kind)) = artifact_stack.pop()
-                {
-                    project.artifacts.push((artifact, kind));
-                }
-
-                if (is_repository_element(&path_stack) || is_plugin_repository_element(&path_stack))
-                    && let Some((repo, _)) = repo_stack.pop()
-                    && !repo.url.is_empty()
-                {
-                    project.repositories.push(repo);
-                }
-
-                text_buf.clear();
-                path_stack.pop();
-            }
+            Ok(Event::Start(e)) => state.handle_start(&e),
+            Ok(Event::End(_)) => state.handle_end(),
             Ok(Event::Text(e)) => {
                 let unescaped = e.unescape().context("Failed to unescape XML text")?;
-                text_buf.push_str(&unescaped);
+                state.text_buf.push_str(&unescaped);
             }
             Ok(Event::Eof) => break,
             Err(e) => anyhow::bail!("XML parse error: {e}"),
@@ -191,7 +77,155 @@ pub fn parse_pom_str(xml: &str) -> Result<Project> {
         }
     }
 
-    Ok(project)
+    Ok(state.project)
+}
+
+#[derive(Default)]
+struct ParseState {
+    project: Project,
+    path_stack: Vec<String>,
+    text_buf: String,
+    artifact_stack: Vec<(Artifact, ArtifactKind)>,
+    repo_stack: Vec<(Repository, bool)>,
+}
+
+impl ParseState {
+    fn handle_start(&mut self, e: &quick_xml::events::BytesStart) {
+        let name = local_name(e);
+        self.path_stack.push(name);
+        self.text_buf.clear();
+
+        if is_dependency_element(&self.path_stack) {
+            self.artifact_stack.push((
+                Artifact {
+                    group_id: None,
+                    artifact_id: None,
+                    version: None,
+                },
+                ArtifactKind::Dependency,
+            ));
+        } else if is_plugin_element(&self.path_stack) {
+            self.artifact_stack.push((
+                Artifact {
+                    group_id: None,
+                    artifact_id: None,
+                    version: None,
+                },
+                ArtifactKind::Plugin,
+            ));
+        } else if is_repository_element(&self.path_stack) {
+            self.repo_stack.push((
+                Repository {
+                    id: None,
+                    name: None,
+                    url: String::new(),
+                    kind: RepositoryKind::Standard,
+                },
+                true,
+            ));
+        } else if is_plugin_repository_element(&self.path_stack) {
+            self.repo_stack.push((
+                Repository {
+                    id: None,
+                    name: None,
+                    url: String::new(),
+                    kind: RepositoryKind::Plugin,
+                },
+                true,
+            ));
+        }
+    }
+
+    fn handle_end(&mut self) {
+        let current_path = self.path_stack.join("/");
+        let text = self.text_buf.trim().to_string();
+
+        self.collect_project_coordinates(&text);
+        self.collect_property(&text);
+        self.collect_module(&text);
+        self.update_artifact_fields(&current_path, &text);
+        self.update_repo_fields(&current_path, &text);
+        self.finish_artifact();
+        self.finish_repository();
+
+        self.text_buf.clear();
+        self.path_stack.pop();
+    }
+
+    fn collect_project_coordinates(&mut self, text: &str) {
+        if self.path_stack.len() == 2 && self.path_stack[0] == "project" {
+            match self.path_stack[1].as_str() {
+                "groupId" => self.project.group_id = Some(text.to_string()),
+                "artifactId" => self.project.artifact_id = Some(text.to_string()),
+                "version" => self.project.version = Some(text.to_string()),
+                "packaging" => self.project.packaging = Some(text.to_string()),
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_property(&mut self, text: &str) {
+        if is_in_properties(&self.path_stack)
+            && self.path_stack.len() > 2
+            && let Some(prop_name) = self.path_stack.last()
+        {
+            self.project
+                .properties
+                .insert(prop_name.clone(), text.to_string());
+        }
+    }
+
+    fn collect_module(&mut self, text: &str) {
+        if is_module_element(&self.path_stack) {
+            self.project.modules.push(text.to_string());
+        }
+    }
+
+    fn update_artifact_fields(&mut self, current_path: &str, text: &str) {
+        let in_nested_block = self
+            .path_stack
+            .iter()
+            .any(|s| s == "exclusions" || s == "configuration");
+        if !in_nested_block && let Some((artifact, _)) = self.artifact_stack.last_mut() {
+            if current_path.ends_with("/groupId") {
+                artifact.group_id = Some(text.to_string());
+            } else if current_path.ends_with("/artifactId") {
+                artifact.artifact_id = Some(text.to_string());
+            } else if current_path.ends_with("/version") {
+                artifact.version = Some(text.to_string());
+            }
+        }
+    }
+
+    fn update_repo_fields(&mut self, current_path: &str, text: &str) {
+        if let Some((repo, true)) = self.repo_stack.last_mut() {
+            if current_path.ends_with("/id") {
+                repo.id = Some(text.to_string());
+            } else if current_path.ends_with("/name") {
+                repo.name = Some(text.to_string());
+            } else if current_path.ends_with("/url") {
+                repo.url = text.to_string();
+            }
+        }
+    }
+
+    fn finish_artifact(&mut self) {
+        if (is_dependency_element(&self.path_stack) || is_plugin_element(&self.path_stack))
+            && let Some((artifact, kind)) = self.artifact_stack.pop()
+        {
+            self.project.artifacts.push((artifact, kind));
+        }
+    }
+
+    fn finish_repository(&mut self) {
+        if (is_repository_element(&self.path_stack)
+            || is_plugin_repository_element(&self.path_stack))
+            && let Some((repo, _)) = self.repo_stack.pop()
+            && !repo.url.is_empty()
+        {
+            self.project.repositories.push(repo);
+        }
+    }
 }
 
 fn local_name(e: &quick_xml::events::BytesStart) -> String {

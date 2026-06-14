@@ -486,12 +486,7 @@ mod tests {
         properties.insert("version.junit".to_string(), "5.10.0".to_string());
 
         let mut mappings = Vec::new();
-        extract_mappings(
-            &project,
-            Path::new("pom.xml"),
-            &properties,
-            &mut mappings,
-        );
+        extract_mappings(&project, Path::new("pom.xml"), &properties, &mut mappings);
 
         assert_eq!(mappings.len(), 2);
 

@@ -1,9 +1,8 @@
 use anyhow::Result;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
-use std::time::Duration;
 
-use crate::constants::{HTTP_TIMEOUT_SECS, MAVEN_CENTRAL_URL};
+use crate::constants::{self, MAVEN_CENTRAL_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::ArtifactMapping;
 use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
@@ -18,13 +17,8 @@ pub struct MavenChecker {
 
 impl MavenChecker {
     pub fn new(releases_only: bool, repositories: Vec<Repository>) -> Self {
-        let client = reqwest::Client::builder()
-            .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
-            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-            .build()
-            .expect("Failed to create HTTP client");
         Self {
-            client,
+            client: constants::http_client(),
             releases_only,
             repositories,
         }
@@ -62,25 +56,34 @@ impl MavenChecker {
     pub async fn check(&self, mapping: &ArtifactMapping) -> Result<CheckResult> {
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
         let kind = checker_kind(mapping.kind);
+        let prop_name = mapping.property.name.clone();
+        let current = mapping.property.current_value.clone();
+        let artifact_opt = Some(artifact.clone());
+
+        let maven_error = |msg: String| -> Result<CheckResult> {
+            Ok(CheckResult::error(
+                Ecosystem::Maven,
+                kind,
+                prop_name.clone(),
+                current.clone(),
+                artifact_opt.clone(),
+                msg,
+            ))
+        };
 
         if self.releases_only
-            && let Some(parsed) = Version::parse(&mapping.property.current_value)
+            && let Some(parsed) = Version::parse(&current)
             && parsed.is_pre_release()
         {
-            return Ok(CheckResult {
-                ecosystem: Ecosystem::Maven,
-                property_name: mapping.property.name.clone(),
-                current_version: mapping.property.current_value.clone(),
-                latest_version: None,
-                outdated: false,
-                skipped: true,
-                error: None,
-                artifact: Some(artifact),
+            return Ok(CheckResult::skipped(
+                Ecosystem::Maven,
                 kind,
-            });
+                prop_name,
+                current,
+                artifact_opt,
+            ));
         }
 
-        // Try Maven Central first
         let central_result = self
             .fetch_from_repo(MAVEN_CENTRAL_URL, &mapping.group_id, &mapping.artifact_id)
             .await;
@@ -88,35 +91,11 @@ impl MavenChecker {
         let all_versions = match central_result {
             Ok(versions) if !versions.is_empty() => versions,
             _ => {
-                // Maven Central failed or empty — try custom repos in parallel
                 let custom_urls = self.repo_urls_for(mapping.kind);
                 if custom_urls.is_empty() {
                     return match central_result {
-                        Err(e) => Ok(CheckResult {
-                            ecosystem: Ecosystem::Maven,
-                            property_name: mapping.property.name.clone(),
-                            current_version: mapping.property.current_value.clone(),
-                            latest_version: None,
-                            outdated: false,
-                            skipped: false,
-                            error: Some(e.to_string()),
-                            artifact: Some(artifact),
-                            kind,
-                        }),
-                        Ok(_) => Ok(CheckResult {
-                            ecosystem: Ecosystem::Maven,
-                            property_name: mapping.property.name.clone(),
-                            current_version: mapping.property.current_value.clone(),
-                            latest_version: None,
-                            outdated: false,
-                            skipped: false,
-                            error: Some(format!(
-                                "No versions found for {}:{}",
-                                mapping.group_id, mapping.artifact_id
-                            )),
-                            artifact: Some(artifact),
-                            kind,
-                        }),
+                        Err(e) => maven_error(e.to_string()),
+                        Ok(_) => maven_error(format!("No versions found for {artifact}")),
                     };
                 }
 
@@ -139,20 +118,7 @@ impl MavenChecker {
                     .collect();
 
                 if merged.is_empty() {
-                    return Ok(CheckResult {
-                        ecosystem: Ecosystem::Maven,
-                        property_name: mapping.property.name.clone(),
-                        current_version: mapping.property.current_value.clone(),
-                        latest_version: None,
-                        outdated: false,
-                        skipped: false,
-                        error: Some(format!(
-                            "No versions found for {}:{}",
-                            mapping.group_id, mapping.artifact_id
-                        )),
-                        artifact: Some(artifact),
-                        kind,
-                    });
+                    return maven_error(format!("No versions found for {artifact}"));
                 }
 
                 merged.sort();
@@ -163,34 +129,23 @@ impl MavenChecker {
 
         let filtered = filter_versions(&all_versions, self.releases_only);
         if filtered.is_empty() {
-            return Ok(CheckResult {
-                ecosystem: Ecosystem::Maven,
-                property_name: mapping.property.name.clone(),
-                current_version: mapping.property.current_value.clone(),
-                latest_version: None,
-                outdated: false,
-                skipped: false,
-                error: Some(format!(
-                    "No release versions found for {}:{}",
-                    mapping.group_id, mapping.artifact_id
-                )),
-                artifact: Some(artifact),
-                kind,
-            });
+            return maven_error(format!("No release versions found for {artifact}"));
         }
 
-        let latest = find_latest(&filtered);
-        Ok(CheckResult {
-            ecosystem: Ecosystem::Maven,
-            property_name: mapping.property.name.clone(),
-            current_version: mapping.property.current_value.clone(),
-            latest_version: Some(latest.clone()),
-            outdated: version::is_newer(&mapping.property.current_value, &latest),
-            skipped: false,
-            error: None,
-            artifact: Some(artifact),
+        let Some(latest) = version::find_latest(&filtered) else {
+            return maven_error(format!("Could not determine latest version for {artifact}"));
+        };
+
+        let is_outdated = version::is_newer(&current, &latest);
+        Ok(CheckResult::checked(
+            Ecosystem::Maven,
             kind,
-        })
+            prop_name,
+            current,
+            latest,
+            is_outdated,
+            artifact_opt,
+        ))
     }
 }
 
@@ -286,14 +241,6 @@ fn filter_versions(versions: &[String], releases_only: bool) -> Vec<String> {
             Some(v.clone())
         })
         .collect()
-}
-
-fn find_latest(versions: &[String]) -> String {
-    let mut parsed: Vec<_> = versions.iter().filter_map(|v| Version::parse(v)).collect();
-    parsed.sort();
-    parsed
-        .last()
-        .map_or_else(|| versions[0].clone(), |v| v.raw.clone())
 }
 
 #[cfg(test)]
@@ -400,7 +347,7 @@ mod tests {
             "2.3.1".to_string(),
             "2.1.0".to_string(),
         ];
-        assert_eq!(find_latest(&versions), "2.3.1");
+        assert_eq!(version::find_latest(&versions), Some("2.3.1".to_string()));
     }
 
     #[test]
@@ -410,7 +357,10 @@ mod tests {
             "3.1.0.Final".to_string(),
             "2.5.0.Final".to_string(),
         ];
-        assert_eq!(find_latest(&versions), "3.1.0.Final");
+        assert_eq!(
+            version::find_latest(&versions),
+            Some("3.1.0.Final".to_string())
+        );
     }
 
     #[test]

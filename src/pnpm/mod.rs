@@ -46,18 +46,16 @@ pub async fn check_project(project_dir: &Path) -> Result<Vec<CheckResult>> {
     let mut results: Vec<CheckResult> = packages
         .into_iter()
         .map(|(name, entry)| {
-            let outdated = version::is_newer(&entry.current, &entry.latest);
-            CheckResult {
-                ecosystem: Ecosystem::Pnpm,
-                property_name: name.clone(),
-                current_version: entry.current,
-                latest_version: Some(entry.latest),
-                outdated,
-                skipped: false,
-                error: None,
-                artifact: Some(name),
-                kind: CheckerKind::Pnpm,
-            }
+            let is_outdated = version::is_newer(&entry.current, &entry.latest);
+            CheckResult::checked(
+                Ecosystem::Pnpm,
+                CheckerKind::Pnpm,
+                name.clone(),
+                entry.current,
+                entry.latest,
+                is_outdated,
+                Some(name),
+            )
         })
         .collect();
 

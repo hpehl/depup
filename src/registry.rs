@@ -48,14 +48,16 @@ impl CheckerKind {
 
     pub fn symbol(&self) -> &'static str {
         match self {
-            Self::Dependency => "\u{25a0}",
+            Self::Dependency => "\u{25cf}",
             Self::Plugin => "\u{25a0}",
-            Self::Node => "\u{25a0}",
-            Self::Npm => "\u{25a0}",
-            Self::Pnpm => "\u{25a0}",
+            Self::Node => "\u{25b2}",
+            Self::Npm => "\u{25c6}",
+            Self::Pnpm => "\u{25c6}",
         }
     }
 }
+
+use crate::progress::ProgressOutcome;
 
 #[derive(Debug, Clone)]
 pub struct CheckResult {
@@ -68,6 +70,85 @@ pub struct CheckResult {
     pub error: Option<String>,
     pub artifact: Option<String>,
     pub kind: CheckerKind,
+}
+
+impl CheckResult {
+    pub fn checked(
+        ecosystem: Ecosystem,
+        kind: CheckerKind,
+        property_name: String,
+        current_version: String,
+        latest_version: String,
+        is_outdated: bool,
+        artifact: Option<String>,
+    ) -> Self {
+        Self {
+            ecosystem,
+            property_name,
+            current_version,
+            latest_version: Some(latest_version),
+            outdated: is_outdated,
+            skipped: false,
+            error: None,
+            artifact,
+            kind,
+        }
+    }
+
+    pub fn skipped(
+        ecosystem: Ecosystem,
+        kind: CheckerKind,
+        property_name: String,
+        current_version: String,
+        artifact: Option<String>,
+    ) -> Self {
+        Self {
+            ecosystem,
+            property_name,
+            current_version,
+            latest_version: None,
+            outdated: false,
+            skipped: true,
+            error: None,
+            artifact,
+            kind,
+        }
+    }
+
+    pub fn error(
+        ecosystem: Ecosystem,
+        kind: CheckerKind,
+        property_name: String,
+        current_version: String,
+        artifact: Option<String>,
+        error: String,
+    ) -> Self {
+        Self {
+            ecosystem,
+            property_name,
+            current_version,
+            latest_version: None,
+            outdated: false,
+            skipped: false,
+            error: Some(error),
+            artifact,
+            kind,
+        }
+    }
+
+    pub fn outcome(&self) -> ProgressOutcome<'_> {
+        if let Some(err) = &self.error {
+            ProgressOutcome::Error { message: err }
+        } else if self.skipped {
+            ProgressOutcome::Skipped
+        } else if self.outdated {
+            ProgressOutcome::Outdated {
+                latest: self.latest_version.as_deref().unwrap_or("?"),
+            }
+        } else {
+            ProgressOutcome::UpToDate
+        }
+    }
 }
 
 #[cfg(test)]

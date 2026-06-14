@@ -1,7 +1,6 @@
 use anyhow::Result;
-use std::time::Duration;
 
-use crate::constants::{HTTP_TIMEOUT_SECS, NPM_REGISTRY_URL};
+use crate::constants::{self, NPM_REGISTRY_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
@@ -17,13 +16,8 @@ pub struct NpmChecker {
 
 impl NpmChecker {
     pub fn new(releases_only: bool) -> Self {
-        let client = reqwest::Client::builder()
-            .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
-            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-            .build()
-            .expect("Failed to create HTTP client");
         Self {
-            client,
+            client: constants::http_client(),
             releases_only,
         }
     }
@@ -64,29 +58,31 @@ impl NpmChecker {
             .as_str()
             .map(ToString::to_string);
 
+        let prop_name = property.name.clone();
+        let current = property.current_value.clone();
+        let artifact = Some(package.to_string());
+
         match latest {
-            Some(latest) => Ok(CheckResult {
-                ecosystem: Ecosystem::Maven,
-                property_name: property.name.clone(),
-                current_version: property.current_value.clone(),
-                latest_version: Some(latest.clone()),
-                outdated: version::is_newer(&property.current_value, &latest),
-                skipped: false,
-                error: None,
-                artifact: Some(package.to_string()),
-                kind: CheckerKind::Npm,
-            }),
-            None => Ok(CheckResult {
-                ecosystem: Ecosystem::Maven,
-                property_name: property.name.clone(),
-                current_version: property.current_value.clone(),
-                latest_version: None,
-                outdated: false,
-                skipped: false,
-                error: Some(format!("No latest version found for {package}")),
-                artifact: Some(package.to_string()),
-                kind: CheckerKind::Npm,
-            }),
+            Some(latest) => {
+                let is_outdated = version::is_newer(&current, &latest);
+                Ok(CheckResult::checked(
+                    Ecosystem::Maven,
+                    CheckerKind::Npm,
+                    prop_name,
+                    current,
+                    latest,
+                    is_outdated,
+                    artifact,
+                ))
+            }
+            None => Ok(CheckResult::error(
+                Ecosystem::Maven,
+                CheckerKind::Npm,
+                prop_name,
+                current,
+                artifact,
+                format!("No latest version found for {package}"),
+            )),
         }
     }
 }

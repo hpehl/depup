@@ -3,7 +3,14 @@ use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
 use std::time::Duration;
 use tokio::time::Instant;
 
-use crate::registry::{CheckResult, CheckerKind};
+use crate::registry::CheckerKind;
+
+pub enum ProgressOutcome<'a> {
+    UpToDate,
+    Outdated { latest: &'a str },
+    Skipped,
+    Error { message: &'a str },
+}
 
 const NAME_WIDTH: usize = 40;
 const ARTIFACT_WIDTH: usize = 50;
@@ -80,35 +87,39 @@ impl Progress {
             .expect("Invalid template")
     }
 
-    pub fn finish_with_result(&self, result: &CheckResult) {
+    pub fn finish(&self, outcome: ProgressOutcome<'_>) {
         self.bar.set_style(Self::finished_style());
         let columns = self.format_columns();
 
-        if let Some(err) = &result.error {
-            self.bar.abandon_with_message(format!(
-                "{} {columns}  {}",
-                style("\u{2717}").red().bold(),
-                style(err).red()
-            ));
-        } else if result.skipped {
-            self.bar.finish_with_message(format!(
-                "{} {columns}  {}",
-                style("-").dim().bold(),
-                style("skipped").dim()
-            ));
-        } else if result.outdated {
-            let latest = result.latest_version.as_deref().unwrap_or("?");
-            self.bar.finish_with_message(format!(
-                "{} {columns}  {}",
-                style("\u{2192}").yellow().bold(),
-                style(format!("\u{2192} {latest}")).yellow()
-            ));
-        } else {
-            self.bar.finish_with_message(format!(
-                "{} {columns}  {}",
-                style("\u{2713}").green().bold(),
-                style("up-to-date").green()
-            ));
+        match outcome {
+            ProgressOutcome::Error { message } => {
+                self.bar.abandon_with_message(format!(
+                    "{} {columns}  {}",
+                    style("\u{2717}").red().bold(),
+                    style(message).red()
+                ));
+            }
+            ProgressOutcome::Skipped => {
+                self.bar.finish_with_message(format!(
+                    "{} {columns}  {}",
+                    style("-").dim().bold(),
+                    style("skipped").dim()
+                ));
+            }
+            ProgressOutcome::Outdated { latest } => {
+                self.bar.finish_with_message(format!(
+                    "{} {columns}  {}",
+                    style("\u{2192}").yellow().bold(),
+                    style(format!("\u{2192} {latest}")).yellow()
+                ));
+            }
+            ProgressOutcome::UpToDate => {
+                self.bar.finish_with_message(format!(
+                    "{} {columns}  {}",
+                    style("\u{2713}").green().bold(),
+                    style("up-to-date").green()
+                ));
+            }
         }
     }
 
