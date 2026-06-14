@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.example</groupId>
+    <artifactId>plain-versions-test</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+    <properties>
+        <version.junit>5.10.0</version.junit>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${version.junit}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>33.0.0-jre</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

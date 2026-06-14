@@ -510,4 +510,33 @@ mod tests {
         assert_eq!(junit.property.name, "version.junit");
         assert_eq!(junit.property.current_value, "5.10.0");
     }
+
+    #[test]
+    fn discover_plain_versions_fixture() {
+        let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("plain-versions");
+
+        let result = discover(&fixture_dir).unwrap();
+        assert_eq!(result.mappings.len(), 2);
+
+        let names: Vec<&str> = result
+            .mappings
+            .iter()
+            .map(|m| m.property.name.as_str())
+            .collect();
+        assert!(names.contains(&"version.junit"));
+        assert!(names.contains(&"com.google.guava:guava"));
+
+        let guava = result
+            .mappings
+            .iter()
+            .find(|m| m.artifact_id == "guava")
+            .unwrap();
+        assert_eq!(guava.property.name, "com.google.guava:guava");
+        assert_eq!(guava.property.current_value, "33.0.0-jre");
+        assert_eq!(guava.group_id, "com.google.guava");
+        assert_eq!(guava.artifact_id, "guava");
+    }
 }
