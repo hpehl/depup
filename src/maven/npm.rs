@@ -2,9 +2,9 @@ use anyhow::Result;
 use std::time::Duration;
 
 use crate::constants::{HTTP_TIMEOUT_SECS, NPM_REGISTRY_URL};
-use crate::maven::discovery::VersionProperty;
 use crate::error::DepupError;
-use crate::registry::{CheckResult, CheckerKind};
+use crate::maven::discovery::VersionProperty;
+use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 use crate::version;
 
 const NPM_PACKAGES: &[(&str, &str)] = &[("npm", "npm"), ("pnpm", "pnpm"), ("yarn", "yarn")];
@@ -66,6 +66,7 @@ impl NpmChecker {
 
         match latest {
             Some(latest) => Ok(CheckResult {
+                ecosystem: Ecosystem::Maven,
                 property_name: property.name.clone(),
                 current_version: property.current_value.clone(),
                 latest_version: Some(latest.clone()),
@@ -76,6 +77,7 @@ impl NpmChecker {
                 kind: CheckerKind::Npm,
             }),
             None => Ok(CheckResult {
+                ecosystem: Ecosystem::Maven,
                 property_name: property.name.clone(),
                 current_version: property.current_value.clone(),
                 latest_version: None,

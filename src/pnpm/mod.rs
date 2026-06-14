@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use crate::registry::{CheckResult, CheckerKind};
+use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 use crate::version;
 
 #[derive(Debug, Deserialize)]
@@ -26,12 +26,7 @@ pub async fn check_project(project_dir: &Path) -> Result<Vec<CheckResult>> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .with_context(|| {
-            format!(
-                "Failed to run 'pnpm outdated' in {}",
-                project_dir.display()
-            )
-        })?;
+        .with_context(|| format!("Failed to run 'pnpm outdated' in {}", project_dir.display()))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -40,8 +35,8 @@ pub async fn check_project(project_dir: &Path) -> Result<Vec<CheckResult>> {
         return Ok(Vec::new());
     }
 
-    let packages: std::collections::HashMap<String, OutdatedEntry> =
-        serde_json::from_str(&stdout).with_context(|| {
+    let packages: std::collections::HashMap<String, OutdatedEntry> = serde_json::from_str(&stdout)
+        .with_context(|| {
             format!(
                 "Failed to parse pnpm outdated JSON in {}",
                 project_dir.display()
@@ -53,6 +48,7 @@ pub async fn check_project(project_dir: &Path) -> Result<Vec<CheckResult>> {
         .map(|(name, entry)| {
             let outdated = version::is_newer(&entry.current, &entry.latest);
             CheckResult {
+                ecosystem: Ecosystem::Pnpm,
                 property_name: name.clone(),
                 current_version: entry.current,
                 latest_version: Some(entry.latest),

@@ -7,7 +7,7 @@ use crate::constants::{HTTP_TIMEOUT_SECS, MAVEN_CENTRAL_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::ArtifactMapping;
 use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
-use crate::registry::{CheckResult, CheckerKind};
+use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 use crate::version::{self, Version};
 
 pub struct MavenChecker {
@@ -68,6 +68,7 @@ impl MavenChecker {
             && parsed.is_pre_release()
         {
             return Ok(CheckResult {
+                ecosystem: Ecosystem::Maven,
                 property_name: mapping.property.name.clone(),
                 current_version: mapping.property.current_value.clone(),
                 latest_version: None,
@@ -92,6 +93,7 @@ impl MavenChecker {
                 if custom_urls.is_empty() {
                     return match central_result {
                         Err(e) => Ok(CheckResult {
+                            ecosystem: Ecosystem::Maven,
                             property_name: mapping.property.name.clone(),
                             current_version: mapping.property.current_value.clone(),
                             latest_version: None,
@@ -102,6 +104,7 @@ impl MavenChecker {
                             kind,
                         }),
                         Ok(_) => Ok(CheckResult {
+                            ecosystem: Ecosystem::Maven,
                             property_name: mapping.property.name.clone(),
                             current_version: mapping.property.current_value.clone(),
                             latest_version: None,
@@ -137,6 +140,7 @@ impl MavenChecker {
 
                 if merged.is_empty() {
                     return Ok(CheckResult {
+                        ecosystem: Ecosystem::Maven,
                         property_name: mapping.property.name.clone(),
                         current_version: mapping.property.current_value.clone(),
                         latest_version: None,
@@ -160,6 +164,7 @@ impl MavenChecker {
         let filtered = filter_versions(&all_versions, self.releases_only);
         if filtered.is_empty() {
             return Ok(CheckResult {
+                ecosystem: Ecosystem::Maven,
                 property_name: mapping.property.name.clone(),
                 current_version: mapping.property.current_value.clone(),
                 latest_version: None,
@@ -176,6 +181,7 @@ impl MavenChecker {
 
         let latest = find_latest(&filtered);
         Ok(CheckResult {
+            ecosystem: Ecosystem::Maven,
             property_name: mapping.property.name.clone(),
             current_version: mapping.property.current_value.clone(),
             latest_version: Some(latest.clone()),

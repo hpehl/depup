@@ -3,9 +3,9 @@ use serde::Deserialize;
 use std::time::Duration;
 
 use crate::constants::{HTTP_TIMEOUT_SECS, NODEJS_DIST_URL};
-use crate::maven::discovery::VersionProperty;
 use crate::error::DepupError;
-use crate::registry::{CheckResult, CheckerKind};
+use crate::maven::discovery::VersionProperty;
+use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 use crate::version::{self, Version};
 
 const NODE_PATTERNS: &[&str] = &[
@@ -90,6 +90,7 @@ impl NodeChecker {
 
         if versions.is_empty() {
             return Ok(CheckResult {
+                ecosystem: Ecosystem::Maven,
                 property_name: property.name.clone(),
                 current_version: property.current_value.clone(),
                 latest_version: None,
@@ -108,6 +109,7 @@ impl NodeChecker {
             .unwrap_or(&property.current_value);
 
         Ok(CheckResult {
+            ecosystem: Ecosystem::Maven,
             property_name: property.name.clone(),
             current_version: property.current_value.clone(),
             latest_version: Some(latest.clone()),

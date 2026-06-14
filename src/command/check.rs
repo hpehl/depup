@@ -1,6 +1,7 @@
+use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::ArgMatches;
 use indicatif::MultiProgress;
 use tokio::sync::Semaphore;
@@ -9,35 +10,71 @@ use tokio::time::Instant;
 
 use crate::args;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
+use crate::maven::discovery;
 use crate::maven::discovery::{ArtifactMapping, VersionProperty};
 use crate::maven::node::NodeChecker;
 use crate::maven::npm::NpmChecker;
 use crate::maven::pom::ArtifactKind;
 use crate::maven::registry::MavenChecker;
-use crate::maven::discovery;
 use crate::output;
 use crate::progress::{self, Progress};
-use crate::registry::{CheckResult, CheckerKind};
+use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 
-pub async fn auto_check(matches: &ArgMatches) -> Result<()> {
+pub async fn check(matches: &ArgMatches) -> Result<()> {
     let path = args::path_argument(matches);
+    let json = args::is_json(matches);
+    let outdated = args::is_outdated(matches);
+    let releases_only = args::releases_only(matches);
+
+    let instant = Instant::now();
     let root = path.canonicalize().unwrap_or_else(|_| path.clone());
 
-    if root.join("pom.xml").exists() {
-        return maven_check(matches).await;
-    }
-    if has_pnpm_signals(&root) {
-        return pnpm_check(matches).await;
+    let has_maven = root.join("pom.xml").exists();
+    let has_pnpm = has_pnpm_signals(&root);
+
+    if !has_maven && !has_pnpm {
+        if json {
+            println!("[]");
+        } else {
+            println!("No supported project found.");
+        }
+        return Ok(());
     }
 
-    bail!(
-        "No supported project found in {}. \
-         Expected pom.xml (Maven) or pnpm-lock.yaml/package.json (pnpm).",
-        root.display()
-    );
+    let mut all_results: Vec<CheckResult> = Vec::new();
+
+    if has_maven {
+        let results = maven_check(&root, json, releases_only).await?;
+        all_results.extend(results);
+    }
+    if has_pnpm {
+        let results = pnpm_check(&root, json).await?;
+        all_results.extend(results);
+    }
+
+    let filtered: Vec<CheckResult> = if outdated {
+        all_results.into_iter().filter(|r| r.outdated).collect()
+    } else {
+        all_results
+    };
+
+    if json {
+        output::print_json(&filtered);
+    } else {
+        println!();
+        output::print_summary(&filtered);
+        progress::done(instant);
+    }
+
+    let has_outdated = filtered.iter().any(|r| r.outdated);
+    if has_outdated {
+        std::process::exit(1);
+    }
+
+    Ok(())
 }
 
-fn has_pnpm_signals(root: &std::path::Path) -> bool {
+fn has_pnpm_signals(root: &Path) -> bool {
     if root.join("pnpm-lock.yaml").exists() {
         return true;
     }
@@ -107,19 +144,11 @@ impl MavenCheckTask {
     }
 }
 
-pub async fn maven_check(matches: &ArgMatches) -> Result<()> {
-    let path = args::path_argument(matches);
-    let json = args::is_json(matches);
-    let outdated = args::is_outdated(matches);
-    let releases_only = args::releases_only(matches);
-
-    let instant = Instant::now();
-    let root = path.canonicalize().unwrap_or_else(|_| path.clone());
-
+async fn maven_check(root: &Path, json: bool, releases_only: bool) -> Result<Vec<CheckResult>> {
     if !json {
         progress::step("\u{1f50d}", "Discovering POM modules...");
     }
-    let discovery_result = discovery::discover(&root)?;
+    let discovery_result = discovery::discover(root)?;
 
     let maven_checker = Arc::new(MavenChecker::new(
         releases_only,
@@ -153,12 +182,10 @@ pub async fn maven_check(matches: &ArgMatches) -> Result<()> {
     }
 
     if tasks.is_empty() {
-        if json {
-            println!("[]");
-        } else {
+        if !json {
             println!("No version properties found.");
         }
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     if !json {
@@ -169,42 +196,11 @@ pub async fn maven_check(matches: &ArgMatches) -> Result<()> {
     }
 
     let results_with_progress = maven_check_all(tasks, json).await;
-
-    if outdated {
-        for (result, progress) in &results_with_progress {
-            if !result.outdated {
-                progress.clear();
-            }
-        }
-    }
-
     let results: Vec<CheckResult> = results_with_progress.into_iter().map(|(r, _)| r).collect();
-    let filtered: Vec<CheckResult> = if outdated {
-        results.into_iter().filter(|r| r.outdated).collect()
-    } else {
-        results
-    };
-
-    if json {
-        output::print_json(&filtered);
-    } else {
-        println!();
-        output::print_summary(&filtered);
-        progress::done(instant);
-    }
-
-    let has_outdated = filtered.iter().any(|r| r.outdated);
-    if has_outdated {
-        std::process::exit(1);
-    }
-
-    Ok(())
+    Ok(results)
 }
 
-async fn maven_check_all(
-    tasks: Vec<MavenCheckTask>,
-    json: bool,
-) -> Vec<(CheckResult, Progress)> {
+async fn maven_check_all(tasks: Vec<MavenCheckTask>, json: bool) -> Vec<(CheckResult, Progress)> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let multi_progress = MultiProgress::new();
     let mut join_set = JoinSet::new();
@@ -238,6 +234,7 @@ async fn maven_check_all(
                     .check(mapping)
                     .await
                     .unwrap_or_else(|e| CheckResult {
+                        ecosystem: Ecosystem::Maven,
                         property_name: mapping.property.name.clone(),
                         current_version: mapping.property.current_value.clone(),
                         latest_version: None,
@@ -254,6 +251,7 @@ async fn maven_check_all(
                     .check(property)
                     .await
                     .unwrap_or_else(|e| CheckResult {
+                        ecosystem: Ecosystem::Maven,
                         property_name: property.name.clone(),
                         current_version: property.current_value.clone(),
                         latest_version: None,
@@ -271,6 +269,7 @@ async fn maven_check_all(
                     .check(property, package)
                     .await
                     .unwrap_or_else(|e| CheckResult {
+                        ecosystem: Ecosystem::Maven,
                         property_name: property.name.clone(),
                         current_version: property.current_value.clone(),
                         latest_version: None,
@@ -293,25 +292,17 @@ async fn maven_check_all(
 // pnpm check
 // ------------------------------------------------------------------
 
-pub async fn pnpm_check(matches: &ArgMatches) -> Result<()> {
-    let path = args::path_argument(matches);
-    let json = args::is_json(matches);
-
-    let instant = Instant::now();
-    let root = path.canonicalize().unwrap_or_else(|_| path.clone());
-
+async fn pnpm_check(root: &Path, json: bool) -> Result<Vec<CheckResult>> {
     if !json {
         progress::step("\u{1f50d}", "Discovering pnpm projects...");
     }
-    let projects = crate::pnpm::discovery::discover(&root);
+    let projects = crate::pnpm::discovery::discover(root);
 
     if projects.is_empty() {
-        if json {
-            println!("[]");
-        } else {
+        if !json {
             println!("No pnpm projects found.");
         }
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     if !json {
@@ -322,21 +313,7 @@ pub async fn pnpm_check(matches: &ArgMatches) -> Result<()> {
     }
 
     let results = pnpm_check_all(&projects, json).await;
-
-    if json {
-        output::print_json(&results);
-    } else {
-        println!();
-        output::print_summary(&results);
-        progress::done(instant);
-    }
-
-    let has_outdated = results.iter().any(|r| r.outdated);
-    if has_outdated {
-        std::process::exit(1);
-    }
-
-    Ok(())
+    Ok(results)
 }
 
 async fn pnpm_check_all(
@@ -373,6 +350,7 @@ async fn pnpm_check_all(
                     let outdated = check_results.iter().filter(|r| r.outdated).count();
                     if outdated > 0 {
                         progress.finish_with_result(&CheckResult {
+                            ecosystem: Ecosystem::Pnpm,
                             property_name: project_name,
                             current_version: String::new(),
                             latest_version: None,
@@ -384,6 +362,7 @@ async fn pnpm_check_all(
                         });
                     } else {
                         progress.finish_with_result(&CheckResult {
+                            ecosystem: Ecosystem::Pnpm,
                             property_name: project_name,
                             current_version: String::new(),
                             latest_version: None,
@@ -398,6 +377,7 @@ async fn pnpm_check_all(
                 }
                 Err(e) => {
                     progress.finish_with_result(&CheckResult {
+                        ecosystem: Ecosystem::Pnpm,
                         property_name: project_name.clone(),
                         current_version: String::new(),
                         latest_version: None,
@@ -408,6 +388,7 @@ async fn pnpm_check_all(
                         kind: CheckerKind::Pnpm,
                     });
                     vec![CheckResult {
+                        ecosystem: Ecosystem::Pnpm,
                         property_name: project_name,
                         current_version: String::new(),
                         latest_version: None,

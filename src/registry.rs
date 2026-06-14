@@ -1,3 +1,19 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Ecosystem {
+    Maven,
+    Pnpm,
+}
+
+impl std::fmt::Display for Ecosystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Maven => write!(f, "Maven"),
+            Self::Pnpm => write!(f, "pnpm"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CheckerKind {
     Dependency,
@@ -43,6 +59,7 @@ impl CheckerKind {
 
 #[derive(Debug, Clone)]
 pub struct CheckResult {
+    pub ecosystem: Ecosystem,
     pub property_name: String,
     pub current_version: String,
     pub latest_version: Option<String>,
@@ -51,4 +68,15 @@ pub struct CheckResult {
     pub error: Option<String>,
     pub artifact: Option<String>,
     pub kind: CheckerKind,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ecosystem_display() {
+        assert_eq!(Ecosystem::Maven.to_string(), "Maven");
+        assert_eq!(Ecosystem::Pnpm.to_string(), "pnpm");
+    }
 }

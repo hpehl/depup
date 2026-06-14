@@ -70,10 +70,12 @@ const fn status_label(result: &CheckResult) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::registry::Ecosystem;
 
     #[test]
     fn status_label_error() {
         let r = CheckResult {
+            ecosystem: Ecosystem::Maven,
             property_name: "p".to_string(),
             current_version: "1.0".to_string(),
             latest_version: None,
@@ -89,6 +91,7 @@ mod tests {
     #[test]
     fn status_label_outdated() {
         let r = CheckResult {
+            ecosystem: Ecosystem::Maven,
             property_name: "p".to_string(),
             current_version: "1.0".to_string(),
             latest_version: Some("2.0".to_string()),
@@ -104,6 +107,7 @@ mod tests {
     #[test]
     fn status_label_up_to_date() {
         let r = CheckResult {
+            ecosystem: Ecosystem::Maven,
             property_name: "p".to_string(),
             current_version: "1.0".to_string(),
             latest_version: Some("1.0".to_string()),
@@ -119,6 +123,7 @@ mod tests {
     #[test]
     fn json_output_structure() {
         let results = vec![CheckResult {
+            ecosystem: Ecosystem::Maven,
             property_name: "version.junit".to_string(),
             current_version: "5.10.0".to_string(),
             latest_version: Some("5.12.0".to_string()),
