@@ -135,22 +135,30 @@ fn extract_mappings(
         let Some(version_str) = &artifact.version else {
             continue;
         };
-        let Some(prop_name) = extract_property_reference(version_str) else {
-            continue;
-        };
-        if prop_name.starts_with("project.") {
-            continue;
-        }
         let Some(group_id) = &artifact.group_id else {
             continue;
         };
         let Some(artifact_id) = &artifact.artifact_id else {
             continue;
         };
-        let Some(raw_value) = properties.get(&prop_name) else {
-            continue;
-        };
-        let current_value = resolve_value(raw_value, properties);
+
+        let (prop_name, current_value) =
+            if let Some(prop_name) = extract_property_reference(version_str) {
+                if prop_name.starts_with("project.") {
+                    continue;
+                }
+                let Some(raw_value) = properties.get(&prop_name) else {
+                    continue;
+                };
+                (prop_name, resolve_value(raw_value, properties))
+            } else {
+                let coords = format!(
+                    "{}:{}",
+                    resolve_value(group_id, properties),
+                    resolve_value(artifact_id, properties)
+                );
+                (coords, version_str.trim().to_string())
+            };
 
         let group_id = resolve_value(group_id, properties);
         let artifact_id = resolve_value(artifact_id, properties);
@@ -158,7 +166,7 @@ fn extract_mappings(
         mappings.push(ArtifactMapping {
             property: VersionProperty {
                 name: prop_name,
-                current_value: current_value.clone(),
+                current_value,
             },
             group_id,
             artifact_id,
@@ -440,5 +448,66 @@ mod tests {
         assert_eq!(mappings.len(), 2);
         assert_eq!(mappings[0].property.name, "version.guava");
         assert_eq!(mappings[1].property.name, "version.junit");
+    }
+
+    #[test]
+    fn extract_mappings_includes_plain_versions() {
+        let project = pom::Project {
+            artifacts: vec![
+                (
+                    pom::Artifact {
+                        group_id: Some("com.google.guava".to_string()),
+                        artifact_id: Some("guava".to_string()),
+                        version: Some("33.0.0-jre".to_string()),
+                    },
+                    pom::ArtifactKind::Dependency,
+                ),
+                (
+                    pom::Artifact {
+                        group_id: Some("org.junit.jupiter".to_string()),
+                        artifact_id: Some("junit-jupiter".to_string()),
+                        version: Some("${version.junit}".to_string()),
+                    },
+                    pom::ArtifactKind::Dependency,
+                ),
+                (
+                    pom::Artifact {
+                        group_id: Some("org.example".to_string()),
+                        artifact_id: Some("no-version".to_string()),
+                        version: None,
+                    },
+                    pom::ArtifactKind::Dependency,
+                ),
+            ],
+            ..Default::default()
+        };
+
+        let mut properties = HashMap::new();
+        properties.insert("version.junit".to_string(), "5.10.0".to_string());
+
+        let mut mappings = Vec::new();
+        extract_mappings(
+            &project,
+            Path::new("pom.xml"),
+            &properties,
+            &mut mappings,
+        );
+
+        assert_eq!(mappings.len(), 2);
+
+        let guava = mappings
+            .iter()
+            .find(|m| m.artifact_id == "guava")
+            .expect("guava mapping should exist");
+        assert_eq!(guava.property.name, "com.google.guava:guava");
+        assert_eq!(guava.property.current_value, "33.0.0-jre");
+        assert_eq!(guava.group_id, "com.google.guava");
+
+        let junit = mappings
+            .iter()
+            .find(|m| m.artifact_id == "junit-jupiter")
+            .expect("junit mapping should exist");
+        assert_eq!(junit.property.name, "version.junit");
+        assert_eq!(junit.property.current_value, "5.10.0");
     }
 }
