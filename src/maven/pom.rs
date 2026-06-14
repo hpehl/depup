@@ -145,9 +145,7 @@ pub fn parse_pom_str(xml: &str) -> Result<Project> {
                 let in_nested_block = path_stack
                     .iter()
                     .any(|s| s == "exclusions" || s == "configuration");
-                if !in_nested_block
-                    && let Some((artifact, _)) = artifact_stack.last_mut()
-                {
+                if !in_nested_block && let Some((artifact, _)) = artifact_stack.last_mut() {
                     if current_path.ends_with("/groupId") {
                         artifact.group_id = Some(text_buf.trim().to_string());
                     } else if current_path.ends_with("/artifactId") {

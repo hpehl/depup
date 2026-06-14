@@ -112,10 +112,6 @@ impl Progress {
         }
     }
 
-    pub fn clear(&self) {
-        self.bar.finish_and_clear();
-    }
-
     fn format_columns(&self) -> String {
         let name = truncate_middle_pad(&self.name, NAME_WIDTH);
         let artifact = truncate_middle_pad(&self.artifact, ARTIFACT_WIDTH);

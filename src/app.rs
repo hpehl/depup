@@ -11,7 +11,7 @@ pub fn build_app() -> Command {
 
     let app = Command::new(crate_name!())
         .version(crate_version!())
-        .about("Check dependency versions across Maven and pnpm ecosystems")
+        .about("Check dependency versions across multiple ecosystems")
         .styles(styles)
         .propagate_version(true)
         .arg(
@@ -22,24 +22,15 @@ pub fn build_app() -> Command {
                 .help("Output results as JSON (for machine consumption)"),
         )
         .subcommand(
-            Command::new("maven")
-                .about("Maven ecosystem commands")
-                .subcommand(
-                    maven_check_args(Command::new("check"))
-                        .about("Check Maven version properties against upstream registries"),
-                ),
+            check_args(Command::new("check"))
+                .about("Check for outdated dependencies (auto-detects ecosystems)"),
         )
         .subcommand(
-            Command::new("pnpm")
-                .about("pnpm ecosystem commands")
-                .subcommand(
-                    pnpm_check_args(Command::new("check"))
-                        .about("Check pnpm projects for outdated packages"),
-                ),
+            update_args(Command::new("update"))
+                .about("Update dependencies to their latest versions"),
         )
         .subcommand(
-            auto_check_args(Command::new("check"))
-                .about("Auto-detect ecosystem and check for outdated dependencies"),
+            audit_args(Command::new("audit")).about("Audit dependencies for known vulnerabilities"),
         )
         .subcommand(
             Command::new("completions")
@@ -56,20 +47,20 @@ pub fn build_app() -> Command {
                         .help("Install completions to the standard location for the shell"),
                 ),
         );
-    auto_check_args(app)
+    check_args(app)
 }
 
-fn maven_check_args(cmd: Command) -> Command {
+fn check_args(cmd: Command) -> Command {
     cmd.arg(
         Arg::new("path")
             .default_value(".")
-            .help("Path to the Maven project root"),
+            .help("Path to the project root (auto-detects ecosystems)"),
     )
     .arg(
         Arg::new("outdated")
             .long("outdated")
             .action(ArgAction::SetTrue)
-            .help("Only show outdated properties"),
+            .help("Only show outdated dependencies"),
     )
     .arg(
         Arg::new("include-pre-releases")
@@ -79,30 +70,18 @@ fn maven_check_args(cmd: Command) -> Command {
     )
 }
 
-fn pnpm_check_args(cmd: Command) -> Command {
+fn update_args(cmd: Command) -> Command {
     cmd.arg(
         Arg::new("path")
             .default_value(".")
-            .help("Root directory to search for pnpm projects"),
+            .help("Path to the project root"),
     )
 }
 
-fn auto_check_args(cmd: Command) -> Command {
+fn audit_args(cmd: Command) -> Command {
     cmd.arg(
         Arg::new("path")
             .default_value(".")
-            .help("Path to the project root (auto-detects ecosystem)"),
-    )
-    .arg(
-        Arg::new("outdated")
-            .long("outdated")
-            .action(ArgAction::SetTrue)
-            .help("Only show outdated properties (Maven only)"),
-    )
-    .arg(
-        Arg::new("include-pre-releases")
-            .long("include-pre-releases")
-            .action(ArgAction::SetTrue)
-            .help("Include pre-release versions (Maven only)"),
+            .help("Path to the project root"),
     )
 }

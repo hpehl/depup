@@ -13,7 +13,7 @@ mod version;
 
 use anyhow::Result;
 
-use crate::error::{JsonErrorEnvelope, DepupError};
+use crate::error::{DepupError, JsonErrorEnvelope};
 
 #[tokio::main]
 async fn main() {
@@ -40,17 +40,11 @@ async fn run() -> Result<()> {
         .map_err(classify_clap_error)?;
 
     match matches.subcommand() {
-        Some(("maven", m)) => match m.subcommand() {
-            Some(("check", m)) => command::check::maven_check(m).await,
-            _ => command::check::maven_check(m).await,
-        },
-        Some(("pnpm", m)) => match m.subcommand() {
-            Some(("check", m)) => command::check::pnpm_check(m).await,
-            _ => command::check::pnpm_check(m).await,
-        },
+        Some(("check", m)) => command::check::check(m).await,
+        Some(("update", m)) => command::update::update(m).await,
+        Some(("audit", m)) => command::audit::audit(m).await,
         Some(("completions", m)) => command::completions::completions(m),
-        Some(("check", m)) => command::check::auto_check(m).await,
-        _ => command::check::auto_check(&matches).await,
+        _ => command::check::check(&matches).await,
     }
 }
 

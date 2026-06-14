@@ -88,21 +88,13 @@ mod tests {
 
     fn setup_pnpm_project(dir: &Path, name: &str) {
         fs::create_dir_all(dir).unwrap();
-        fs::write(
-            dir.join("package.json"),
-            format!(r#"{{"name": "{name}"}}"#),
-        )
-        .unwrap();
+        fs::write(dir.join("package.json"), format!(r#"{{"name": "{name}"}}"#)).unwrap();
         fs::write(dir.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n").unwrap();
     }
 
     fn setup_non_pnpm_project(dir: &Path, name: &str) {
         fs::create_dir_all(dir).unwrap();
-        fs::write(
-            dir.join("package.json"),
-            format!(r#"{{"name": "{name}"}}"#),
-        )
-        .unwrap();
+        fs::write(dir.join("package.json"), format!(r#"{{"name": "{name}"}}"#)).unwrap();
     }
 
     #[test]
@@ -145,7 +137,11 @@ mod tests {
         let root = tmp.path();
 
         setup_pnpm_project(root, "workspace-root");
-        fs::write(root.join("pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n").unwrap();
+        fs::write(
+            root.join("pnpm-workspace.yaml"),
+            "packages:\n  - 'packages/*'\n",
+        )
+        .unwrap();
 
         let member = root.join("packages").join("member-a");
         setup_pnpm_project(&member, "member-a");

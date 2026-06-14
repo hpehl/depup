@@ -1,8 +1,8 @@
-# mvnup
+# depup
 
-Check Maven version properties against upstream registries.
+Check dependency versions across multiple ecosystems.
 
-`mvnup` scans a multi-module Maven project, discovers all `${version.*}` properties and the artifacts they control, then checks each against upstream Maven repositories to find outdated versions. It works where Maven's `versions:display-property-updates` fails — when properties are defined in a parent POM but referenced in child POMs.
+`depup` auto-detects project ecosystems in a directory tree and checks all dependencies for newer versions. Currently supports **Maven** and **pnpm**.
 
 ## Installation
 
@@ -13,59 +13,67 @@ cargo install --path .
 ## Usage
 
 ```bash
-# Check current directory
-mvnup
+# Check current directory (auto-detects ecosystems)
+depup
 
 # Check a specific project
-mvnup check /path/to/maven/project
+depup check /path/to/project
 
 # JSON output (for scripting)
-mvnup check --json
+depup check --json
 
 # Only show outdated versions
-mvnup check --outdated
+depup check --outdated
 
-# Include pre-release versions (alpha, beta, CR, RC, milestone)
-mvnup check --include-pre-releases
-
-# Verbose output (show artifact coordinates)
-mvnup check -v
+# Include pre-release versions (Maven only)
+depup check --include-pre-releases
 
 # Generate shell completions (auto-detects shell)
-mvnup completions
+depup completions
 
 # Install shell completions
-mvnup completions --install
+depup completions --install
 
 # Generate completions for a specific shell
-mvnup completions fish
+depup completions fish
 ```
 
-The `check` subcommand is the default — `mvnup /path` is equivalent to `mvnup check /path`.
+The `check` subcommand is the default — `depup /path` is equivalent to `depup check /path`.
+
+If both Maven and pnpm projects are found in the target path, both are checked and results are combined.
+
+## Subcommands
+
+| Command | Description |
+|---------|-------------|
+| `check` | Check dependencies for newer versions (default) |
+| `update` | Update dependencies to their latest versions (not yet implemented) |
+| `audit` | Audit dependencies for known vulnerabilities (not yet implemented) |
+| `completions` | Generate and install shell completions |
+
+## Ecosystems
+
+### Maven
+
+Scans multi-module Maven projects, discovers all `${version.*}` properties and the artifacts they control, then checks each against upstream Maven repositories. Works where Maven's `versions:display-property-updates` fails — when properties are defined in a parent POM but referenced in child POMs.
+
+Also detects Node.js and npm/pnpm/yarn version properties in Maven POMs (e.g., `version.node`, `version.npm`).
+
+### pnpm
+
+Discovers pnpm projects in the directory tree (via `pnpm-lock.yaml` or `packageManager` field in `package.json`), runs `pnpm outdated --format json` on each, and aggregates results. Workspace members are skipped — only root projects are checked.
 
 ## Example Output
 
 ```
 🔍 Discovering POM modules...
-🌐 Checking 4 properties...
-  ✓ version.compiler.plugin
-  ✓ version.javadoc.plugin
-  ✓ version.junit
-  ✓ version.mockito
+⚙️ Checking 4 properties...
+  ✓ version.compiler.plugin  org.apache.maven.plugins:maven-compiler-plugin  3.13.0    up-to-date
+  → version.junit            org.junit.jupiter:junit-jupiter                 5.10.0    → 5.12.2
+  ✓ version.javadoc.plugin   org.apache.maven.plugins:maven-javadoc-plugin   3.12.0    up-to-date
+  ✓ version.mockito          org.mockito:mockito-core                        5.18.0    up-to-date
 
-+----------------------------+---------+--------+----------+
-| Property                   | Current | Latest | Status   |
-+============================================================+
-| version.compiler.plugin    | 3.11.0  | 3.13.0 | OUTDATED |
-|----------------------------+---------+--------+----------|
-| version.javadoc.plugin     | 3.12.0  | 3.12.0 | OK       |
-|----------------------------+---------+--------+----------|
-| version.junit              | 5.10.0  | 5.12.2 | OUTDATED |
-|----------------------------+---------+--------+----------|
-| version.mockito            | 5.18.0  | 5.18.0 | OK       |
-+----------------------------+---------+--------+----------+
-
-4 properties checked: 2 current, 2 outdated
+4 properties checked: 3 current, 1 outdated  (■ Dependency, ■ Plugin)
 
 Done in 1s
 ```
@@ -84,6 +92,8 @@ Error codes: `POM_NOT_FOUND`, `POM_PARSE_FAILED`, `REGISTRY_LOOKUP_FAILED`, `NO_
 
 ## How It Works
 
+### Maven
+
 1. Parses the root `pom.xml` and recursively follows `<modules>` declarations
 2. For every `<dependency>` and `<plugin>` using `${version.*}`, maps the property to its groupId and artifactId
 3. Resolves property values from the root POM's `<properties>` block
@@ -91,9 +101,16 @@ Error codes: `POM_NOT_FOUND`, `POM_PARSE_FAILED`, `REGISTRY_LOOKUP_FAILED`, `NO_
 5. If not found on Maven Central, queries all `<repositories>` and `<pluginRepositories>` defined in the POMs in parallel
 6. Compares versions using Maven-aware ordering (handles `.Final`, `-SP1`, and other qualifiers)
 
+### pnpm
+
+1. Walks the directory tree finding directories with `pnpm-lock.yaml` or `packageManager: "pnpm@..."` in `package.json`
+2. Skips `node_modules/` and workspace members
+3. Runs `pnpm outdated --format json` on each discovered project
+4. Parses and aggregates results
+
 ## Version Filtering
 
-By default, `mvnup` excludes pre-release versions and SNAPSHOTs. Use `--include-pre-releases` to also show pre-release versions matching these patterns:
+By default, `depup` excludes pre-release versions and SNAPSHOTs (Maven). Use `--include-pre-releases` to also show pre-release versions matching these patterns:
 
 - `*-alpha*`, `*-beta*`
 - `*-RC*`, `*-CR*`
@@ -107,9 +124,9 @@ SNAPSHOTs are always excluded regardless of flags.
 Generate and install shell completions for tab-completion of subcommands and flags:
 
 ```bash
-mvnup completions --install       # auto-detect shell, install to standard path
-mvnup completions fish            # print fish completions to stdout
-mvnup completions --install zsh   # install zsh completions
+depup completions --install       # auto-detect shell, install to standard path
+depup completions fish            # print fish completions to stdout
+depup completions --install zsh   # install zsh completions
 ```
 
 Supported shells: bash, zsh, fish, elvish, powershell.
@@ -118,6 +135,7 @@ Supported shells: bash, zsh, fish, elvish, powershell.
 
 - Rust 1.85+ (edition 2024)
 - Network access to Maven Central (`repo1.maven.org`) and any custom repositories defined in the project's POMs
+- `pnpm` installed and on PATH (for pnpm ecosystem)
 
 ## License
 

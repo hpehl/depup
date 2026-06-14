@@ -19,11 +19,11 @@ cargo build --release                     # release build (uses LTO)
 cargo test                                # all unit + integration tests
 cargo test maven::pom::tests             # run tests in a specific module
 cargo test -- --nocapture                 # show println output during tests
-cargo run -- check /path                  # auto-detect ecosystem and check
-cargo run -- maven check /path            # explicit Maven check
-cargo run -- maven check --json /path     # Maven check with JSON output
-cargo run -- pnpm check /path             # pnpm outdated check
-cargo run -- pnpm check --json /path      # pnpm check with JSON output
+cargo run -- check /path                  # auto-detect ecosystems and check all
+cargo run -- check --json /path           # check with JSON output
+cargo run -- check --outdated /path       # only show outdated dependencies
+cargo run -- update /path                 # update dependencies (stub)
+cargo run -- audit /path                  # audit dependencies (stub)
 cargo run -- completions                  # generate shell completions
 cargo clippy                              # lint
 cargo fmt                                 # format
@@ -37,9 +37,9 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 ### CLI Layer
 
-- **`app.rs`** — Defines the clap `Command` tree using the builder API (not derive macros). Subcommands: `maven check`, `pnpm check`, `check` (auto-detect), `completions`. Global `--json` flag. Styled help text. Separated from `main.rs` so the completion system can build the command tree independently.
+- **`app.rs`** — Defines the clap `Command` tree using the builder API (not derive macros). Subcommands: `check` (auto-detects all ecosystems), `update` (stub), `audit` (stub), `completions`. Global `--json` flag. Styled help text. Separated from `main.rs` so the completion system can build the command tree independently.
 
-- **`main.rs`** — Entry point. Wires `CompleteEnv` for dynamic shell completions, dispatches subcommands (`maven`, `pnpm`, `check`, `completions`), handles top-level error reporting with JSON error envelope support.
+- **`main.rs`** — Entry point. Wires `CompleteEnv` for dynamic shell completions, dispatches subcommands (`check`, `update`, `audit`, `completions`), handles top-level error reporting with JSON error envelope support.
 
 - **`args.rs`** — Helper functions to extract typed arguments from clap `ArgMatches`.
 
@@ -47,11 +47,16 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 ### Command Layer (`src/command/`)
 
-- **`check.rs`** — Orchestrates check pipelines for each ecosystem:
-  - `auto_check()` — Sniffs for `pom.xml` or `pnpm-lock.yaml` to pick the ecosystem.
-  - `maven_check()` — Discover POM modules, check versions concurrently with progress spinners, sort/filter results, output table or JSON.
-  - `pnpm_check()` — Discover pnpm projects, run `pnpm outdated --format json` on each, aggregate results.
+- **`check.rs`** — Orchestrates check pipelines across all ecosystems:
+  - `check()` — Discovers all ecosystems in the target path (Maven if `pom.xml` exists, pnpm if lockfile exists), runs all found, merges results.
+  - Maven path: discover POM modules, check versions concurrently with progress spinners, sort/filter results.
+  - pnpm path: discover pnpm projects, run `pnpm outdated --format json` on each, aggregate results.
   - Both use `tokio::task::JoinSet` for parallel checks with semaphore-based rate limiting.
+  - Output: combined table or JSON across all ecosystems.
+
+- **`update.rs`** — Stub for future `update` subcommand.
+
+- **`audit.rs`** — Stub for future `audit` subcommand.
 
 - **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
 
