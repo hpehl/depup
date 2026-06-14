@@ -209,7 +209,7 @@ fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
 
 fn deduplicate(mappings: &mut Vec<ArtifactMapping>) {
     let mut seen = std::collections::HashSet::new();
-    mappings.retain(|m| seen.insert(m.property.name.clone()));
+    mappings.retain(|m| seen.insert(format!("{}:{}", m.group_id, m.artifact_id)));
 }
 
 fn deduplicate_repos(repos: &mut Vec<Repository>) {
@@ -415,5 +415,30 @@ mod tests {
         assert_eq!(props.get("project.artifactId").unwrap(), "child-mod");
         assert_eq!(props.get("project.version").unwrap(), "1.0.0");
         assert_eq!(props.get("project.packaging").unwrap(), "pom");
+    }
+
+    #[test]
+    fn deduplicate_by_coordinates() {
+        let mapping = |name: &str, group: &str, artifact: &str| ArtifactMapping {
+            property: VersionProperty {
+                name: name.to_string(),
+                current_value: "1.0.0".to_string(),
+            },
+            group_id: group.to_string(),
+            artifact_id: artifact.to_string(),
+            kind: pom::ArtifactKind::Dependency,
+            referenced_in: PathBuf::from("pom.xml"),
+        };
+
+        let mut mappings = vec![
+            mapping("version.guava", "com.google.guava", "guava"),
+            mapping("com.google.guava:guava", "com.google.guava", "guava"),
+            mapping("version.junit", "org.junit.jupiter", "junit-jupiter"),
+        ];
+
+        deduplicate(&mut mappings);
+        assert_eq!(mappings.len(), 2);
+        assert_eq!(mappings[0].property.name, "version.guava");
+        assert_eq!(mappings[1].property.name, "version.junit");
     }
 }
