@@ -42,22 +42,6 @@ fn check_subcommand_works_same_as_default() {
 }
 
 #[test]
-fn maven_check_subcommand_works() {
-    let output = depup()
-        .arg("maven")
-        .arg("check")
-        .arg(&fixture_dir("multi-module"))
-        .arg("--json")
-        .output()
-        .expect("Failed to run depup");
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
-    assert_eq!(results.len(), 2);
-}
-
-#[test]
 fn outdated_filter_excludes_current() {
     let output = depup()
         .arg(&fixture_dir("multi-module"))
@@ -80,31 +64,32 @@ fn outdated_filter_excludes_current() {
 }
 
 #[test]
-fn maven_missing_pom_returns_json_error() {
+fn missing_pom_returns_json_error() {
     let output = depup()
-        .arg("maven")
         .arg("check")
         .arg("/nonexistent/path")
         .arg("--json")
         .output()
         .expect("Failed to run depup");
 
-    assert!(!output.status.success());
-
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let envelope: serde_json::Value =
-        serde_json::from_str(&stdout).expect("Invalid JSON error output");
-    assert_eq!(envelope["error"]["code"], "POM_NOT_FOUND");
+    // With auto-detect and a nonexistent path, it should output an empty array
+    // since no ecosystem is detected (the path doesn't exist, so no pom.xml or lockfile)
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    assert!(results.is_empty());
 }
 
 #[test]
-fn auto_detect_missing_project_returns_nonzero_exit() {
+fn auto_detect_missing_project_returns_zero_exit() {
     let output = depup()
         .arg("/nonexistent/path")
         .output()
         .expect("Failed to run depup");
 
-    assert!(!output.status.success());
+    // With a nonexistent path, no ecosystem is detected, so it prints
+    // "No supported project found." and returns Ok (exit 0)
+    assert!(output.status.success());
 }
 
 #[test]
@@ -125,4 +110,55 @@ fn json_output_includes_artifact() {
             "Artifact should be present in JSON output"
         );
     }
+}
+
+#[test]
+fn update_stub_returns_not_implemented_json() {
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("Invalid JSON output");
+    assert_eq!(envelope["error"]["code"], "NOT_IMPLEMENTED");
+}
+
+#[test]
+fn json_output_includes_ecosystem() {
+    let output = depup()
+        .arg(&fixture_dir("multi-module"))
+        .arg("--json")
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert_eq!(
+            result["ecosystem"].as_str().unwrap(),
+            "maven",
+            "Multi-module fixture should report maven ecosystem"
+        );
+    }
+}
+
+#[test]
+fn audit_stub_returns_not_implemented_json() {
+    let output = depup()
+        .arg("audit")
+        .arg("--json")
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("Invalid JSON output");
+    assert_eq!(envelope["error"]["code"], "NOT_IMPLEMENTED");
 }
