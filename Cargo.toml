@@ -8,6 +8,9 @@ repository = "https://github.com/hpehl/depup"
 homepage = "https://github.com/hpehl/depup"
 authors = ["Harald Pehl <harald.pehl@gmail.com>"]
 rust-version = "1.85"
+readme = "README.md"
+keywords = ["dependency", "version", "maven", "npm", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 anyhow = "1"

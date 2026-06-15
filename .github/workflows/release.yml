@@ -32,6 +32,16 @@ jobs:
           title: '$version'
           changelog: CHANGELOG.md
           token: ${{ secrets.GITHUB_TOKEN }}
+  publish-crate:
+    if: github.repository_owner == 'hpehl'
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish --token ${CRATES_TOKEN}
+        env:
+          CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
   upload-assets:
     if: github.repository_owner == 'hpehl'
     needs: create-release
