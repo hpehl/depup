@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `update` subcommand for updating outdated dependencies
-- Maven: format-preserving POM property updates (preserves comments, whitespace, indentation)
+- Maven: format-preserving POM updates for both managed properties and inline versions (preserves comments, whitespace, indentation)
 - npm: delegates to native package manager update commands (npm, pnpm, yarn, bun)
 - `--dry-run` flag to preview updates without making changes
 - `--maven` / `--npm` flags to limit updates to a single ecosystem

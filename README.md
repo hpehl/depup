@@ -90,7 +90,7 @@ depup update --npm
 depup update --json
 ```
 
-For Maven, `depup update` rewrites `<properties>` values in POM files while preserving all formatting, comments, and indentation. Only managed properties (`${...}` references) are updated — inline version numbers are reported as skipped.
+For Maven, `depup update` rewrites version numbers in POM files while preserving all formatting, comments, and indentation. Both managed properties (`${...}` references in `<properties>` blocks) and plain inline versions (`<version>5.10.0</version>` inside dependency/plugin blocks) are updated.
 
 For npm, `depup update` delegates to the detected package manager's native update command (`npm update`, `pnpm update`, `yarn upgrade`, `bun update`).
 

@@ -74,9 +74,9 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`node.rs`** — Checks Node.js version properties found in Maven POMs (e.g., `version.node`) against the Node.js distribution index.
 
-- **`pom_writer.rs`** — Surgical POM property updater. Replaces property values inside `<properties>` blocks without altering formatting, comments, or whitespace. Works at the byte level using quick-xml only to locate element boundaries, then splices new values into the original text.
+- **`pom_writer.rs`** — Surgical POM version updater. Two public functions: `update_properties()` replaces values in `<properties>` blocks, `update_inline_versions()` replaces `<version>` elements inside dependency/plugin blocks matched by `groupId:artifactId` coordinates. Both use a shared `Replacement`/`apply_replacements()` pattern — quick-xml locates byte ranges, string splicing preserves formatting.
 
-- **`updater.rs`** — Bridges check results to POM file writes. Filters to Maven + outdated, groups by source POM, calls `pom_writer::update_properties`, writes back. Skips unmanaged inline versions.
+- **`updater.rs`** — Bridges check results to POM file writes. Filters to Maven + outdated, groups by source POM. For each POM, applies property updates then inline version updates in sequence. Both managed and unmanaged versions are updated.
 
 - **`pm_versions.rs`** — Checks package manager tool version properties found in Maven POMs (e.g., `version.npm`, `version.pnpm`, `version.yarn`) against the npm registry.
 
