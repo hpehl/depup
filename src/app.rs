@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects};
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_name, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 /// Extracts the project root path from CLI arguments, defaulting to the current directory.
 pub fn path_argument(matches: &ArgMatches) -> PathBuf {
@@ -29,7 +29,7 @@ pub fn build_app() -> Command {
         .literal(AnsiColor::Blue.on_default() | Effects::BOLD)
         .placeholder(AnsiColor::Cyan.on_default());
 
-    Command::new(crate_name!())
+    Command::new("depup")
         .version(crate_version!())
         .about("Check dependency versions across multiple ecosystems")
         .styles(styles)

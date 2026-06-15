@@ -1,5 +1,5 @@
 [package]
-name = "depup"
+name = "depup-cli"
 version = "0.1.0"
 edition = "2024"
 description = "Check dependency versions across Maven and npm ecosystems"
@@ -11,6 +11,10 @@ rust-version = "1.85"
 readme = "README.md"
 keywords = ["dependency", "version", "maven", "npm", "cli"]
 categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "depup"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"

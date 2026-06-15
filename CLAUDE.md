@@ -123,7 +123,7 @@ These patterns are shared with the `mgt` and `wado` CLI tools:
 Distributed via:
 
 - **Homebrew** — `brew install hpehl/tap/depup` (macOS Intel & Apple Silicon, formula in `hpehl/homebrew-tap`)
-- **Cargo** — `cargo install depup` (published to crates.io)
+- **Cargo** — `cargo install depup-cli` (published to crates.io as `depup-cli`, installs the `depup` binary)
 - **GitHub Releases** — precompiled binaries for macOS (x64, arm64), Linux (x64), Windows (x64)
 - **Source** — `cargo build --release && cargo install --path .`
 

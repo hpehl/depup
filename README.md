@@ -18,7 +18,7 @@ brew install depup
 ### Cargo
 
 ```shell
-cargo install depup
+cargo install depup-cli
 ```
 
 ### Build from source
