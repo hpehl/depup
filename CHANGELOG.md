@@ -18,3 +18,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-release version filtering (alpha, beta, RC, milestone, SNAPSHOT)
 - Multi-module Maven project discovery
 - Table and JSON output formats
+
+[Unreleased]: https://github.com/hpehl/depup/compare/v0.1.0...HEAD
