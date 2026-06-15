@@ -11,4 +11,5 @@ pub mod maven_central;
 pub mod node;
 pub mod pm_versions;
 pub mod pom;
+pub mod pom_writer;
 pub mod tool;
