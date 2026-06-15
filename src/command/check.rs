@@ -1,3 +1,10 @@
+//! Orchestrates check pipelines across all ecosystems.
+//!
+//! Auto-detects Maven (via `pom.xml`) and npm (via lockfiles or `packageManager` field),
+//! runs all discovered checks concurrently using `JoinSet`, applies CLI filters,
+//! and outputs results as a table or JSON. Exits with code 1 if any outdated
+//! dependencies are found.
+
 use std::path::Path;
 use std::sync::Arc;
 
@@ -8,18 +15,19 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 
-use crate::args;
+use crate::app;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
+use crate::filter::Filter;
 use crate::npm::discovery::NpmProject;
 use crate::output;
 use crate::progress;
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 
+/// Main entry point for the `check` subcommand.
 pub async fn check(matches: &ArgMatches) -> Result<()> {
-    let path = args::path_argument(matches);
-    let json = args::is_json(matches);
-    let outdated = args::is_outdated(matches);
-    let releases_only = args::releases_only(matches);
+    let path = app::path_argument(matches);
+    let json = app::is_json(matches);
+    let filter = Filter::from_matches(matches);
 
     let instant = Instant::now();
     let root = path.canonicalize().unwrap_or_else(|_| path.clone());
@@ -27,7 +35,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     let has_maven = root.join("pom.xml").exists();
 
     let maven_prepared = if has_maven {
-        Some(crate::maven::checker::discover(&root, releases_only)?)
+        Some(crate::maven::checker::discover(&root, filter.stable)?)
     } else {
         None
     };
@@ -66,11 +74,10 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
 
     bar.finish_and_clear();
 
-    let filtered: Vec<CheckResult> = if outdated {
-        all_results.into_iter().filter(|r| r.outdated).collect()
-    } else {
-        all_results
-    };
+    let filtered: Vec<CheckResult> = all_results
+        .into_iter()
+        .filter(|r| filter.matches(r))
+        .collect();
 
     if json {
         output::print_json(&filtered);
@@ -87,6 +94,8 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
+/// Spawns npm project checks concurrently with semaphore-based rate limiting.
+/// On failure, produces an error `CheckResult` rather than propagating the error.
 fn spawn_npm_checks(
     join_set: &mut JoinSet<Vec<CheckResult>>,
     projects: Vec<NpmProject>,
@@ -107,7 +116,7 @@ fn spawn_npm_checks(
             bar.set_message(format!("{} ({})", project.name, project.package_manager));
             let project_name = project.name.clone();
             let project_path = project.path.clone();
-            let results = crate::npm::check_project(&project, &root)
+            let results = crate::npm::checker::check_project(&project, &root)
                 .await
                 .unwrap_or_else(|e| {
                     let source = project_path

@@ -1,3 +1,9 @@
+//! Yarn classic (v1) package manager checker.
+//!
+//! Parses NDJSON from `yarn list --json` and `yarn outdated --json`.
+//! Yarn classic outputs one JSON object per line (not a single JSON array),
+//! requiring line-by-line parsing. Dev deps are classified from `package.json`.
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
@@ -8,6 +14,7 @@ use tokio::process::Command;
 
 use super::{OutdatedEntry, PackageManagerChecker, read_dev_dependency_names};
 
+/// Yarn classic (v1) checker implementation.
 pub struct Yarn;
 
 #[derive(Debug, Deserialize)]

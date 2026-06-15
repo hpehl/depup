@@ -1,18 +1,23 @@
+//! Structured error types for human-readable and machine-consumable error output.
+//!
+//! Every `DepupError` carries a stable `DepupErrorCode` that serializes to
+//! `SCREAMING_SNAKE_CASE` for the JSON error envelope, making errors parseable
+//! by CI scripts and other tools.
+
 use serde::Serialize;
 
+/// Stable, machine-readable error codes. Serialized as `SCREAMING_SNAKE_CASE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[allow(dead_code)]
 pub enum DepupErrorCode {
     PomNotFound,
     PomParseFailed,
-    RegistryLookupFailed,
-    NoVersionsFound,
     HttpRequestFailed,
     ClapParseError,
     Internal,
 }
 
+/// Application-specific error with a stable code for machine consumption.
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
 #[must_use]
@@ -29,27 +34,10 @@ impl DepupError {
         }
     }
 
-    #[cfg(test)]
     pub fn pom_parse_failed(path: &str, detail: &str) -> Self {
         Self {
             code: DepupErrorCode::PomParseFailed,
             message: format!("Failed to parse {path}: {detail}"),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn registry_lookup_failed(artifact: &str, detail: &str) -> Self {
-        Self {
-            code: DepupErrorCode::RegistryLookupFailed,
-            message: format!("Registry lookup failed for {artifact}: {detail}"),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn no_versions_found(artifact: &str) -> Self {
-        Self {
-            code: DepupErrorCode::NoVersionsFound,
-            message: format!("No versions found for {artifact}"),
         }
     }
 
@@ -74,11 +62,13 @@ impl DepupError {
     }
 }
 
+/// JSON envelope wrapping an error for `--json` mode output.
 #[derive(Serialize)]
 pub struct JsonErrorEnvelope {
     pub error: JsonErrorBody,
 }
 
+/// Inner body of the JSON error envelope.
 #[derive(Serialize)]
 pub struct JsonErrorBody {
     pub code: DepupErrorCode,
@@ -141,17 +131,12 @@ mod tests {
 
     #[test]
     fn json_error_envelope_from_depup_error() {
-        let err = DepupError::no_versions_found("org.example:my-lib");
+        let err = DepupError::pom_not_found("/some/path");
         let envelope = JsonErrorEnvelope::from_depup_error(&err);
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
-        assert_eq!(json["error"]["code"], "NO_VERSIONS_FOUND");
-        assert!(
-            json["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains("org.example:my-lib")
-        );
+        assert_eq!(json["error"]["code"], "POM_NOT_FOUND");
+        assert!(json["error"]["message"].as_str().unwrap().contains("/some/path"));
     }
 
     #[test]
@@ -182,10 +167,10 @@ mod tests {
     #[test]
     fn error_code_extracts_from_anyhow() {
         let err: anyhow::Error =
-            DepupError::registry_lookup_failed("org.example:lib", "connection refused").into();
+            DepupError::pom_parse_failed("pom.xml", "invalid XML").into();
         assert_eq!(
             DepupError::error_code(&err),
-            DepupErrorCode::RegistryLookupFailed
+            DepupErrorCode::PomParseFailed
         );
     }
 

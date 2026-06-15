@@ -1,3 +1,11 @@
+//! Maven repository version checker.
+//!
+//! Queries `maven-metadata.xml` to find all published versions of an artifact.
+//! Tries Maven Central first; if not found, falls back to custom repositories
+//! declared in the POM. Standard repositories are used for dependencies,
+//! plugin repositories for plugins. Filters snapshots by default and optionally
+//! filters pre-releases when `--stable` is set.
+
 use anyhow::Result;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
@@ -9,6 +17,7 @@ use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 use crate::version::{self, Version};
 
+/// Checks Maven artifacts against Maven Central and custom repositories.
 pub struct MavenChecker {
     client: reqwest::Client,
     releases_only: bool,
@@ -24,6 +33,8 @@ impl MavenChecker {
         }
     }
 
+    /// Returns custom repository URLs matching the artifact kind
+    /// (standard repos for dependencies, plugin repos for plugins).
     fn repo_urls_for(&self, kind: ArtifactKind) -> Vec<&str> {
         self.repositories
             .iter()
@@ -53,6 +64,8 @@ fn checker_kind(kind: ArtifactKind) -> CheckerKind {
 }
 
 impl MavenChecker {
+    /// Checks a single Maven artifact for newer versions.
+    /// Tries Maven Central first, then custom repos in parallel on miss.
     pub async fn check(&self, mapping: &ArtifactMapping, source: &str) -> Result<CheckResult> {
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
         let kind = checker_kind(mapping.kind);
@@ -153,6 +166,7 @@ impl MavenChecker {
     }
 }
 
+/// Fetches all published versions from a Maven repository's `maven-metadata.xml`.
 async fn fetch_versions(
     client: &reqwest::Client,
     base_url: &str,
@@ -187,6 +201,7 @@ async fn fetch_versions(
     Ok(parse_metadata_versions(&body))
 }
 
+/// Parses `<version>` elements from a `maven-metadata.xml` response.
 fn parse_metadata_versions(xml: &str) -> Vec<String> {
     let mut reader = Reader::from_str(xml);
     let mut versions = Vec::new();
@@ -229,6 +244,7 @@ fn parse_metadata_versions(xml: &str) -> Vec<String> {
     versions
 }
 
+/// Filters out snapshots (always) and pre-releases (when `releases_only` is true).
 fn filter_versions(versions: &[String], releases_only: bool) -> Vec<String> {
     versions
         .iter()

@@ -1,7 +1,13 @@
+//! Serializable output types for `--json` mode.
+//!
+//! Converts internal `CheckResult` into a flat, JSON-friendly structure
+//! suitable for machine consumption. Optional fields are omitted when empty/none.
+
 use serde::Serialize;
 
 use crate::registry::CheckResult;
 
+/// Flat JSON representation of a single dependency check result.
 #[derive(Debug, Serialize)]
 pub struct JsonResult {
     pub ecosystem: String,
@@ -10,10 +16,13 @@ pub struct JsonResult {
     pub latest: Option<String>,
     pub status: String,
     pub kind: String,
+    pub managed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artifact: Option<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub source: String,
 }
 
 impl From<&CheckResult> for JsonResult {
@@ -34,8 +43,10 @@ impl From<&CheckResult> for JsonResult {
             latest: r.latest_version.clone(),
             status: status.to_string(),
             kind: r.kind.to_string().to_lowercase(),
+            managed: r.has_version_property,
             error: r.error.clone(),
             artifact: r.artifact.clone(),
+            source: r.source.clone(),
         }
     }
 }

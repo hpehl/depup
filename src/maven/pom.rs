@@ -1,9 +1,18 @@
+//! POM XML parser using quick-xml's event-based reader.
+//!
+//! Uses event-based parsing intentionally: serde can't handle `<properties>` blocks
+//! with arbitrary child element names as a `HashMap<String, String>`.
+//! Handles XML namespaces by stripping namespace prefixes from element names.
+
 use anyhow::{Context, Result};
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::error::DepupError;
+
+/// Parsed representation of a Maven POM file.
 #[derive(Debug, Default)]
 pub struct Project {
     pub group_id: Option<String>,
@@ -16,6 +25,7 @@ pub struct Project {
     pub repositories: Vec<Repository>,
 }
 
+/// A Maven dependency or plugin artifact with optional GAV coordinates.
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_field_names)]
 pub struct Artifact {
@@ -24,6 +34,7 @@ pub struct Artifact {
     pub version: Option<String>,
 }
 
+/// Whether an artifact is a dependency or a plugin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ArtifactKind {
     Dependency,
@@ -39,6 +50,7 @@ impl std::fmt::Display for ArtifactKind {
     }
 }
 
+/// A Maven repository declared in the POM (either standard or plugin).
 #[derive(Debug, Clone)]
 pub struct Repository {
     pub id: Option<String>,
@@ -47,18 +59,24 @@ pub struct Repository {
     pub kind: RepositoryKind,
 }
 
+/// Distinguishes standard repositories (for dependencies) from plugin repositories.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepositoryKind {
     Standard,
     Plugin,
 }
 
+/// Reads and parses a POM file from disk.
 pub fn parse_pom(path: &Path) -> Result<Project> {
+    let path_str = path.display().to_string();
     let content = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
-    parse_pom_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
+        .map_err(|e| DepupError::pom_parse_failed(&path_str, &e.to_string()))?;
+    parse_pom_str(&content)
+        .map_err(|e| DepupError::pom_parse_failed(&path_str, &e.to_string()).into())
 }
 
+/// Parses POM XML from a string. Extracts project coordinates, properties,
+/// modules, artifacts (dependencies and plugins), and repositories.
 pub fn parse_pom_str(xml: &str) -> Result<Project> {
     let mut reader = Reader::from_str(xml);
     let mut state = ParseState::default();
@@ -80,6 +98,8 @@ pub fn parse_pom_str(xml: &str) -> Result<Project> {
     Ok(state.project)
 }
 
+/// Internal state machine for the event-based XML parser.
+/// Tracks the element path stack, text buffer, and in-progress artifacts/repositories.
 #[derive(Default)]
 struct ParseState {
     project: Project,
@@ -228,6 +248,7 @@ impl ParseState {
     }
 }
 
+/// Strips the namespace prefix from an XML element name (e.g., `ns:element` → `element`).
 fn local_name(e: &quick_xml::events::BytesStart) -> String {
     let full = String::from_utf8_lossy(e.name().as_ref()).to_string();
     full.split(':').next_back().unwrap_or(&full).to_string()

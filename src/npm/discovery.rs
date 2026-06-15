@@ -1,8 +1,16 @@
+//! npm ecosystem project discovery.
+//!
+//! Walks a directory tree finding npm ecosystem projects. Detects the package
+//! manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`,
+//! `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`.
+//! Skips `node_modules/`, `.git/`, `target/`, and workspace members.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::PackageManager;
 
+/// A discovered npm ecosystem project with its path, name, and detected package manager.
 #[derive(Debug, Clone)]
 pub struct NpmProject {
     pub path: PathBuf,
@@ -10,6 +18,8 @@ pub struct NpmProject {
     pub package_manager: PackageManager,
 }
 
+/// Discovers all npm ecosystem projects under the given root directory.
+/// Workspace members are excluded — only workspace roots are returned.
 pub fn discover(root: &Path) -> Vec<NpmProject> {
     let mut all_dirs = Vec::new();
     collect_package_dirs(root, &mut all_dirs);
@@ -44,6 +54,8 @@ pub fn discover(root: &Path) -> Vec<NpmProject> {
     projects
 }
 
+/// Detects the package manager by lock file presence, falling back to the
+/// `packageManager` field in `package.json`.
 fn detect_package_manager(dir: &Path) -> Option<PackageManager> {
     if dir.join("pnpm-lock.yaml").exists() {
         return Some(PackageManager::Pnpm);
@@ -60,6 +72,7 @@ fn detect_package_manager(dir: &Path) -> Option<PackageManager> {
     detect_from_package_manager_field(dir)
 }
 
+/// Reads the `packageManager` field from `package.json` (e.g., `"pnpm@9.15.0"`).
 fn detect_from_package_manager_field(dir: &Path) -> Option<PackageManager> {
     let content = fs::read_to_string(dir.join("package.json")).ok()?;
     let pkg: serde_json::Value = serde_json::from_str(&content).ok()?;
@@ -78,6 +91,8 @@ fn detect_from_package_manager_field(dir: &Path) -> Option<PackageManager> {
     }
 }
 
+/// Checks if a directory is a workspace root (pnpm: `pnpm-workspace.yaml`,
+/// npm/yarn/bun: `workspaces` field in `package.json`).
 fn is_workspace_root(dir: &Path, pm: PackageManager) -> bool {
     match pm {
         PackageManager::Pnpm => dir.join("pnpm-workspace.yaml").exists(),
@@ -93,6 +108,8 @@ fn is_workspace_root(dir: &Path, pm: PackageManager) -> bool {
     }
 }
 
+/// Recursively collects directories containing `package.json`.
+/// Skips `node_modules/`, `.git/`, and `target/`.
 fn collect_package_dirs(dir: &Path, result: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -113,6 +130,7 @@ fn collect_package_dirs(dir: &Path, result: &mut Vec<PathBuf>) {
     }
 }
 
+/// Returns true if `dir` is a subdirectory of any workspace root (but not the root itself).
 fn is_workspace_member(dir: &Path, workspace_roots: &[(&PathBuf, PackageManager)]) -> bool {
     workspace_roots
         .iter()

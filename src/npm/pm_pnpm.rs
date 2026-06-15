@@ -1,3 +1,8 @@
+//! pnpm package manager checker.
+//!
+//! Uses `pnpm list --json` and `pnpm outdated --format json`.
+//! pnpm's JSON output natively separates `dependencies` and `devDependencies`.
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
@@ -8,6 +13,7 @@ use tokio::process::Command;
 
 use super::{OutdatedEntry, PackageManagerChecker};
 
+/// pnpm checker implementation.
 pub struct Pnpm;
 
 #[derive(Debug, Deserialize)]

@@ -1,3 +1,9 @@
+//! npm package manager checker.
+//!
+//! Uses `npm list --json` and `npm outdated --json` for package data.
+//! Dev dependencies are classified by reading `devDependencies` from `package.json`
+//! since `npm list` doesn't distinguish them.
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
@@ -8,6 +14,7 @@ use tokio::process::Command;
 
 use super::{OutdatedEntry, PackageManagerChecker, read_dev_dependency_names};
 
+/// npm checker implementation.
 pub struct Npm;
 
 #[derive(Debug, Deserialize)]

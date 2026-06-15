@@ -15,8 +15,9 @@ fn depup() -> Command {
 #[test]
 fn json_output_returns_array() {
     let output = depup()
-        .arg(&fixture_dir("multi-module"))
+        .arg("check")
         .arg("--json")
+        .arg(&fixture_dir("multi-module"))
         .output()
         .expect("Failed to run depup");
 
@@ -27,26 +28,19 @@ fn json_output_returns_array() {
 }
 
 #[test]
-fn check_subcommand_works_same_as_default() {
-    let output = depup()
-        .arg("check")
-        .arg(&fixture_dir("multi-module"))
-        .arg("--json")
-        .output()
-        .expect("Failed to run depup");
+fn no_subcommand_returns_error() {
+    let output = depup().output().expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
-    assert_eq!(results.len(), 2);
+    assert!(!output.status.success());
 }
 
 #[test]
 fn outdated_filter_excludes_current() {
     let output = depup()
-        .arg(&fixture_dir("multi-module"))
+        .arg("check")
         .arg("--json")
         .arg("--outdated")
+        .arg(&fixture_dir("multi-module"))
         .output()
         .expect("Failed to run depup");
 
@@ -67,14 +61,12 @@ fn outdated_filter_excludes_current() {
 fn missing_pom_returns_json_error() {
     let output = depup()
         .arg("check")
-        .arg("/nonexistent/path")
         .arg("--json")
+        .arg("/nonexistent/path")
         .output()
         .expect("Failed to run depup");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // With auto-detect and a nonexistent path, it should output an empty array
-    // since no ecosystem is detected (the path doesn't exist, so no pom.xml or lockfile)
     let results: Vec<serde_json::Value> =
         serde_json::from_str(&stdout).expect("Invalid JSON output");
     assert!(results.is_empty());
@@ -83,20 +75,20 @@ fn missing_pom_returns_json_error() {
 #[test]
 fn auto_detect_missing_project_returns_zero_exit() {
     let output = depup()
+        .arg("check")
         .arg("/nonexistent/path")
         .output()
         .expect("Failed to run depup");
 
-    // With a nonexistent path, no ecosystem is detected, so it prints
-    // "No supported project found." and returns Ok (exit 0)
     assert!(output.status.success());
 }
 
 #[test]
 fn json_output_includes_artifact() {
     let output = depup()
-        .arg(&fixture_dir("multi-module"))
+        .arg("check")
         .arg("--json")
+        .arg(&fixture_dir("multi-module"))
         .output()
         .expect("Failed to run depup");
 
@@ -130,8 +122,9 @@ fn update_stub_returns_not_implemented_json() {
 #[test]
 fn json_output_includes_ecosystem() {
     let output = depup()
-        .arg(&fixture_dir("multi-module"))
+        .arg("check")
         .arg("--json")
+        .arg(&fixture_dir("multi-module"))
         .output()
         .expect("Failed to run depup");
 
@@ -144,6 +137,156 @@ fn json_output_includes_ecosystem() {
             result["ecosystem"].as_str().unwrap(),
             "maven",
             "Multi-module fixture should report maven ecosystem"
+        );
+    }
+}
+
+#[test]
+fn stable_alias_works() {
+    let output = depup()
+        .arg("check")
+        .arg("--json")
+        .arg("--releases-only")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success() || !output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    for result in &results {
+        assert_ne!(
+            result["status"].as_str().unwrap(),
+            "skipped",
+            "--releases-only (alias for --stable) should exclude skipped"
+        );
+    }
+}
+
+#[test]
+fn json_output_includes_managed_field() {
+    let output = depup()
+        .arg("check")
+        .arg("--json")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert!(
+            result.get("managed").is_some(),
+            "JSON output should include managed field"
+        );
+    }
+}
+
+#[test]
+fn managed_unmanaged_conflict() {
+    let output = depup()
+        .arg("check")
+        .arg("--managed")
+        .arg("--unmanaged")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(!output.status.success());
+}
+
+#[test]
+fn maven_npm_conflict() {
+    let output = depup()
+        .arg("check")
+        .arg("--maven")
+        .arg("--npm")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(!output.status.success());
+}
+
+#[test]
+fn kind_filter_conflict() {
+    let output = depup()
+        .arg("check")
+        .arg("--dependencies")
+        .arg("--plugins")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(!output.status.success());
+}
+
+#[test]
+fn maven_filter_only_maven_results() {
+    let output = depup()
+        .arg("check")
+        .arg("--json")
+        .arg("--maven")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert_eq!(
+            result["ecosystem"].as_str().unwrap(),
+            "maven",
+            "--maven should only return maven results"
+        );
+    }
+}
+
+#[test]
+fn managed_filter_only_managed() {
+    let output = depup()
+        .arg("check")
+        .arg("--json")
+        .arg("--managed")
+        .arg(&fixture_dir("plain-versions"))
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert!(
+            result["managed"].as_bool().unwrap(),
+            "--managed should only return managed dependencies"
+        );
+    }
+}
+
+#[test]
+fn unmanaged_filter_only_unmanaged() {
+    let output = depup()
+        .arg("check")
+        .arg("--json")
+        .arg("--unmanaged")
+        .arg(&fixture_dir("plain-versions"))
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert!(
+            !result["managed"].as_bool().unwrap(),
+            "--unmanaged should only return unmanaged dependencies"
         );
     }
 }

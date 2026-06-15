@@ -1,3 +1,9 @@
+//! Core types shared across all ecosystems: `Ecosystem`, `CheckerKind`, `CheckResult`, and `Outcome`.
+//!
+//! These types form the common currency passed between discovery, checking, filtering,
+//! and output stages.
+
+/// Supported dependency ecosystems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Ecosystem {
@@ -14,12 +20,12 @@ impl std::fmt::Display for Ecosystem {
     }
 }
 
+/// Classifies a check result for display grouping and styling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CheckerKind {
     Dependency,
     Plugin,
-    Node,
-    NpmPkg,
+    ToolVersion,
     NpmDep,
     NpmDevDep,
 }
@@ -29,8 +35,7 @@ impl std::fmt::Display for CheckerKind {
         match self {
             Self::Dependency => write!(f, "Dependency"),
             Self::Plugin => write!(f, "Plugin"),
-            Self::Node => write!(f, "Node"),
-            Self::NpmPkg => write!(f, "npm"),
+            Self::ToolVersion => write!(f, "Tool Version"),
             Self::NpmDep => write!(f, "Dependency"),
             Self::NpmDevDep => write!(f, "Dev Dependency"),
         }
@@ -38,37 +43,43 @@ impl std::fmt::Display for CheckerKind {
 }
 
 impl CheckerKind {
+    /// Returns the terminal color style for this kind.
     pub fn color(self) -> console::Style {
         match self {
             Self::Dependency => console::Style::new().cyan(),
             Self::Plugin => console::Style::new().magenta(),
-            Self::Node => console::Style::new().green(),
-            Self::NpmPkg => console::Style::new().yellow(),
+            Self::ToolVersion => console::Style::new().green(),
             Self::NpmDep | Self::NpmDevDep => console::Style::new().blue(),
         }
     }
 
+    /// Returns the Unicode symbol used in the summary legend.
     pub fn symbol(self) -> &'static str {
         match self {
             Self::Dependency => "\u{25cf}",
             Self::Plugin => "\u{25a0}",
-            Self::Node => "\u{25b2}",
-            Self::NpmPkg | Self::NpmDep | Self::NpmDevDep => "\u{25c6}",
+            Self::ToolVersion => "\u{25b2}",
+            Self::NpmDep | Self::NpmDevDep => "\u{25c6}",
         }
     }
 
+    /// Returns the section header label used when grouping results by kind.
     pub fn group_label(self) -> &'static str {
         match self {
             Self::Dependency => "Dependencies",
             Self::Plugin => "Plugins",
-            Self::Node => "Node",
-            Self::NpmPkg => "npm",
+            Self::ToolVersion => "Tool Versions",
             Self::NpmDep => "Dependencies",
             Self::NpmDevDep => "Dev Dependencies",
         }
     }
 }
 
+/// Result of checking a single dependency against its registry.
+///
+/// Constructed via the `checked()`, `skipped()`, or `error()` factory methods
+/// to ensure all fields are set consistently. No post-construction mutation
+/// except `with_version_property()`.
 #[derive(Debug, Clone)]
 pub struct CheckResult {
     pub ecosystem: Ecosystem,
@@ -81,8 +92,10 @@ pub struct CheckResult {
     pub artifact: Option<String>,
     pub source: String,
     pub kind: CheckerKind,
+    pub has_version_property: bool,
 }
 
+/// Derived state of a `CheckResult`, used by the output layer to choose formatting.
 pub enum Outcome<'a> {
     UpToDate,
     Outdated { latest: &'a str },
@@ -113,6 +126,7 @@ impl CheckResult {
             artifact,
             source,
             kind,
+            has_version_property: true,
         }
     }
 
@@ -135,6 +149,7 @@ impl CheckResult {
             artifact,
             source,
             kind,
+            has_version_property: true,
         }
     }
 
@@ -158,9 +173,17 @@ impl CheckResult {
             artifact,
             source,
             kind,
+            has_version_property: true,
         }
     }
 
+    /// Builder-style setter for whether this dependency has a managed version property (Maven only).
+    pub fn with_version_property(mut self, has_version_property: bool) -> Self {
+        self.has_version_property = has_version_property;
+        self
+    }
+
+    /// Derives the display outcome from the result's state flags.
     pub fn outcome(&self) -> Outcome<'_> {
         if let Some(err) = &self.error {
             Outcome::Error { message: err }
@@ -287,8 +310,7 @@ mod tests {
     fn checker_kind_display() {
         assert_eq!(CheckerKind::Dependency.to_string(), "Dependency");
         assert_eq!(CheckerKind::Plugin.to_string(), "Plugin");
-        assert_eq!(CheckerKind::Node.to_string(), "Node");
-        assert_eq!(CheckerKind::NpmPkg.to_string(), "npm");
+        assert_eq!(CheckerKind::ToolVersion.to_string(), "Tool Version");
         assert_eq!(CheckerKind::NpmDep.to_string(), "Dependency");
         assert_eq!(CheckerKind::NpmDevDep.to_string(), "Dev Dependency");
     }

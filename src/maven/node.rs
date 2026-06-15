@@ -1,12 +1,23 @@
+//! Node.js version checker for Maven POM tool-version properties.
+//!
+//! Checks properties like `version.node` or `nodejs.version` against the
+//! Node.js distribution index. When `--stable` is set, only LTS releases
+//! are considered.
+
+use std::future::Future;
+use std::pin::Pin;
+
 use anyhow::Result;
 use serde::Deserialize;
 
 use crate::constants::{self, NODEJS_DIST_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
+use crate::maven::tool::ToolVersionChecker;
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 use crate::version;
 
+/// Property name patterns that trigger Node.js version checking.
 const NODE_PATTERNS: &[&str] = &[
     "version.node",
     "version.nodejs",
@@ -14,17 +25,21 @@ const NODE_PATTERNS: &[&str] = &[
     "nodejs.version",
 ];
 
+/// Checks Node.js version properties against the Node.js distribution index.
 pub struct NodeChecker {
     client: reqwest::Client,
     releases_only: bool,
 }
 
+/// A single release entry from the Node.js distribution index.
 #[derive(Deserialize)]
 struct NodeRelease {
     version: String,
     lts: LtsField,
 }
 
+/// The `lts` field in the Node.js index is either a codename string (e.g., "Jod")
+/// or `false` for non-LTS releases.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum LtsField {
@@ -39,18 +54,18 @@ impl LtsField {
 }
 
 impl NodeChecker {
-    pub fn new(releases_only: bool) -> Self {
+    pub fn new(stable: bool) -> Self {
         Self {
             client: constants::http_client(),
-            releases_only,
+            releases_only: stable,
         }
     }
 
-    pub fn matches(property_name: &str) -> bool {
-        NODE_PATTERNS.contains(&property_name)
-    }
-
-    pub async fn check(&self, property: &VersionProperty, source: &str) -> Result<CheckResult> {
+    async fn fetch_and_check(
+        &self,
+        property: &VersionProperty,
+        source: &str,
+    ) -> Result<CheckResult> {
         let resp = self
             .client
             .get(NODEJS_DIST_URL)
@@ -90,7 +105,7 @@ impl NodeChecker {
         if versions.is_empty() {
             return Ok(CheckResult::error(
                 Ecosystem::Maven,
-                CheckerKind::Node,
+                CheckerKind::ToolVersion,
                 prop_name,
                 current,
                 artifact,
@@ -102,7 +117,7 @@ impl NodeChecker {
         let Some(latest) = version::find_latest(&versions) else {
             return Ok(CheckResult::error(
                 Ecosystem::Maven,
-                CheckerKind::Node,
+                CheckerKind::ToolVersion,
                 prop_name,
                 current,
                 artifact,
@@ -115,7 +130,7 @@ impl NodeChecker {
         let is_outdated = version::is_newer(current_normalized, &latest);
         Ok(CheckResult::checked(
             Ecosystem::Maven,
-            CheckerKind::Node,
+            CheckerKind::ToolVersion,
             prop_name,
             current,
             latest,
@@ -126,23 +141,36 @@ impl NodeChecker {
     }
 }
 
+impl ToolVersionChecker for NodeChecker {
+    fn patterns(&self) -> &[&str] {
+        NODE_PATTERNS
+    }
+
+    fn label(&self, _property: &VersionProperty) -> String {
+        "nodejs.org".to_string()
+    }
+
+    fn check<'a>(
+        &'a self,
+        property: &'a VersionProperty,
+        source: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send + 'a>> {
+        Box::pin(self.fetch_and_check(property, source))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn matches_node_patterns() {
-        assert!(NodeChecker::matches("version.node"));
-        assert!(NodeChecker::matches("version.nodejs"));
-        assert!(NodeChecker::matches("node.version"));
-        assert!(NodeChecker::matches("nodejs.version"));
-    }
-
-    #[test]
-    fn does_not_match_unrelated() {
-        assert!(!NodeChecker::matches("version.junit"));
-        assert!(!NodeChecker::matches("node"));
-        assert!(!NodeChecker::matches("version.node.something"));
+    fn patterns_match_node() {
+        let checker = NodeChecker::new(false);
+        let patterns = checker.patterns();
+        assert!(patterns.contains(&"version.node"));
+        assert!(patterns.contains(&"version.nodejs"));
+        assert!(patterns.contains(&"node.version"));
+        assert!(patterns.contains(&"nodejs.version"));
     }
 
     #[test]

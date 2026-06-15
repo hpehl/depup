@@ -1,6 +1,15 @@
+//! Version parsing and comparison.
+//!
+//! Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that
+//! don't follow strict semver. Qualifiers are separated by `-` or the first
+//! alphabetic character after the numeric prefix. A version without a qualifier
+//! is considered newer than the same numeric version with a qualifier
+//! (e.g., `1.0.0` > `1.0.0.Final`).
+
 use std::cmp::Ordering;
 use std::fmt;
 
+/// A parsed version with numeric components and an optional qualifier.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Version {
     pub major: u64,
@@ -17,6 +26,8 @@ impl fmt::Display for Version {
 }
 
 impl Version {
+    /// Parses a version string into its numeric and qualifier components.
+    /// Returns `None` if the string is empty or has no numeric prefix.
     pub fn parse(raw: &str) -> Option<Self> {
         if raw.is_empty() {
             return None;
@@ -41,6 +52,8 @@ impl Version {
         })
     }
 
+    /// Returns true if the qualifier indicates a pre-release version
+    /// (alpha, beta, RC, CR, snapshot, milestone, preview, dev, incubating).
     pub fn is_pre_release(&self) -> bool {
         self.qualifier
             .as_ref()
@@ -75,6 +88,8 @@ impl Ord for Version {
     }
 }
 
+/// Splits a version string into numeric and qualifier parts.
+/// Handles both `-` separators (`2.1.0-SP1`) and dot-joined qualifiers (`3.0.0.Final`).
 fn split_qualifier(version: &str) -> (&str, Option<String>) {
     if version.is_empty() {
         return ("", None);
@@ -95,6 +110,8 @@ fn split_qualifier(version: &str) -> (&str, Option<String>) {
     }
 }
 
+/// Checks if a lowercased qualifier string indicates a pre-release.
+/// Also matches milestone-style qualifiers like `M1`, `M2`, etc.
 fn is_pre_release_qualifier(lower: &str) -> bool {
     let patterns = [
         "alpha",
@@ -113,12 +130,15 @@ fn is_pre_release_qualifier(lower: &str) -> bool {
             && lower[1..].chars().all(|c| c.is_ascii_digit()))
 }
 
+/// Finds the highest version from a list of version strings.
 pub fn find_latest(versions: &[String]) -> Option<String> {
     let mut parsed: Vec<_> = versions.iter().filter_map(|v| Version::parse(v)).collect();
     parsed.sort();
     parsed.last().map(|v| v.raw.clone())
 }
 
+/// Returns true if `latest` is a newer version than `current`.
+/// Falls back to string inequality if either version cannot be parsed.
 pub fn is_newer(current: &str, latest: &str) -> bool {
     match (Version::parse(current), Version::parse(latest)) {
         (Some(c), Some(l)) => l > c,

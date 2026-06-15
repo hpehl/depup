@@ -1,7 +1,27 @@
+//! CLI definition using the clap builder API.
+//!
+//! Separated from `main.rs` so the shell completion system can build the command
+//! tree independently without pulling in runtime dependencies.
+
+use std::path::PathBuf;
+
 use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects};
-use clap::{Arg, ArgAction, Command, crate_name, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_name, crate_version};
 
+/// Extracts the project root path from CLI arguments, defaulting to the current directory.
+pub fn path_argument(matches: &ArgMatches) -> PathBuf {
+    matches
+        .get_one::<String>("path")
+        .map_or_else(|| PathBuf::from("."), PathBuf::from)
+}
+
+/// Returns whether the global `--json` flag is set.
+pub fn is_json(matches: &ArgMatches) -> bool {
+    matches.get_flag("json")
+}
+
+/// Builds the complete clap `Command` tree with styled help text.
 pub fn build_app() -> Command {
     let styles = Styles::styled()
         .header(AnsiColor::Green.on_default() | Effects::BOLD)
@@ -9,11 +29,12 @@ pub fn build_app() -> Command {
         .literal(AnsiColor::Blue.on_default() | Effects::BOLD)
         .placeholder(AnsiColor::Cyan.on_default());
 
-    let app = Command::new(crate_name!())
+    Command::new(crate_name!())
         .version(crate_version!())
         .about("Check dependency versions across multiple ecosystems")
         .styles(styles)
         .propagate_version(true)
+        .subcommand_required(true)
         .arg(
             Arg::new("json")
                 .long("json")
@@ -46,10 +67,10 @@ pub fn build_app() -> Command {
                         .action(ArgAction::SetTrue)
                         .help("Install completions to the standard location for the shell"),
                 ),
-        );
-    check_args(app)
+        )
 }
 
+/// Adds check-specific arguments: path, filtering, and ecosystem selection flags.
 fn check_args(cmd: Command) -> Command {
     cmd.arg(
         Arg::new("path")
@@ -63,10 +84,65 @@ fn check_args(cmd: Command) -> Command {
             .help("Only show outdated dependencies"),
     )
     .arg(
-        Arg::new("include-pre-releases")
-            .long("include-pre-releases")
+        Arg::new("stable")
+            .long("stable")
+            .visible_alias("releases-only")
             .action(ArgAction::SetTrue)
-            .help("Include pre-release versions (alpha, beta, CR, RC, milestone)"),
+            .help("Exclude pre-release versions (alpha, beta, CR, RC, milestone)"),
+    )
+    .arg(
+        Arg::new("managed")
+            .long("managed")
+            .action(ArgAction::SetTrue)
+            .conflicts_with("unmanaged")
+            .help("Only show dependencies with a version property (Maven only)"),
+    )
+    .arg(
+        Arg::new("unmanaged")
+            .long("unmanaged")
+            .action(ArgAction::SetTrue)
+            .help("Only show dependencies without a version property (Maven only)"),
+    )
+    .arg(
+        Arg::new("maven")
+            .long("maven")
+            .action(ArgAction::SetTrue)
+            .conflicts_with("npm")
+            .help("Only show Maven ecosystem results"),
+    )
+    .arg(
+        Arg::new("npm")
+            .long("npm")
+            .action(ArgAction::SetTrue)
+            .help("Only show npm ecosystem results"),
+    )
+    .arg(
+        Arg::new("dependencies")
+            .long("dependencies")
+            .action(ArgAction::SetTrue)
+            .conflicts_with_all(["plugins", "dev-deps", "tools"])
+            .help("Only show dependencies"),
+    )
+    .arg(
+        Arg::new("plugins")
+            .long("plugins")
+            .action(ArgAction::SetTrue)
+            .conflicts_with_all(["dev-deps", "tools"])
+            .help("Only show plugins"),
+    )
+    .arg(
+        Arg::new("dev-deps")
+            .long("dev-deps")
+            .action(ArgAction::SetTrue)
+            .conflicts_with("tools")
+            .help("Only show dev dependencies"),
+    )
+    .arg(
+        Arg::new("tools")
+            .long("tools")
+            .visible_alias("other")
+            .action(ArgAction::SetTrue)
+            .help("Only show tool version checks (Node.js, package manager versions)"),
     )
 }
 

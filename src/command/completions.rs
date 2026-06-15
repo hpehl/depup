@@ -1,3 +1,9 @@
+//! Shell completion generation and installation.
+//!
+//! Uses `clap_complete`'s `CompleteEnv` protocol: the binary re-invokes itself
+//! with `COMPLETE=<shell>` to produce the completion script, which is then
+//! printed to stdout or installed to the shell's standard completion directory.
+
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -9,6 +15,8 @@ use clap::ArgMatches;
 
 const SUPPORTED_SHELLS: &[&str] = &["bash", "zsh", "fish", "elvish", "powershell"];
 
+/// Entry point for the `completions` subcommand.
+/// Prints or installs shell completions based on the `--install` flag.
 pub fn completions(matches: &ArgMatches) -> Result<()> {
     let shell = matches
         .get_one::<String>("shell")
@@ -29,6 +37,7 @@ pub fn completions(matches: &ArgMatches) -> Result<()> {
     }
 }
 
+/// Auto-detects the current shell from `$SHELL` or `$PSModulePath`, defaulting to bash.
 fn detect_shell() -> &'static str {
     if let Ok(shell) = env::var("SHELL") {
         if shell.contains("fish") {
@@ -47,6 +56,7 @@ fn detect_shell() -> &'static str {
     "bash"
 }
 
+/// Generates a completion script by re-invoking the binary with `COMPLETE=<shell>`.
 fn generate_script(shell: &str) -> Result<Vec<u8>> {
     let exe = env::current_exe().with_context(|| "Could not determine executable path")?;
     let output = Command::new(&exe)

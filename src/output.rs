@@ -1,15 +1,22 @@
+//! Terminal and JSON output formatting.
+//!
+//! Results are grouped by ecosystem (Maven, npm) and then by kind
+//! (Dependencies, Plugins, Tool Versions, Dev Dependencies). Each line
+//! shows the artifact name, current version, source file, and status
+//! with color-coded symbols.
+
 use std::collections::BTreeSet;
 
 use console::style;
 
 use crate::json::JsonResult;
-use crate::progress::truncate_middle_pad;
 use crate::registry::{CheckResult, CheckerKind, Ecosystem, Outcome};
 
 const ARTIFACT_WIDTH: usize = 40;
 const VERSION_WIDTH: usize = 30;
 const SOURCE_WIDTH: usize = 25;
 
+/// Prints results as a JSON array to stdout.
 pub fn print_json(results: &[CheckResult]) {
     let json_results: Vec<JsonResult> = results.iter().map(JsonResult::from).collect();
 
@@ -30,7 +37,13 @@ fn print_ecosystem_header(ecosystem: Ecosystem) {
     );
 }
 
+/// Prints a styled summary table to stdout, grouped by ecosystem and kind.
 pub fn print_results(results: &[CheckResult]) {
+    if results.is_empty() {
+        println!("{}", style("No dependencies to show.").dim());
+        return;
+    }
+
     let ecosystems: Vec<Ecosystem> = results
         .iter()
         .map(|r| r.ecosystem)
@@ -131,6 +144,8 @@ fn print_result_line(result: &CheckResult) {
     }
 }
 
+/// Formats the version column, appending the property name in parentheses
+/// when the artifact name differs from the property name (Maven managed dependencies).
 fn format_version(result: &CheckResult) -> String {
     if result.current_version.is_empty() {
         return String::new();
@@ -143,6 +158,22 @@ fn format_version(result: &CheckResult) -> String {
     }
 }
 
+/// Truncates a string to `width` characters using middle-ellipsis, or right-pads if shorter.
+fn truncate_middle_pad(s: &str, width: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count > width {
+        let ellipsis = "\u{2026}";
+        let half = (width - 1) / 2;
+        let remainder = width - 1 - half;
+        let prefix: String = s.chars().take(half).collect();
+        let suffix: String = s.chars().skip(char_count - remainder).collect();
+        format!("{prefix}{ellipsis}{suffix}")
+    } else {
+        format!("{s:<width$}")
+    }
+}
+
+/// Prints a one-line summary with counts and a legend of kind symbols.
 fn print_summary(results: &[CheckResult]) {
     let total = results.len();
     let outdated = results.iter().filter(|r| r.outdated).count();
@@ -211,100 +242,6 @@ mod tests {
     }
 
     #[test]
-    fn status_label_error() {
-        let r = CheckResult::error(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".to_string(),
-            "1.0".to_string(),
-            None,
-            "fail".to_string(),
-            String::new(),
-        );
-        assert_eq!(JsonResult::from(&r).status, "error");
-    }
-
-    #[test]
-    fn status_label_outdated() {
-        let r = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".to_string(),
-            "1.0".to_string(),
-            "2.0".to_string(),
-            true,
-            None,
-            String::new(),
-        );
-        assert_eq!(JsonResult::from(&r).status, "outdated");
-    }
-
-    #[test]
-    fn status_label_up_to_date() {
-        let r = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".to_string(),
-            "1.0".to_string(),
-            "1.0".to_string(),
-            false,
-            None,
-            String::new(),
-        );
-        assert_eq!(JsonResult::from(&r).status, "up-to-date");
-    }
-
-    #[test]
-    fn json_output_structure() {
-        let r = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "version.junit".to_string(),
-            "5.10.0".to_string(),
-            "5.12.0".to_string(),
-            true,
-            Some("org.junit.jupiter:junit-jupiter".to_string()),
-            String::new(),
-        );
-        let json_result = JsonResult::from(&r);
-        assert_eq!(json_result.status, "outdated");
-        assert_eq!(json_result.kind, "dependency");
-        assert_eq!(
-            json_result.artifact.as_deref(),
-            Some("org.junit.jupiter:junit-jupiter")
-        );
-    }
-
-    #[test]
-    fn json_output_includes_ecosystem() {
-        let r = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "version.junit".to_string(),
-            "5.10.0".to_string(),
-            "5.12.0".to_string(),
-            true,
-            Some("org.junit.jupiter:junit-jupiter".to_string()),
-            String::new(),
-        );
-        let json_result = JsonResult::from(&r);
-        assert_eq!(json_result.ecosystem, "maven");
-    }
-
-    #[test]
-    fn status_label_skipped() {
-        let r = CheckResult::skipped(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".to_string(),
-            "1.0-alpha".to_string(),
-            None,
-            String::new(),
-        );
-        assert_eq!(JsonResult::from(&r).status, "skipped");
-    }
-
-    #[test]
     fn format_version_with_property() {
         let r = CheckResult::checked(
             Ecosystem::Maven,
@@ -361,5 +298,33 @@ mod tests {
             String::new(),
         );
         assert_eq!(format_version(&r), "");
+    }
+
+    #[test]
+    fn truncate_short_string_pads() {
+        let result = truncate_middle_pad("hello", 10);
+        assert_eq!(result, "hello     ");
+        assert_eq!(result.len(), 10);
+    }
+
+    #[test]
+    fn truncate_exact_width_no_change() {
+        let result = truncate_middle_pad("abcde", 5);
+        assert_eq!(result, "abcde");
+    }
+
+    #[test]
+    fn truncate_long_string_inserts_ellipsis() {
+        let result = truncate_middle_pad("abcdefghij", 7);
+        assert!(result.contains('\u{2026}'));
+        assert_eq!(result.chars().count(), 7);
+        assert!(result.starts_with("abc"));
+        assert!(result.ends_with("hij"));
+    }
+
+    #[test]
+    fn truncate_multibyte_does_not_panic() {
+        let result = truncate_middle_pad("ä\u{f6}ü\u{e9}\u{e8}\u{ea}\u{eb}\u{e0}", 5);
+        assert_eq!(result.chars().count(), 5);
     }
 }

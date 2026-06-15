@@ -1,3 +1,9 @@
+//! Bun package manager checker.
+//!
+//! Lists packages by reading `package.json` + `node_modules/*/package.json`
+//! (bun doesn't have a `list --json` command). Uses `bun outdated --format json`
+//! for update information.
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
@@ -8,6 +14,7 @@ use tokio::process::Command;
 
 use super::{OutdatedEntry, PackageManagerChecker};
 
+/// Bun checker implementation.
 pub struct Bun;
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +84,7 @@ impl PackageManagerChecker for Bun {
     }
 }
 
+/// Reads the installed version of a package from its `node_modules/*/package.json`.
 fn get_installed_version(dir: &Path, package: &str) -> Option<String> {
     let pkg_json = dir.join("node_modules").join(package).join("package.json");
     let content = std::fs::read_to_string(pkg_json).ok()?;

@@ -1,3 +1,10 @@
+//! Orchestrates Maven ecosystem checks.
+//!
+//! Two-phase design: `discover()` builds the task list synchronously,
+//! `check()` runs all tasks concurrently with semaphore-based rate limiting.
+//! This split allows the caller to count tasks for the progress bar before
+//! starting async work.
+
 use std::path::Path;
 use std::sync::Arc;
 
@@ -8,25 +15,20 @@ use tokio::task::JoinSet;
 
 use crate::constants::MAX_CONCURRENT_REQUESTS;
 use crate::maven::discovery::{self, ArtifactMapping, VersionProperty};
-use crate::maven::node::NodeChecker;
-use crate::maven::pm_versions::PmVersionsChecker;
 use crate::maven::pom::ArtifactKind;
-use crate::maven::registry::MavenChecker;
+use crate::maven::maven_central::MavenChecker;
+use crate::maven::tool::{ToolCheckerRegistry, ToolVersionChecker};
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 
+/// A single unit of work: either a Maven artifact check or a tool version check.
 enum CheckTask {
     Maven {
         mapping: ArtifactMapping,
         checker: Arc<MavenChecker>,
     },
-    Node {
+    Tool {
         property: VersionProperty,
-        checker: Arc<NodeChecker>,
-    },
-    Npm {
-        property: VersionProperty,
-        package: &'static str,
-        checker: Arc<PmVersionsChecker>,
+        checker: Arc<dyn ToolVersionChecker>,
     },
 }
 
@@ -37,8 +39,7 @@ impl CheckTask {
                 ArtifactKind::Dependency => CheckerKind::Dependency,
                 ArtifactKind::Plugin => CheckerKind::Plugin,
             },
-            Self::Node { .. } => CheckerKind::Node,
-            Self::Npm { .. } => CheckerKind::NpmPkg,
+            Self::Tool { .. } => CheckerKind::ToolVersion,
         }
     }
 
@@ -47,8 +48,9 @@ impl CheckTask {
             Self::Maven { mapping, .. } => {
                 format!("{}:{}", mapping.group_id, mapping.artifact_id)
             }
-            Self::Node { .. } => "nodejs.org".to_string(),
-            Self::Npm { package, .. } => (*package).to_string(),
+            Self::Tool {
+                property, checker, ..
+            } => checker.label(property),
         }
     }
 
@@ -60,11 +62,12 @@ impl CheckTask {
                 .unwrap_or(&mapping.referenced_in)
                 .display()
                 .to_string(),
-            Self::Node { .. } | Self::Npm { .. } => "pom.xml".to_string(),
+            Self::Tool { .. } => "pom.xml".to_string(),
         }
     }
 }
 
+/// Pre-built list of check tasks, ready for concurrent execution.
 pub struct PreparedChecks {
     tasks: Vec<CheckTask>,
 }
@@ -75,15 +78,16 @@ impl PreparedChecks {
     }
 }
 
-pub fn discover(root: &Path, releases_only: bool) -> Result<PreparedChecks> {
+/// Discovery phase: walks the Maven module tree, builds check tasks for all
+/// artifacts and orphan tool-version properties. Runs synchronously.
+pub fn discover(root: &Path, stable: bool) -> Result<PreparedChecks> {
     let discovery_result = discovery::discover(root)?;
 
     let maven_checker = Arc::new(MavenChecker::new(
-        releases_only,
+        stable,
         discovery_result.repositories,
     ));
-    let node_checker = Arc::new(NodeChecker::new(releases_only));
-    let npm_checker = Arc::new(PmVersionsChecker::new(releases_only));
+    let tool_registry = ToolCheckerRegistry::new(stable);
 
     let mut tasks: Vec<CheckTask> = discovery_result
         .mappings
@@ -95,23 +99,16 @@ pub fn discover(root: &Path, releases_only: bool) -> Result<PreparedChecks> {
         .collect();
 
     for property in discovery_result.orphan_properties {
-        if NodeChecker::matches(&property.name) {
-            tasks.push(CheckTask::Node {
-                property,
-                checker: Arc::clone(&node_checker),
-            });
-        } else if let Some(package) = PmVersionsChecker::matches(&property.name) {
-            tasks.push(CheckTask::Npm {
-                property,
-                package,
-                checker: Arc::clone(&npm_checker),
-            });
+        if let Some(checker) = tool_registry.find(&property.name) {
+            tasks.push(CheckTask::Tool { property, checker });
         }
     }
 
     Ok(PreparedChecks { tasks })
 }
 
+/// Execution phase: runs all prepared check tasks concurrently with a semaphore.
+/// Errors are captured as `CheckResult::error` rather than propagated.
 pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> Vec<CheckResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let mut join_set = JoinSet::new();
@@ -130,18 +127,25 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
                 CheckTask::Maven {
                     ref mapping,
                     ref checker,
-                } => checker.check(mapping, &source).await.unwrap_or_else(|e| {
-                    CheckResult::error(
-                        Ecosystem::Maven,
-                        kind,
-                        mapping.property.name.clone(),
-                        mapping.property.current_value.clone(),
-                        Some(format!("{}:{}", mapping.group_id, mapping.artifact_id)),
-                        e.to_string(),
-                        source.clone(),
-                    )
-                }),
-                CheckTask::Node {
+                } => {
+                    let has_prop = mapping.has_version_property;
+                    checker
+                        .check(mapping, &source)
+                        .await
+                        .unwrap_or_else(|e| {
+                            CheckResult::error(
+                                Ecosystem::Maven,
+                                kind,
+                                mapping.property.name.clone(),
+                                mapping.property.current_value.clone(),
+                                Some(format!("{}:{}", mapping.group_id, mapping.artifact_id)),
+                                e.to_string(),
+                                source.clone(),
+                            )
+                        })
+                        .with_version_property(has_prop)
+                }
+                CheckTask::Tool {
                     ref property,
                     ref checker,
                 } => checker.check(property, &source).await.unwrap_or_else(|e| {
@@ -150,29 +154,11 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
                         kind,
                         property.name.clone(),
                         property.current_value.clone(),
-                        Some("nodejs.org".to_string()),
+                        None,
                         e.to_string(),
                         source.clone(),
                     )
                 }),
-                CheckTask::Npm {
-                    ref property,
-                    package,
-                    ref checker,
-                } => checker
-                    .check(property, package, &source)
-                    .await
-                    .unwrap_or_else(|e| {
-                        CheckResult::error(
-                            Ecosystem::Maven,
-                            kind,
-                            property.name.clone(),
-                            property.current_value.clone(),
-                            Some(package.to_string()),
-                            e.to_string(),
-                            source.clone(),
-                        )
-                    }),
             };
             bar.inc(1);
             result

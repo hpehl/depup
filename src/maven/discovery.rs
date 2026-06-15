@@ -1,3 +1,11 @@
+//! Maven module tree discovery and version property mapping.
+//!
+//! Walks the module tree starting from the root `pom.xml`, follows `<modules>`
+//! declarations recursively, and maps each artifact's `${version.*}` reference
+//! back to the property value in the root POM's `<properties>`.
+//! Also handles artifacts with plain (non-property) versions and collects
+//! repositories declared across all POMs.
+
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -5,12 +13,14 @@ use std::path::{Path, PathBuf};
 use crate::error::DepupError;
 use crate::maven::pom::{self, ArtifactKind, Repository};
 
+/// A named property with its resolved value (e.g., `version.junit` → `5.10.0`).
 #[derive(Debug, Clone)]
 pub struct VersionProperty {
     pub name: String,
     pub current_value: String,
 }
 
+/// Maps a Maven artifact to its version property and source POM location.
 #[derive(Debug, Clone)]
 pub struct ArtifactMapping {
     pub property: VersionProperty,
@@ -18,14 +28,20 @@ pub struct ArtifactMapping {
     pub artifact_id: String,
     pub kind: ArtifactKind,
     pub referenced_in: PathBuf,
+    pub has_version_property: bool,
 }
 
+/// Result of the Maven module tree discovery phase.
 pub struct DiscoveryResult {
     pub mappings: Vec<ArtifactMapping>,
     pub orphan_properties: Vec<VersionProperty>,
     pub repositories: Vec<Repository>,
 }
 
+/// Discovers all Maven artifacts and their version properties starting from the root POM.
+///
+/// Returns artifact mappings (property → artifact), orphan properties (properties
+/// not referenced by any artifact, potential tool versions), and all declared repositories.
 pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     let root_pom_path = root.join("pom.xml");
     if !root_pom_path.exists() {
@@ -81,6 +97,8 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     })
 }
 
+/// Injects Maven implicit properties (`project.groupId`, `project.artifactId`, etc.)
+/// into the properties map so `${project.*}` references resolve correctly.
 fn inject_project_properties(project: &pom::Project, properties: &mut HashMap<String, String>) {
     if let Some(gid) = &project.group_id {
         properties.insert("project.groupId".to_string(), gid.clone());
@@ -100,6 +118,8 @@ fn inject_project_properties(project: &pom::Project, properties: &mut HashMap<St
     );
 }
 
+/// Like `inject_project_properties`, but for child modules: uses the child's values
+/// when present, falling back to the parent's values for inherited coordinates.
 fn inject_project_properties_with_fallback(
     child: &pom::Project,
     parent: &pom::Project,
@@ -124,6 +144,9 @@ fn inject_project_properties_with_fallback(
     );
 }
 
+/// Extracts artifact-to-property mappings from a parsed POM.
+/// Handles both `${version.*}` property references and plain inline versions.
+/// Skips artifacts referencing `${project.*}` properties.
 fn extract_mappings(
     project: &pom::Project,
     pom_path: &Path,
@@ -141,7 +164,7 @@ fn extract_mappings(
             continue;
         };
 
-        let (prop_name, current_value) =
+        let (prop_name, current_value, has_version_property) =
             if let Some(prop_name) = extract_property_reference(version_str) {
                 if prop_name.starts_with("project.") {
                     continue;
@@ -149,14 +172,14 @@ fn extract_mappings(
                 let Some(raw_value) = properties.get(&prop_name) else {
                     continue;
                 };
-                (prop_name, resolve_value(raw_value, properties))
+                (prop_name, resolve_value(raw_value, properties), true)
             } else {
                 let coords = format!(
                     "{}:{}",
                     resolve_value(group_id, properties),
                     resolve_value(artifact_id, properties)
                 );
-                (coords, version_str.trim().to_string())
+                (coords, version_str.trim().to_string(), false)
             };
 
         let group_id = resolve_value(group_id, properties);
@@ -171,10 +194,12 @@ fn extract_mappings(
             artifact_id,
             kind: *kind,
             referenced_in: pom_path.to_path_buf(),
+            has_version_property,
         });
     }
 }
 
+/// Recursively follows `<modules>` declarations to collect all child POM paths.
 fn collect_module_poms(
     parent_dir: &Path,
     project: &pom::Project,
@@ -191,6 +216,7 @@ fn collect_module_poms(
     Ok(())
 }
 
+/// Extracts the property name from a `${property.name}` reference.
 fn extract_property_reference(version: &str) -> Option<String> {
     version
         .trim()
@@ -200,6 +226,7 @@ fn extract_property_reference(version: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
+/// Resolves chained `${...}` property references up to 10 levels deep.
 fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
     let mut current = value.to_string();
     for _ in 0..10 {
@@ -214,11 +241,13 @@ fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
     current
 }
 
+/// Removes duplicate artifact mappings by `groupId:artifactId`, keeping the first occurrence.
 fn deduplicate(mappings: &mut Vec<ArtifactMapping>) {
     let mut seen = std::collections::HashSet::new();
     mappings.retain(|m| seen.insert(format!("{}:{}", m.group_id, m.artifact_id)));
 }
 
+/// Removes duplicate repositories by normalized URL (trailing slashes stripped).
 fn deduplicate_repos(repos: &mut Vec<Repository>) {
     let mut seen = std::collections::HashSet::new();
     repos.retain(|r| {
@@ -435,6 +464,7 @@ mod tests {
             artifact_id: artifact.to_string(),
             kind: pom::ArtifactKind::Dependency,
             referenced_in: PathBuf::from("pom.xml"),
+            has_version_property: !name.contains(':'),
         };
 
         let mut mappings = vec![
