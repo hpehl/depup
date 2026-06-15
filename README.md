@@ -6,9 +6,29 @@ Check dependency versions across multiple ecosystems.
 
 ## Installation
 
-```bash
-cargo install --path .
+[Precompiled binaries](https://github.com/hpehl/depup/releases) are available for macOS (Intel & Apple Silicon), Linux, and Windows.
+
+### Brew
+
+```shell
+brew tap hpehl/tap
+brew install depup
 ```
+
+### Cargo
+
+```shell
+cargo install depup
+```
+
+### Build from source
+
+1. [Install Rust and Cargo](https://www.rust-lang.org/tools/install)
+2. `git clone git@github.com:hpehl/depup.git`
+3. `cd depup`
+4. `cargo build --release && cargo install --path .`
+
+This installs the `depup` binary to `~/.cargo/bin/` which should be in your `$PATH`.
 
 ## Usage
 

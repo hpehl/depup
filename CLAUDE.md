@@ -118,6 +118,24 @@ These patterns are shared with the `mgt` and `wado` CLI tools:
 - Artifacts not on Maven Central that also aren't in any POM-defined repository will show as errors.
 - npm ecosystem checks require the respective package manager (npm, pnpm, yarn, or bun) to be installed and on PATH.
 
+## Installation
+
+Distributed via:
+
+- **Homebrew** — `brew install hpehl/tap/depup` (macOS Intel & Apple Silicon, formula in `hpehl/homebrew-tap`)
+- **Cargo** — `cargo install depup` (published to crates.io)
+- **GitHub Releases** — precompiled binaries for macOS (x64, arm64), Linux (x64), Windows (x64)
+- **Source** — `cargo build --release && cargo install --path .`
+
 ## Release
 
-Uses `cargo-release` with `release.toml`. Changelog follows [Keep a Changelog](https://keepachangelog.com/) format.
+Release process mirrors `wado`:
+
+1. Run `./release.sh <version>` — validates semver, checks clean tree, runs `cargo release` which bumps `Cargo.toml`, updates `CHANGELOG.md`, commits, tags, and pushes.
+2. Tag push triggers `.github/workflows/release.yml`:
+   - Creates GitHub release with changelog excerpt
+   - Publishes crate to crates.io (`CRATES_TOKEN` secret)
+   - Builds binaries for 4 targets (linux x64, macOS x64/arm64, Windows x64)
+   - Updates `Formula/depup.rb` in `hpehl/homebrew-tap` with new version and SHA256 checksums (`FORMULA_TOKEN` secret)
+
+Uses `cargo-release` with `release.toml`. Changelog follows [Keep a Changelog](https://keepachangelog.com/) format. CI verification via `.github/workflows/verify.yml` on push/PR to main.
