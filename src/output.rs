@@ -178,7 +178,10 @@ fn print_summary(results: &[CheckResult]) {
     let total = results.len();
     let outdated = results.iter().filter(|r| r.is_outdated()).count();
     let skipped = results.iter().filter(|r| r.is_skipped()).count();
-    let errors = results.iter().filter(|r| r.error_message().is_some()).count();
+    let errors = results
+        .iter()
+        .filter(|r| r.error_message().is_some())
+        .count();
     let current = total - outdated - skipped - errors;
 
     print!("{total} checked: ");

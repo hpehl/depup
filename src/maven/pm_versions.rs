@@ -157,12 +157,30 @@ mod tests {
 
     #[test]
     fn resolve_package_names() {
-        assert_eq!(PmVersionsChecker::resolve_package("version.npm"), Some("npm"));
-        assert_eq!(PmVersionsChecker::resolve_package("npm.version"), Some("npm"));
-        assert_eq!(PmVersionsChecker::resolve_package("version.pnpm"), Some("pnpm"));
-        assert_eq!(PmVersionsChecker::resolve_package("pnpm.version"), Some("pnpm"));
-        assert_eq!(PmVersionsChecker::resolve_package("version.yarn"), Some("yarn"));
-        assert_eq!(PmVersionsChecker::resolve_package("yarn.version"), Some("yarn"));
+        assert_eq!(
+            PmVersionsChecker::resolve_package("version.npm"),
+            Some("npm")
+        );
+        assert_eq!(
+            PmVersionsChecker::resolve_package("npm.version"),
+            Some("npm")
+        );
+        assert_eq!(
+            PmVersionsChecker::resolve_package("version.pnpm"),
+            Some("pnpm")
+        );
+        assert_eq!(
+            PmVersionsChecker::resolve_package("pnpm.version"),
+            Some("pnpm")
+        );
+        assert_eq!(
+            PmVersionsChecker::resolve_package("version.yarn"),
+            Some("yarn")
+        );
+        assert_eq!(
+            PmVersionsChecker::resolve_package("yarn.version"),
+            Some("yarn")
+        );
     }
 
     #[test]

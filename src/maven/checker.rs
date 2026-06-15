@@ -96,10 +96,7 @@ impl PreparedChecks {
 pub fn discover(root: &Path, stable: bool) -> Result<PreparedChecks> {
     let discovery_result = discovery::discover(root)?;
 
-    let maven_checker = Arc::new(MavenChecker::new(
-        stable,
-        discovery_result.repositories,
-    ));
+    let maven_checker = Arc::new(MavenChecker::new(stable, discovery_result.repositories));
     let tool_registry = ToolCheckerRegistry::new(stable);
 
     let mut tasks: Vec<CheckTask> = discovery_result

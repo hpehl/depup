@@ -136,7 +136,12 @@ mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
         assert_eq!(json["error"]["code"], "POM_NOT_FOUND");
-        assert!(json["error"]["message"].as_str().unwrap().contains("/some/path"));
+        assert!(
+            json["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("/some/path")
+        );
     }
 
     #[test]
@@ -166,12 +171,8 @@ mod tests {
 
     #[test]
     fn error_code_extracts_from_anyhow() {
-        let err: anyhow::Error =
-            DepupError::pom_parse_failed("pom.xml", "invalid XML").into();
-        assert_eq!(
-            DepupError::error_code(&err),
-            DepupErrorCode::PomParseFailed
-        );
+        let err: anyhow::Error = DepupError::pom_parse_failed("pom.xml", "invalid XML").into();
+        assert_eq!(DepupError::error_code(&err), DepupErrorCode::PomParseFailed);
     }
 
     #[test]

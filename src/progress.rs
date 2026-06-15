@@ -26,4 +26,3 @@ pub fn done(instant: Instant) {
         style(HumanDuration(instant.elapsed())).cyan()
     );
 }
-

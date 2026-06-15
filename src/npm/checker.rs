@@ -17,7 +17,10 @@ use crate::version;
 async fn run_checks(
     checker: &impl PackageManagerChecker,
     dir: &Path,
-) -> Result<(Vec<(String, String, bool)>, std::collections::HashMap<String, super::OutdatedEntry>)> {
+) -> Result<(
+    Vec<(String, String, bool)>,
+    std::collections::HashMap<String, super::OutdatedEntry>,
+)> {
     tokio::try_join!(checker.list_packages(dir), checker.outdated_packages(dir))
 }
 

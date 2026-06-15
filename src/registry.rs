@@ -231,12 +231,7 @@ mod tests {
 
     #[test]
     fn checked_result_fields() {
-        let r = CheckResult::checked(
-            dep_id(),
-            "5.10.0".to_string(),
-            "5.12.0".to_string(),
-            true,
-        );
+        let r = CheckResult::checked(dep_id(), "5.10.0".to_string(), "5.12.0".to_string(), true);
         assert!(r.is_outdated());
         assert!(!r.is_skipped());
         assert!(r.error_message().is_none());
@@ -276,7 +271,13 @@ mod tests {
     #[test]
     fn status_matches_state() {
         let up_to_date = CheckResult::checked(
-            CheckId::new(Ecosystem::Maven, CheckerKind::Dependency, "p".into(), None, String::new()),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "p".into(),
+                None,
+                String::new(),
+            ),
             "1.0".into(),
             "1.0".into(),
             false,
@@ -284,7 +285,13 @@ mod tests {
         assert!(matches!(up_to_date.status, CheckStatus::UpToDate { .. }));
 
         let outdated = CheckResult::checked(
-            CheckId::new(Ecosystem::Maven, CheckerKind::Dependency, "p".into(), None, String::new()),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "p".into(),
+                None,
+                String::new(),
+            ),
             "1.0".into(),
             "2.0".into(),
             true,
@@ -292,13 +299,25 @@ mod tests {
         assert!(matches!(outdated.status, CheckStatus::Outdated { .. }));
 
         let skipped = CheckResult::skipped(
-            CheckId::new(Ecosystem::Maven, CheckerKind::Dependency, "p".into(), None, String::new()),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "p".into(),
+                None,
+                String::new(),
+            ),
             "1.0".into(),
         );
         assert!(matches!(skipped.status, CheckStatus::Skipped));
 
         let error = CheckResult::error(
-            CheckId::new(Ecosystem::Maven, CheckerKind::Dependency, "p".into(), None, String::new()),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "p".into(),
+                None,
+                String::new(),
+            ),
             "1.0".into(),
             "fail".into(),
         );
