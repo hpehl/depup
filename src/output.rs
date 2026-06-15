@@ -196,7 +196,7 @@ mod tests {
                 kind: CheckerKind::Dependency,
             },
             CheckResult {
-                ecosystem: Ecosystem::Pnpm,
+                ecosystem: Ecosystem::Npm,
                 property_name: "react".to_string(),
                 current_version: "18.0.0".to_string(),
                 latest_version: Some("19.0.0".to_string()),
@@ -205,7 +205,7 @@ mod tests {
                 error: None,
                 artifact: Some("react".to_string()),
                 source: "package.json".to_string(),
-                kind: CheckerKind::Pnpm,
+                kind: CheckerKind::NpmDep,
             },
         ];
 
@@ -215,7 +215,7 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        assert_eq!(ecosystems, vec![Ecosystem::Maven, Ecosystem::Pnpm]);
+        assert_eq!(ecosystems, vec![Ecosystem::Maven, Ecosystem::Npm]);
     }
 
     #[test]
@@ -337,8 +337,8 @@ mod tests {
     #[test]
     fn format_version_pnpm() {
         let r = CheckResult::checked(
-            Ecosystem::Pnpm,
-            CheckerKind::Pnpm,
+            Ecosystem::Npm,
+            CheckerKind::NpmDep,
             "react".to_string(),
             "18.2.0".to_string(),
             "19.0.0".to_string(),
@@ -351,8 +351,8 @@ mod tests {
     #[test]
     fn format_version_empty() {
         let r = CheckResult::error(
-            Ecosystem::Pnpm,
-            CheckerKind::Pnpm,
+            Ecosystem::Npm,
+            CheckerKind::NpmDep,
             "my-app".to_string(),
             String::new(),
             None,

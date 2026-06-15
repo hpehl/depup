@@ -2,14 +2,14 @@
 #[serde(rename_all = "lowercase")]
 pub enum Ecosystem {
     Maven,
-    Pnpm,
+    Npm,
 }
 
 impl std::fmt::Display for Ecosystem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Maven => write!(f, "Maven"),
-            Self::Pnpm => write!(f, "pnpm"),
+            Self::Npm => write!(f, "npm"),
         }
     }
 }
@@ -19,9 +19,9 @@ pub enum CheckerKind {
     Dependency,
     Plugin,
     Node,
-    Npm,
-    Pnpm,
-    PnpmDev,
+    NpmPkg,
+    NpmDep,
+    NpmDevDep,
 }
 
 impl std::fmt::Display for CheckerKind {
@@ -30,9 +30,9 @@ impl std::fmt::Display for CheckerKind {
             Self::Dependency => write!(f, "Dependency"),
             Self::Plugin => write!(f, "Plugin"),
             Self::Node => write!(f, "Node"),
-            Self::Npm => write!(f, "npm"),
-            Self::Pnpm => write!(f, "pnpm"),
-            Self::PnpmDev => write!(f, "pnpm (dev)"),
+            Self::NpmPkg => write!(f, "npm"),
+            Self::NpmDep => write!(f, "Dependency"),
+            Self::NpmDevDep => write!(f, "Dev Dependency"),
         }
     }
 }
@@ -43,8 +43,8 @@ impl CheckerKind {
             Self::Dependency => console::Style::new().cyan(),
             Self::Plugin => console::Style::new().magenta(),
             Self::Node => console::Style::new().green(),
-            Self::Npm => console::Style::new().yellow(),
-            Self::Pnpm | Self::PnpmDev => console::Style::new().blue(),
+            Self::NpmPkg => console::Style::new().yellow(),
+            Self::NpmDep | Self::NpmDevDep => console::Style::new().blue(),
         }
     }
 
@@ -53,7 +53,7 @@ impl CheckerKind {
             Self::Dependency => "\u{25cf}",
             Self::Plugin => "\u{25a0}",
             Self::Node => "\u{25b2}",
-            Self::Npm | Self::Pnpm | Self::PnpmDev => "\u{25c6}",
+            Self::NpmPkg | Self::NpmDep | Self::NpmDevDep => "\u{25c6}",
         }
     }
 
@@ -62,9 +62,9 @@ impl CheckerKind {
             Self::Dependency => "Dependencies",
             Self::Plugin => "Plugins",
             Self::Node => "Node",
-            Self::Npm => "npm",
-            Self::Pnpm => "Dependencies",
-            Self::PnpmDev => "Dev Dependencies",
+            Self::NpmPkg => "npm",
+            Self::NpmDep => "Dependencies",
+            Self::NpmDevDep => "Dev Dependencies",
         }
     }
 }
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn ecosystem_display() {
         assert_eq!(Ecosystem::Maven.to_string(), "Maven");
-        assert_eq!(Ecosystem::Pnpm.to_string(), "pnpm");
+        assert_eq!(Ecosystem::Npm.to_string(), "npm");
     }
 
     #[test]
@@ -282,8 +282,8 @@ mod tests {
         assert_eq!(CheckerKind::Dependency.to_string(), "Dependency");
         assert_eq!(CheckerKind::Plugin.to_string(), "Plugin");
         assert_eq!(CheckerKind::Node.to_string(), "Node");
-        assert_eq!(CheckerKind::Npm.to_string(), "npm");
-        assert_eq!(CheckerKind::Pnpm.to_string(), "pnpm");
-        assert_eq!(CheckerKind::PnpmDev.to_string(), "pnpm (dev)");
+        assert_eq!(CheckerKind::NpmPkg.to_string(), "npm");
+        assert_eq!(CheckerKind::NpmDep.to_string(), "Dependency");
+        assert_eq!(CheckerKind::NpmDevDep.to_string(), "Dev Dependency");
     }
 }

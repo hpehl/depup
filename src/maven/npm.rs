@@ -67,7 +67,7 @@ impl NpmChecker {
                 let is_outdated = version::is_newer(&current, &latest);
                 Ok(CheckResult::checked(
                     Ecosystem::Maven,
-                    CheckerKind::Npm,
+                    CheckerKind::NpmPkg,
                     prop_name,
                     current,
                     latest,
@@ -77,7 +77,7 @@ impl NpmChecker {
             }
             None => Ok(CheckResult::error(
                 Ecosystem::Maven,
-                CheckerKind::Npm,
+                CheckerKind::NpmPkg,
                 prop_name,
                 current,
                 artifact,

@@ -38,7 +38,7 @@ impl CheckTask {
                 ArtifactKind::Plugin => CheckerKind::Plugin,
             },
             Self::Node { .. } => CheckerKind::Node,
-            Self::Npm { .. } => CheckerKind::Npm,
+            Self::Npm { .. } => CheckerKind::NpmPkg,
         }
     }
 

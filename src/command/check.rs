@@ -30,11 +30,11 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     } else {
         None
     };
-    let pnpm_projects = crate::pnpm::discovery::discover(&root);
+    let npm_projects = crate::npm::discovery::discover(&root);
 
     let maven_count = maven_prepared.as_ref().map_or(0, |p| p.count());
-    let pnpm_count = pnpm_projects.len();
-    let total = maven_count + pnpm_count;
+    let npm_count = npm_projects.len();
+    let total = maven_count + npm_count;
 
     if total == 0 {
         if json {
@@ -62,18 +62,18 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         });
     }
 
-    if !pnpm_projects.is_empty() {
+    if !npm_projects.is_empty() {
         let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
-        for project in pnpm_projects {
+        for project in npm_projects {
             let semaphore = Arc::clone(&semaphore);
-            let project_path = project.path.clone();
-            let project_name = project.name.clone();
             let root = root.clone();
             let bar = bar.clone();
             join_set.spawn(async move {
                 let _permit = semaphore.acquire().await.unwrap();
-                bar.set_message(project_name.clone());
-                let results = crate::pnpm::check_project(&project_path, &root)
+                bar.set_message(format!("{} ({})", project.name, project.package_manager));
+                let project_name = project.name.clone();
+                let project_path = project.path.clone();
+                let results = crate::npm::check_project(&project, &root)
                     .await
                     .unwrap_or_else(|e| {
                         let source = project_path
@@ -83,8 +83,8 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
                             .display()
                             .to_string();
                         vec![CheckResult::error(
-                            Ecosystem::Pnpm,
-                            CheckerKind::Pnpm,
+                            Ecosystem::Npm,
+                            CheckerKind::NpmDep,
                             project_name,
                             String::new(),
                             None,

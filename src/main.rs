@@ -6,7 +6,7 @@ mod error;
 mod json;
 mod maven;
 mod output;
-mod pnpm;
+mod npm;
 mod progress;
 mod registry;
 mod version;

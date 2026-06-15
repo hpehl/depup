@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `depup` is a Rust CLI that checks dependency versions across multiple ecosystems. It currently supports:
 
 - **Maven** — Discovers version properties (`${version.*}`) across multi-module Maven projects and checks them against Maven Central and custom repositories.
-- **pnpm** — Discovers pnpm projects in a directory tree and checks for outdated packages via `pnpm outdated`.
+- **npm** — Discovers npm ecosystem projects in a directory tree and checks for outdated packages. Supports multiple package managers: npm, pnpm, yarn (classic), and bun. Auto-detects the package manager by lock file or `packageManager` field in `package.json`.
 
-Auto-detection picks the ecosystem based on project files (`pom.xml` → Maven, `pnpm-lock.yaml` → pnpm).
+Auto-detection picks the ecosystem based on project files (`pom.xml` → Maven, lock file or `packageManager` field → npm ecosystem).
 
 ## Build & Test
 
@@ -70,15 +70,23 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 - **`node.rs`** / **`npm.rs`** — Checkers for Node.js and npm/pnpm/yarn version properties found in Maven POMs (orphan properties like `version.node`).
 
-### pnpm Ecosystem (`src/pnpm/`)
+### npm Ecosystem (`src/npm/`)
 
-- **`discovery.rs`** — Walks a directory tree finding pnpm projects. Detects via `pnpm-lock.yaml` or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (detected via `pnpm-workspace.yaml`).
+- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait, and `check_project()` dispatcher. Each PM implements `list_packages()` and `outdated_packages()` via the trait.
 
-- **`mod.rs`** — `check_project()` runs `pnpm outdated --format json` on a project directory, parses the JSON output into `Vec<CheckResult>`.
+- **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
+
+- **`pm_npm.rs`** — npm checker: `npm list --json` + `npm outdated --json`. Reads `package.json` to classify dev dependencies.
+
+- **`pm_pnpm.rs`** — pnpm checker: `pnpm list --json` + `pnpm outdated --format json`.
+
+- **`pm_yarn.rs`** — Yarn classic checker: parses NDJSON from `yarn list --json` and `yarn outdated --json`.
+
+- **`pm_bun.rs`** — Bun checker: reads `package.json` + `node_modules/*/package.json` for versions, `bun outdated --format json` for updates.
 
 ### Shared Layer
 
-- **`registry.rs`** — `CheckResult` struct and `CheckerKind` enum (Dependency, Plugin, Node, Npm, Pnpm) used by all ecosystems. Each kind has a display color and symbol.
+- **`registry.rs`** — `CheckResult` struct and `CheckerKind` enum (Dependency, Plugin, Node, NpmPkg, NpmDep, NpmDevDep) used by all ecosystems. Each kind has a display color and symbol.
 
 - **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver.
 
@@ -106,7 +114,7 @@ These patterns are shared with the `mgt` and `wado` CLI tools:
 
 - Maven Central requires a `User-Agent` header or returns 403. The client sets `depup/{version}`.
 - Artifacts not on Maven Central that also aren't in any POM-defined repository will show as errors.
-- pnpm check requires `pnpm` to be installed and on PATH.
+- npm ecosystem checks require the respective package manager (npm, pnpm, yarn, or bun) to be installed and on PATH.
 
 ## Release
 
