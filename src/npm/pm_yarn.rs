@@ -1,4 +1,4 @@
-//! Yarn classic (v1) package manager checker.
+//! Yarn classic (v1) package manager resolver.
 //!
 //! Parses NDJSON from `yarn list --json` and `yarn outdated --json`.
 //! Yarn classic outputs one JSON object per line (not a single JSON array),
@@ -12,9 +12,9 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{OutdatedEntry, PackageManagerChecker, read_dev_dependency_names};
+use super::{OutdatedEntry, PackageManagerResolver, read_dev_dependency_names};
 
-/// Yarn classic (v1) checker implementation.
+/// Yarn classic (v1) resolver implementation.
 pub struct Yarn;
 
 #[derive(Debug, Deserialize)]
@@ -47,7 +47,7 @@ struct OutdatedTableData {
     body: Vec<Vec<String>>,
 }
 
-impl PackageManagerChecker for Yarn {
+impl PackageManagerResolver for Yarn {
     async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>> {
         let output = Command::new("yarn")
             .args(["list", "--json", "--depth", "0"])

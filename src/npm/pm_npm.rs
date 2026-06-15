@@ -1,4 +1,4 @@
-//! npm package manager checker.
+//! npm package manager resolver.
 //!
 //! Uses `npm list --json` and `npm outdated --json` for package data.
 //! Dev dependencies are classified by reading `devDependencies` from `package.json`
@@ -12,9 +12,9 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{OutdatedEntry, PackageManagerChecker, read_dev_dependency_names};
+use super::{OutdatedEntry, PackageManagerResolver, read_dev_dependency_names};
 
-/// npm checker implementation.
+/// npm resolver implementation.
 pub struct Npm;
 
 #[derive(Debug, Deserialize)]
@@ -37,7 +37,7 @@ struct OutdatedOutput {
     latest: String,
 }
 
-impl PackageManagerChecker for Npm {
+impl PackageManagerResolver for Npm {
     async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>> {
         let output = Command::new("npm")
             .args(["list", "--json", "--depth", "0"])

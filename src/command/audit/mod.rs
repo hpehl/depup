@@ -29,7 +29,8 @@ pub async fn audit(matches: &ArgMatches) -> Result<()> {
 
     // Phase 1: Discover and check dependencies (reuse check pipeline for version info)
     let (check_results, _npm_projects) =
-        crate::command::pipeline::run_checks(&root, do_maven, do_npm, filter.stable, json).await?;
+        crate::command::pipeline::resolve_versions(&root, do_maven, do_npm, filter.stable, json)
+            .await?;
 
     // Filter to deps matching the user's filters (excluding tool versions)
     let auditable: Vec<VersionResult> = check_results

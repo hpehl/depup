@@ -36,7 +36,8 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
 
     // Phase 1: Check for outdated dependencies
     let (check_results, npm_projects) =
-        crate::command::pipeline::run_checks(&root, do_maven, do_npm, filter.stable, json).await?;
+        crate::command::pipeline::resolve_versions(&root, do_maven, do_npm, filter.stable, json)
+            .await?;
 
     // Filter to outdated results matching the user's filters
     let outdated: Vec<VersionResult> = check_results

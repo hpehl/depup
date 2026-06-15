@@ -1,4 +1,4 @@
-//! Shared discovery and check pipeline used by `check`, `update`, and `audit`.
+//! Shared discovery and version resolution pipeline used by `check`, `update`, and `audit`.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -22,11 +22,11 @@ pub fn detect_ecosystems(filter: &Filter, root: &Path) -> (bool, bool) {
     (do_maven, do_npm)
 }
 
-/// Discovers dependencies and runs checks across all ecosystems.
+/// Discovers dependencies and resolves their versions across all ecosystems.
 ///
-/// Returns the check results and the discovered npm projects (needed by update
+/// Returns the version results and the discovered npm projects (needed by update
 /// to delegate to the correct package manager).
-pub async fn run_checks(
+pub async fn resolve_versions(
     root: &Path,
     do_maven: bool,
     do_npm: bool,
@@ -34,7 +34,7 @@ pub async fn run_checks(
     json: bool,
 ) -> Result<(Vec<VersionResult>, Vec<NpmProject>)> {
     let maven_prepared = if do_maven {
-        Some(crate::maven::checker::discover(root, stable)?)
+        Some(crate::maven::resolver::discover(root, stable)?)
     } else {
         None
     };
@@ -63,10 +63,10 @@ pub async fn run_checks(
     if let Some(prepared) = maven_prepared {
         let root = root.to_path_buf();
         let bar = bar.clone();
-        join_set.spawn(async move { crate::maven::checker::check(&root, prepared, &bar).await });
+        join_set.spawn(async move { crate::maven::resolver::resolve(&root, prepared, &bar).await });
     }
 
-    spawn_npm_checks(&mut join_set, &npm_projects, root, &bar);
+    spawn_npm_resolves(&mut join_set, &npm_projects, root, &bar);
 
     let results: Vec<VersionResult> = join_set.join_all().await.into_iter().flatten().collect();
     bar.finish_and_clear();
@@ -74,9 +74,9 @@ pub async fn run_checks(
     Ok((results, npm_projects))
 }
 
-/// Spawns npm project checks concurrently with semaphore-based rate limiting.
+/// Spawns npm project version resolution concurrently with semaphore-based rate limiting.
 /// On failure, produces an error `VersionResult` rather than propagating the error.
-fn spawn_npm_checks(
+fn spawn_npm_resolves(
     join_set: &mut JoinSet<Vec<VersionResult>>,
     projects: &[NpmProject],
     root: &Path,
@@ -97,7 +97,7 @@ fn spawn_npm_checks(
             bar.set_message(format!("{} ({})", project.name, project.package_manager));
             let project_name = project.name.clone();
             let project_path = project.path.clone();
-            let results = crate::npm::checker::check_project(&project, &root)
+            let results = crate::npm::resolver::resolve_project(&project, &root)
                 .await
                 .unwrap_or_else(|e| {
                     let source = project_path

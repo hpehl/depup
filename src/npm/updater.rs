@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use super::discovery::NpmProject;
-use super::{PackageManager, PackageManagerChecker, pm_bun, pm_npm, pm_pnpm, pm_yarn};
+use super::{PackageManager, PackageManagerResolver, pm_bun, pm_npm, pm_pnpm, pm_yarn};
 use crate::dependency::{UpdateResult, VersionResult};
 
 /// Runs the native update command for a single npm project and maps the

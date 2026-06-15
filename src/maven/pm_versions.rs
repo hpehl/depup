@@ -1,6 +1,6 @@
-//! Package manager version checker for Maven POM tool-version properties.
+//! Package manager version resolver for Maven POM tool-version properties.
 //!
-//! Checks properties like `version.npm`, `version.pnpm`, or `yarn.version`
+//! Resolves properties like `version.npm`, `version.pnpm`, or `yarn.version`
 //! against the npm registry's `dist-tags.latest` for the corresponding package.
 
 use std::future::Future;
@@ -12,7 +12,7 @@ use crate::constants::{self, NPM_REGISTRY_URL};
 use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
-use crate::maven::tool::ToolVersionChecker;
+use crate::maven::tool::ToolVersionResolver;
 use crate::version;
 
 /// Generates the pattern-to-package mapping table and the flat pattern list.
@@ -32,12 +32,12 @@ pm_tools![
     ("yarn.version", "yarn"),
 ];
 
-/// Checks package manager version properties against the npm registry.
-pub struct PmVersionsChecker {
+/// Resolves package manager version properties against the npm registry.
+pub struct PmVersionsResolver {
     client: reqwest::Client,
 }
 
-impl PmVersionsChecker {
+impl PmVersionsResolver {
     pub fn new() -> Self {
         Self {
             client: constants::http_client(),
@@ -119,7 +119,7 @@ impl PmVersionsChecker {
     }
 }
 
-impl ToolVersionChecker for PmVersionsChecker {
+impl ToolVersionResolver for PmVersionsResolver {
     fn patterns(&self) -> &[&str] {
         PM_PATTERN_NAMES
     }
@@ -130,7 +130,7 @@ impl ToolVersionChecker for PmVersionsChecker {
             .to_string()
     }
 
-    fn check<'a>(
+    fn resolve<'a>(
         &'a self,
         property: &'a VersionProperty,
         source: &'a str,
@@ -145,8 +145,8 @@ mod tests {
 
     #[test]
     fn patterns_match_pm_tools() {
-        let checker = PmVersionsChecker::new();
-        let patterns = checker.patterns();
+        let resolver = PmVersionsResolver::new();
+        let patterns = resolver.patterns();
         assert!(patterns.contains(&"version.npm"));
         assert!(patterns.contains(&"npm.version"));
         assert!(patterns.contains(&"version.pnpm"));
@@ -158,45 +158,45 @@ mod tests {
     #[test]
     fn resolve_package_names() {
         assert_eq!(
-            PmVersionsChecker::resolve_package("version.npm"),
+            PmVersionsResolver::resolve_package("version.npm"),
             Some("npm")
         );
         assert_eq!(
-            PmVersionsChecker::resolve_package("npm.version"),
+            PmVersionsResolver::resolve_package("npm.version"),
             Some("npm")
         );
         assert_eq!(
-            PmVersionsChecker::resolve_package("version.pnpm"),
+            PmVersionsResolver::resolve_package("version.pnpm"),
             Some("pnpm")
         );
         assert_eq!(
-            PmVersionsChecker::resolve_package("pnpm.version"),
+            PmVersionsResolver::resolve_package("pnpm.version"),
             Some("pnpm")
         );
         assert_eq!(
-            PmVersionsChecker::resolve_package("version.yarn"),
+            PmVersionsResolver::resolve_package("version.yarn"),
             Some("yarn")
         );
         assert_eq!(
-            PmVersionsChecker::resolve_package("yarn.version"),
+            PmVersionsResolver::resolve_package("yarn.version"),
             Some("yarn")
         );
     }
 
     #[test]
     fn does_not_match_unrelated() {
-        assert_eq!(PmVersionsChecker::resolve_package("version.junit"), None);
-        assert_eq!(PmVersionsChecker::resolve_package("npm"), None);
-        assert_eq!(PmVersionsChecker::resolve_package("version.node"), None);
+        assert_eq!(PmVersionsResolver::resolve_package("version.junit"), None);
+        assert_eq!(PmVersionsResolver::resolve_package("npm"), None);
+        assert_eq!(PmVersionsResolver::resolve_package("version.node"), None);
     }
 
     #[test]
     fn label_resolves_from_property() {
-        let checker = PmVersionsChecker::new();
+        let resolver = PmVersionsResolver::new();
         let prop = VersionProperty {
             name: "version.pnpm".to_string(),
             current_value: "9.0.0".to_string(),
         };
-        assert_eq!(checker.label(&prop), "pnpm");
+        assert_eq!(resolver.label(&prop), "pnpm");
     }
 }

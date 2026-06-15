@@ -1,4 +1,4 @@
-//! Maven repository version checker.
+//! Maven repository version resolver.
 //!
 //! Queries `maven-metadata.xml` to find all published versions of an artifact.
 //! Tries Maven Central first; if not found, falls back to custom repositories
@@ -17,14 +17,14 @@ use crate::maven::discovery::ArtifactMapping;
 use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
 use crate::version::{self, Version};
 
-/// Checks Maven artifacts against Maven Central and custom repositories.
-pub struct MavenChecker {
+/// Resolves Maven artifact versions against Maven Central and custom repositories.
+pub struct MavenVersionResolver {
     client: reqwest::Client,
     releases_only: bool,
     repositories: Vec<Repository>,
 }
 
-impl MavenChecker {
+impl MavenVersionResolver {
     pub fn new(releases_only: bool, repositories: Vec<Repository>) -> Self {
         Self {
             client: constants::http_client(),
@@ -80,10 +80,10 @@ fn dependency_from_mapping(mapping: &ArtifactMapping, source: &str) -> Dependenc
     )
 }
 
-impl MavenChecker {
-    /// Checks a single Maven artifact for newer versions.
+impl MavenVersionResolver {
+    /// Resolves a single Maven artifact to find newer versions.
     /// Tries Maven Central first, then custom repos in parallel on miss.
-    pub async fn check(&self, mapping: &ArtifactMapping, source: &str) -> Result<VersionResult> {
+    pub async fn resolve(&self, mapping: &ArtifactMapping, source: &str) -> Result<VersionResult> {
         let id = dependency_from_mapping(mapping, source);
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
         let current = mapping.property.current_value.clone();
@@ -401,8 +401,8 @@ mod tests {
                 kind: RepositoryKind::Plugin,
             },
         ];
-        let checker = MavenChecker::new(false, repos);
-        let urls = checker.repo_urls_for(ArtifactKind::Dependency);
+        let resolver = MavenVersionResolver::new(false, repos);
+        let urls = resolver.repo_urls_for(ArtifactKind::Dependency);
         assert_eq!(urls, vec!["https://dep-repo.example.com"]);
     }
 
@@ -422,8 +422,8 @@ mod tests {
                 kind: RepositoryKind::Plugin,
             },
         ];
-        let checker = MavenChecker::new(false, repos);
-        let urls = checker.repo_urls_for(ArtifactKind::Plugin);
+        let resolver = MavenVersionResolver::new(false, repos);
+        let urls = resolver.repo_urls_for(ArtifactKind::Plugin);
         assert_eq!(urls, vec!["https://plugin-repo.example.com"]);
     }
 }

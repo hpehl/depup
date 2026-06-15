@@ -1,7 +1,7 @@
-//! Orchestrates Maven ecosystem checks.
+//! Resolves Maven dependency versions against upstream registries.
 //!
 //! Two-phase design: `discover()` builds the task list synchronously,
-//! `check()` runs all tasks concurrently with semaphore-based rate limiting.
+//! `resolve()` runs all tasks concurrently with semaphore-based rate limiting.
 //! This split allows the caller to count tasks for the progress bar before
 //! starting async work.
 
@@ -16,30 +16,30 @@ use tokio::task::JoinSet;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
 use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::maven::discovery::{self, ArtifactMapping, VersionProperty};
-use crate::maven::maven_central::MavenChecker;
-use crate::maven::tool::{ToolCheckerRegistry, ToolVersionChecker};
+use crate::maven::maven_central::MavenVersionResolver;
+use crate::maven::tool::{ToolResolverRegistry, ToolVersionResolver};
 
-/// A single unit of work: either a Maven artifact check or a tool version check.
-enum CheckTask {
+/// A single unit of work: either a Maven artifact or a tool version to resolve.
+enum ResolveTask {
     Maven {
         mapping: ArtifactMapping,
-        checker: Arc<MavenChecker>,
+        resolver: Arc<MavenVersionResolver>,
     },
     Tool {
         property: VersionProperty,
-        checker: Arc<dyn ToolVersionChecker>,
+        resolver: Arc<dyn ToolVersionResolver>,
     },
 }
 
-impl CheckTask {
+impl ResolveTask {
     fn label(&self) -> String {
         match self {
             Self::Maven { mapping, .. } => {
                 format!("{}:{}", mapping.group_id, mapping.artifact_id)
             }
             Self::Tool {
-                property, checker, ..
-            } => checker.label(property),
+                property, resolver, ..
+            } => resolver.label(property),
         }
     }
 
@@ -84,46 +84,53 @@ impl CheckTask {
     }
 }
 
-/// Pre-built list of check tasks, ready for concurrent execution.
-pub struct PreparedChecks {
-    tasks: Vec<CheckTask>,
+/// Pre-built list of resolve tasks, ready for concurrent execution.
+pub struct PreparedResolves {
+    tasks: Vec<ResolveTask>,
 }
 
-impl PreparedChecks {
+impl PreparedResolves {
     pub fn count(&self) -> usize {
         self.tasks.len()
     }
 }
 
-/// Discovery phase: walks the Maven module tree, builds check tasks for all
+/// Discovery phase: walks the Maven module tree, builds resolve tasks for all
 /// artifacts and orphan tool-version properties. Runs synchronously.
-pub fn discover(root: &Path, stable: bool) -> Result<PreparedChecks> {
+pub fn discover(root: &Path, stable: bool) -> Result<PreparedResolves> {
     let discovery_result = discovery::discover(root)?;
 
-    let maven_checker = Arc::new(MavenChecker::new(stable, discovery_result.repositories));
-    let tool_registry = ToolCheckerRegistry::new(stable);
+    let maven_resolver = Arc::new(MavenVersionResolver::new(
+        stable,
+        discovery_result.repositories,
+    ));
+    let tool_registry = ToolResolverRegistry::new(stable);
 
-    let mut tasks: Vec<CheckTask> = discovery_result
+    let mut tasks: Vec<ResolveTask> = discovery_result
         .mappings
         .into_iter()
-        .map(|mapping| CheckTask::Maven {
+        .map(|mapping| ResolveTask::Maven {
             mapping,
-            checker: Arc::clone(&maven_checker),
+            resolver: Arc::clone(&maven_resolver),
         })
         .collect();
 
     for property in discovery_result.orphan_properties {
-        if let Some(checker) = tool_registry.find(&property.name) {
-            tasks.push(CheckTask::Tool { property, checker });
+        if let Some(resolver) = tool_registry.find(&property.name) {
+            tasks.push(ResolveTask::Tool { property, resolver });
         }
     }
 
-    Ok(PreparedChecks { tasks })
+    Ok(PreparedResolves { tasks })
 }
 
-/// Execution phase: runs all prepared check tasks concurrently with a semaphore.
+/// Execution phase: runs all prepared resolve tasks concurrently with a semaphore.
 /// Errors are captured as `VersionResult::error` rather than propagated.
-pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> Vec<VersionResult> {
+pub async fn resolve(
+    root: &Path,
+    prepared: PreparedResolves,
+    bar: &ProgressBar,
+) -> Vec<VersionResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let mut join_set = JoinSet::new();
     let root = root.to_path_buf();
@@ -138,9 +145,9 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
             let _permit = semaphore.acquire().await.unwrap();
             bar.set_message(label);
             let result = match task {
-                CheckTask::Maven {
+                ResolveTask::Maven {
                     ref mapping,
-                    ref checker,
+                    ref resolver,
                 } => {
                     let source = mapping
                         .referenced_in
@@ -148,16 +155,19 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
                         .unwrap_or(&mapping.referenced_in)
                         .display()
                         .to_string();
-                    checker.check(mapping, &source).await.unwrap_or_else(|e| {
-                        let (id, current) = task.error_id(&root);
-                        VersionResult::error(id, current, e.to_string())
-                    })
+                    resolver
+                        .resolve(mapping, &source)
+                        .await
+                        .unwrap_or_else(|e| {
+                            let (id, current) = task.error_id(&root);
+                            VersionResult::error(id, current, e.to_string())
+                        })
                 }
-                CheckTask::Tool {
+                ResolveTask::Tool {
                     ref property,
-                    ref checker,
-                } => checker
-                    .check(property, "pom.xml")
+                    ref resolver,
+                } => resolver
+                    .resolve(property, "pom.xml")
                     .await
                     .unwrap_or_else(|e| {
                         let (id, current) = task.error_id(&root);

@@ -1,6 +1,6 @@
-//! Node.js version checker for Maven POM tool-version properties.
+//! Node.js version resolver for Maven POM tool-version properties.
 //!
-//! Checks properties like `version.node` or `nodejs.version` against the
+//! Resolves properties like `version.node` or `nodejs.version` against the
 //! Node.js distribution index. When `--stable` is set, only LTS releases
 //! are considered.
 
@@ -14,10 +14,10 @@ use crate::constants::{self, NODEJS_DIST_URL};
 use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
-use crate::maven::tool::ToolVersionChecker;
+use crate::maven::tool::ToolVersionResolver;
 use crate::version;
 
-/// Property name patterns that trigger Node.js version checking.
+/// Property name patterns that trigger Node.js version resolution.
 const NODE_PATTERNS: &[&str] = &[
     "version.node",
     "version.nodejs",
@@ -25,8 +25,8 @@ const NODE_PATTERNS: &[&str] = &[
     "nodejs.version",
 ];
 
-/// Checks Node.js version properties against the Node.js distribution index.
-pub struct NodeChecker {
+/// Resolves Node.js version properties against the Node.js distribution index.
+pub struct NodeResolver {
     client: reqwest::Client,
     releases_only: bool,
 }
@@ -63,7 +63,7 @@ fn tool_id(source: &str) -> Dependency {
     )
 }
 
-impl NodeChecker {
+impl NodeResolver {
     pub fn new(stable: bool) -> Self {
         Self {
             client: constants::http_client(),
@@ -132,7 +132,7 @@ impl NodeChecker {
     }
 }
 
-impl ToolVersionChecker for NodeChecker {
+impl ToolVersionResolver for NodeResolver {
     fn patterns(&self) -> &[&str] {
         NODE_PATTERNS
     }
@@ -141,7 +141,7 @@ impl ToolVersionChecker for NodeChecker {
         "nodejs.org".to_string()
     }
 
-    fn check<'a>(
+    fn resolve<'a>(
         &'a self,
         property: &'a VersionProperty,
         source: &'a str,
@@ -156,8 +156,8 @@ mod tests {
 
     #[test]
     fn patterns_match_node() {
-        let checker = NodeChecker::new(false);
-        let patterns = checker.patterns();
+        let resolver = NodeResolver::new(false);
+        let patterns = resolver.patterns();
         assert!(patterns.contains(&"version.node"));
         assert!(patterns.contains(&"version.nodejs"));
         assert!(patterns.contains(&"node.version"));

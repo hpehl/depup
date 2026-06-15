@@ -1,4 +1,4 @@
-//! Bun package manager checker.
+//! Bun package manager resolver.
 //!
 //! Lists packages by reading `package.json` + `node_modules/*/package.json`
 //! (bun doesn't have a `list --json` command). Uses `bun outdated --format json`
@@ -12,9 +12,9 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{OutdatedEntry, PackageManagerChecker};
+use super::{OutdatedEntry, PackageManagerResolver};
 
-/// Bun checker implementation.
+/// Bun resolver implementation.
 pub struct Bun;
 
 #[derive(Debug, Deserialize)]
@@ -25,7 +25,7 @@ struct OutdatedOutput {
     latest: String,
 }
 
-impl PackageManagerChecker for Bun {
+impl PackageManagerResolver for Bun {
     async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>> {
         let pkg_content = std::fs::read_to_string(dir.join("package.json"))
             .with_context(|| format!("Failed to read package.json in {}", dir.display()))?;

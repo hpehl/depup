@@ -1,4 +1,4 @@
-//! pnpm package manager checker.
+//! pnpm package manager resolver.
 //!
 //! Uses `pnpm list --json` and `pnpm outdated --format json`.
 //! pnpm's JSON output natively separates `dependencies` and `devDependencies`.
@@ -11,9 +11,9 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{OutdatedEntry, PackageManagerChecker};
+use super::{OutdatedEntry, PackageManagerResolver};
 
-/// pnpm checker implementation.
+/// pnpm resolver implementation.
 pub struct Pnpm;
 
 #[derive(Debug, Deserialize)]
@@ -29,7 +29,7 @@ struct ListEntry {
     version: String,
 }
 
-impl PackageManagerChecker for Pnpm {
+impl PackageManagerResolver for Pnpm {
     async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>> {
         let output = Command::new("pnpm")
             .args(["list", "--json", "--depth", "0"])

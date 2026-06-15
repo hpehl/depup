@@ -27,7 +27,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     let (do_maven, do_npm) = super::pipeline::detect_ecosystems(&filter, &root);
 
     let (all_results, _npm_projects) =
-        super::pipeline::run_checks(&root, do_maven, do_npm, filter.stable, json).await?;
+        super::pipeline::resolve_versions(&root, do_maven, do_npm, filter.stable, json).await?;
 
     if all_results.is_empty() {
         if json {

@@ -43,18 +43,18 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### Command Layer (`src/command/`)
 
-- **`pipeline.rs`** — Shared discovery and check pipeline used by `check`, `update`, and `audit`. Contains `detect_ecosystems()` (shared ecosystem detection from filters + project files) and `run_checks()` (discovers Maven via `pom.xml` and npm via lockfiles, runs all checks concurrently with `JoinSet`, returns `(Vec<VersionResult>, Vec<NpmProject>)`).
+- **`pipeline.rs`** — Shared discovery and version resolution pipeline used by `check`, `update`, and `audit`. Contains `detect_ecosystems()` (shared ecosystem detection from filters + project files) and `resolve_versions()` (discovers Maven via `pom.xml` and npm via lockfiles, resolves all versions concurrently with `JoinSet`, returns `(Vec<VersionResult>, Vec<NpmProject>)`).
 
-- **`check.rs`** — Orchestrates the check subcommand. Calls `pipeline::run_checks()`, applies `Filter`, outputs results as table or JSON. Exits with code 1 when outdated dependencies are found.
+- **`check.rs`** — Orchestrates the check subcommand. Calls `pipeline::resolve_versions()`, applies `Filter`, outputs results as table or JSON. Exits with code 1 when outdated dependencies are found.
 
-- **`update.rs`** — Orchestrates the update subcommand. Calls `pipeline::run_checks()`, applies `Filter` to select which outdated deps to update, then:
+- **`update.rs`** — Orchestrates the update subcommand. Calls `pipeline::resolve_versions()`, applies `Filter` to select which outdated deps to update, then:
   - Maven: calls `maven::updater::apply_updates()` to rewrite POM files in place, with per-POM progress bar.
   - npm: calls `npm::updater::update_project()` for each project with outdated deps, with per-project progress bar.
   - Supports all check filters (`--managed`, `--dependencies`, `--include`, `--exclude`, etc.) plus `--dry-run`.
   - Output mirrors check: grouped by ecosystem/kind, summary line, timing, exit code 1 on errors.
 
 - **`audit/`** — Audit subcommand module:
-  - **`mod.rs`** — Orchestrates the audit subcommand. Calls `pipeline::run_checks()` to discover dependencies with versions, filters out tool versions, queries OSV.dev via `osv::audit()`, applies severity filter, outputs results as table or JSON. Same output style as check/update: progress bar, grouped table, summary line, timing. Exit code 1 when vulnerabilities are found.
+  - **`mod.rs`** — Orchestrates the audit subcommand. Calls `pipeline::resolve_versions()` to discover dependencies with versions, filters out tool versions, queries OSV.dev via `osv::audit()`, applies severity filter, outputs results as table or JSON. Same output style as check/update: progress bar, grouped table, summary line, timing. Exit code 1 when vulnerabilities are found.
   - **`osv.rs`** — OSV.dev API client for vulnerability auditing. Queries the batch endpoint (`POST /v1/querybatch`) with dependency coordinates and versions, fetches full vulnerability details from individual endpoints (`GET /v1/vulns/{id}`). Maps `Ecosystem::Maven` to OSV's `"Maven"` and `Ecosystem::Npm` to `"npm"`. Deduplicates queries and vuln IDs. Extracts severity from CVSS scores or ecosystem/database-specific labels. Skips tool versions.
 
 - **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
@@ -65,36 +65,38 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`discovery.rs`** — Walks the module tree starting from root `pom.xml`, follows `<modules>` declarations recursively. For each artifact, extracts the version — either any `${...}` property reference (skipping `${project.*}`) or a plain inline version number. Maps property references back to values in the root POM's `<properties>` (supports chained resolution up to 10 levels). Also collects `<repositories>` and `<pluginRepositories>` from all POMs, deduplicates by URL.
 
-- **`maven_central.rs`** — Unified Maven repository checker using `maven-metadata.xml`. Tries Maven Central first; if not found, queries custom repositories in parallel. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default.
+- **`maven_central.rs`** — `MavenVersionResolver`: resolves artifact versions via `maven-metadata.xml`. Tries Maven Central first; if not found, queries custom repositories in parallel. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default.
 
-- **`checker.rs`** — Orchestrates Maven checks. Wraps discovery, builds `CheckTask` variants (Maven artifact, Node.js version, package manager version), and runs them concurrently with progress reporting.
+- **`resolver.rs`** — Orchestrates Maven version resolution. Wraps discovery, builds `ResolveTask` variants (Maven artifact, Node.js version, package manager version), and runs them concurrently with progress reporting.
 
-- **`node.rs`** — Checks Node.js version properties found in Maven POMs (e.g., `version.node`) against the Node.js distribution index.
+- **`node.rs`** — `NodeResolver`: resolves Node.js version properties found in Maven POMs (e.g., `version.node`) against the Node.js distribution index.
 
 - **`pom_writer/`** — Surgical POM version updater, split into focused sub-modules:
   - **`mod.rs`** — Shared `Replacement` struct, `apply_replacements()` string splicing, `local_name()` XML helper.
   - **`properties.rs`** — `update_properties()`: replaces values in `<properties>` blocks.
   - **`inline.rs`** — `update_inline_versions()`: replaces `<version>` elements inside dependency/plugin blocks matched by `groupId:artifactId` coordinates. Includes `InlineVersionUpdate` type and predicates for artifact block detection.
 
-- **`updater.rs`** — Bridges check results to POM file writes. Filters to Maven + outdated, groups by source POM. For each POM, applies property updates then inline version updates in sequence. Both managed and unmanaged versions are updated.
+- **`updater.rs`** — Bridges version results to POM file writes. Filters to Maven + outdated, groups by source POM. For each POM, applies property updates then inline version updates in sequence. Both managed and unmanaged versions are updated.
 
-- **`pm_versions.rs`** — Checks package manager tool version properties found in Maven POMs (e.g., `version.npm`, `version.pnpm`, `version.yarn`) against the npm registry.
+- **`pm_versions.rs`** — `PmVersionsResolver`: resolves package manager tool version properties found in Maven POMs (e.g., `version.npm`, `version.pnpm`, `version.yarn`) against the npm registry.
+
+- **`tool.rs`** — `ToolVersionResolver` trait and `ToolResolverRegistry`. Extensible mechanism for resolving non-Maven version properties. Each resolver declares property name patterns it handles.
 
 ### npm Ecosystem (`src/npm/`)
 
-- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait with `list_packages()`, `outdated_packages()`, and `update_packages()` methods, shared `read_dev_dependency_names()` utility.
+- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerResolver` trait with `list_packages()`, `outdated_packages()`, and `update_packages()` methods, shared `read_dev_dependency_names()` utility.
 
-- **`checker.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `VersionResult` values.
+- **`resolver.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `VersionResult` values.
 
 - **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
 
-- **`pm_npm.rs`** — npm checker: `npm list --json` + `npm outdated --json`. Uses shared `read_dev_dependency_names()` to classify dev dependencies.
+- **`pm_npm.rs`** — npm resolver: `npm list --json` + `npm outdated --json`. Uses shared `read_dev_dependency_names()` to classify dev dependencies.
 
-- **`pm_pnpm.rs`** — pnpm checker: `pnpm list --json` + `pnpm outdated --format json`.
+- **`pm_pnpm.rs`** — pnpm resolver: `pnpm list --json` + `pnpm outdated --format json`.
 
-- **`pm_yarn.rs`** — Yarn classic checker: parses NDJSON from `yarn list --json` and `yarn outdated --json`. Uses shared `read_dev_dependency_names()`.
+- **`pm_yarn.rs`** — Yarn classic resolver: parses NDJSON from `yarn list --json` and `yarn outdated --json`. Uses shared `read_dev_dependency_names()`.
 
-- **`pm_bun.rs`** — Bun checker: reads `package.json` + `node_modules/*/package.json` for versions, `bun outdated --format json` for updates.
+- **`pm_bun.rs`** — Bun resolver: reads `package.json` + `node_modules/*/package.json` for versions, `bun outdated --format json` for updates.
 
 - **`updater.rs`** — Orchestrates npm updates by delegating to each project's package manager native update command (`npm update`, `pnpm update`, `yarn upgrade`, `bun update`).
 
@@ -125,7 +127,7 @@ These patterns are shared with the `mgt` and `wado` CLI tools:
 - **`JoinSet`** for parallel async operations (not `futures::join_all`)
 - **Command module organization** — each subcommand in `src/command/`
 - **Shell completions** via `clap_complete` with `unstable-dynamic` feature
-- **Trait-based dispatch** — `PackageManagerChecker` trait for PM-specific operations, `ToolVersionChecker` trait for Maven tool-version properties
+- **Trait-based dispatch** — `PackageManagerResolver` trait for PM-specific operations, `ToolVersionResolver` trait for Maven tool-version properties
 
 ## Known Quirks
 

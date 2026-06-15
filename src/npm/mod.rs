@@ -4,16 +4,16 @@
 //! outdated packages. Auto-detects the package manager by lock file or
 //! `packageManager` field in `package.json`.
 //!
-//! - [`PackageManagerChecker`] trait — each PM implements `list_packages()` and `outdated_packages()`.
-//! - [`checker`] module — dispatches to the detected PM and merges results into [`crate::dependency::VersionResult`]s.
+//! - [`PackageManagerResolver`] trait — each PM implements `list_packages()` and `outdated_packages()`.
+//! - [`resolver`] module — dispatches to the detected PM and resolves versions into [`crate::dependency::VersionResult`]s.
 //! - [`discovery`] module — walks the directory tree finding npm projects.
 
-pub mod checker;
 pub mod discovery;
 mod pm_bun;
 mod pm_npm;
 mod pm_pnpm;
 mod pm_yarn;
+pub mod resolver;
 pub mod updater;
 
 use std::collections::{HashMap, HashSet};
@@ -58,7 +58,7 @@ pub struct OutdatedEntry {
 /// Trait for package-manager-specific operations: listing installed packages
 /// and querying for outdated packages. Each PM implements this with its own
 /// CLI commands and JSON output format.
-pub trait PackageManagerChecker {
+pub trait PackageManagerResolver {
     /// Lists installed packages as `(name, version, is_dev)` tuples.
     async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>>;
     /// Queries for outdated packages, returning a map of package name to outdated info.
@@ -68,7 +68,7 @@ pub trait PackageManagerChecker {
 }
 
 /// Reads `devDependencies` keys from `package.json` to classify dev vs. prod deps.
-/// Used by npm and yarn checkers that don't distinguish dev deps in their `list` output.
+/// Used by npm and yarn resolvers that don't distinguish dev deps in their `list` output.
 pub(super) fn read_dev_dependency_names(dir: &Path) -> HashSet<String> {
     let Ok(content) = std::fs::read_to_string(dir.join("package.json")) else {
         return HashSet::new();

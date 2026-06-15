@@ -1,4 +1,4 @@
-//! npm ecosystem checker.
+//! Resolves npm dependency versions against their package manager registries.
 //!
 //! Dispatches to the appropriate package manager implementation, runs
 //! `list` and `outdated` commands concurrently via `tokio::try_join!`,
@@ -9,24 +9,24 @@ use std::path::Path;
 use anyhow::Result;
 
 use super::discovery::NpmProject;
-use super::{PackageManager, PackageManagerChecker, pm_bun, pm_npm, pm_pnpm, pm_yarn};
+use super::{PackageManager, PackageManagerResolver, pm_bun, pm_npm, pm_pnpm, pm_yarn};
 use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::version;
 
-/// Runs `list_packages` and `outdated_packages` concurrently for any checker.
-async fn run_checks(
-    checker: &impl PackageManagerChecker,
+/// Runs `list_packages` and `outdated_packages` concurrently for any resolver.
+async fn run_queries(
+    resolver: &impl PackageManagerResolver,
     dir: &Path,
 ) -> Result<(
     Vec<(String, String, bool)>,
     std::collections::HashMap<String, super::OutdatedEntry>,
 )> {
-    tokio::try_join!(checker.list_packages(dir), checker.outdated_packages(dir))
+    tokio::try_join!(resolver.list_packages(dir), resolver.outdated_packages(dir))
 }
 
-/// Checks a single npm project for outdated dependencies.
+/// Resolves versions for a single npm project.
 /// Dispatches to the detected package manager and merges installed + outdated data.
-pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<VersionResult>> {
+pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<VersionResult>> {
     let source = project
         .path
         .strip_prefix(root)
@@ -36,10 +36,10 @@ pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<Vers
         .to_string();
 
     let (installed, outdated) = match project.package_manager {
-        PackageManager::Npm => run_checks(&pm_npm::Npm, &project.path).await?,
-        PackageManager::Pnpm => run_checks(&pm_pnpm::Pnpm, &project.path).await?,
-        PackageManager::Yarn => run_checks(&pm_yarn::Yarn, &project.path).await?,
-        PackageManager::Bun => run_checks(&pm_bun::Bun, &project.path).await?,
+        PackageManager::Npm => run_queries(&pm_npm::Npm, &project.path).await?,
+        PackageManager::Pnpm => run_queries(&pm_pnpm::Pnpm, &project.path).await?,
+        PackageManager::Yarn => run_queries(&pm_yarn::Yarn, &project.path).await?,
+        PackageManager::Bun => run_queries(&pm_bun::Bun, &project.path).await?,
     };
 
     let mut results: Vec<VersionResult> = installed
