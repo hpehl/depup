@@ -100,4 +100,21 @@ impl PackageManagerChecker for Npm {
             })
             .collect())
     }
+
+    async fn update_packages(&self, dir: &Path) -> Result<String> {
+        let output = Command::new("npm")
+            .args(["update"])
+            .current_dir(dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .with_context(|| format!("Failed to run 'npm update' in {}", dir.display()))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("npm update failed in {}: {}", dir.display(), stderr.trim());
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
 }

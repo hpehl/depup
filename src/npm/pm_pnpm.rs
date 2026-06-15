@@ -97,4 +97,21 @@ impl PackageManagerChecker for Pnpm {
             })
             .collect())
     }
+
+    async fn update_packages(&self, dir: &Path) -> Result<String> {
+        let output = Command::new("pnpm")
+            .args(["update"])
+            .current_dir(dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .with_context(|| format!("Failed to run 'pnpm update' in {}", dir.display()))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("pnpm update failed in {}: {}", dir.display(), stderr.trim());
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
 }

@@ -14,6 +14,7 @@ mod pm_bun;
 mod pm_npm;
 mod pm_pnpm;
 mod pm_yarn;
+pub mod updater;
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -62,6 +63,8 @@ pub trait PackageManagerChecker {
     async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>>;
     /// Queries for outdated packages, returning a map of package name to outdated info.
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>>;
+    /// Runs the package manager's native update command, returning stdout.
+    async fn update_packages(&self, dir: &Path) -> Result<String>;
 }
 
 /// Reads `devDependencies` keys from `package.json` to classify dev vs. prod deps.

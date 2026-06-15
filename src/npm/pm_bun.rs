@@ -82,6 +82,23 @@ impl PackageManagerChecker for Bun {
             })
             .collect())
     }
+
+    async fn update_packages(&self, dir: &Path) -> Result<String> {
+        let output = Command::new("bun")
+            .args(["update"])
+            .current_dir(dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .with_context(|| format!("Failed to run 'bun update' in {}", dir.display()))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("bun update failed in {}: {}", dir.display(), stderr.trim());
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
 }
 
 /// Reads the installed version of a package from its `node_modules/*/package.json`.

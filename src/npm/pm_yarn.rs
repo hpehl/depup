@@ -123,6 +123,27 @@ impl PackageManagerChecker for Yarn {
         }
         Ok(result)
     }
+
+    async fn update_packages(&self, dir: &Path) -> Result<String> {
+        let output = Command::new("yarn")
+            .args(["upgrade"])
+            .current_dir(dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .with_context(|| format!("Failed to run 'yarn upgrade' in {}", dir.display()))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!(
+                "yarn upgrade failed in {}: {}",
+                dir.display(),
+                stderr.trim()
+            );
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
 }
 
 /// Parse "package@version" from yarn list tree entries
