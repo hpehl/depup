@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary)
+
 ## [0.1.0] - 2026-06-15
 
 ### Added
