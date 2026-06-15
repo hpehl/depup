@@ -36,7 +36,7 @@ impl std::fmt::Display for CheckerKind {
 }
 
 impl CheckerKind {
-    pub fn color(&self) -> console::Style {
+    pub fn color(self) -> console::Style {
         match self {
             Self::Dependency => console::Style::new().cyan(),
             Self::Plugin => console::Style::new().magenta(),
@@ -46,18 +46,15 @@ impl CheckerKind {
         }
     }
 
-    pub fn symbol(&self) -> &'static str {
+    pub fn symbol(self) -> &'static str {
         match self {
             Self::Dependency => "\u{25cf}",
             Self::Plugin => "\u{25a0}",
             Self::Node => "\u{25b2}",
-            Self::Npm => "\u{25c6}",
-            Self::Pnpm => "\u{25c6}",
+            Self::Npm | Self::Pnpm => "\u{25c6}",
         }
     }
 }
-
-use crate::progress::ProgressOutcome;
 
 #[derive(Debug, Clone)]
 pub struct CheckResult {
@@ -69,7 +66,15 @@ pub struct CheckResult {
     pub skipped: bool,
     pub error: Option<String>,
     pub artifact: Option<String>,
+    pub source: String,
     pub kind: CheckerKind,
+}
+
+pub enum Outcome<'a> {
+    UpToDate,
+    Outdated { latest: &'a str },
+    Skipped,
+    Error { message: &'a str },
 }
 
 impl CheckResult {
@@ -91,6 +96,7 @@ impl CheckResult {
             skipped: false,
             error: None,
             artifact,
+            source: String::new(),
             kind,
         }
     }
@@ -111,6 +117,7 @@ impl CheckResult {
             skipped: true,
             error: None,
             artifact,
+            source: String::new(),
             kind,
         }
     }
@@ -132,21 +139,27 @@ impl CheckResult {
             skipped: false,
             error: Some(error),
             artifact,
+            source: String::new(),
             kind,
         }
     }
 
-    pub fn outcome(&self) -> ProgressOutcome<'_> {
+    pub fn with_source(mut self, source: String) -> Self {
+        self.source = source;
+        self
+    }
+
+    pub fn outcome(&self) -> Outcome<'_> {
         if let Some(err) = &self.error {
-            ProgressOutcome::Error { message: err }
+            Outcome::Error { message: err }
         } else if self.skipped {
-            ProgressOutcome::Skipped
+            Outcome::Skipped
         } else if self.outdated {
-            ProgressOutcome::Outdated {
+            Outcome::Outdated {
                 latest: self.latest_version.as_deref().unwrap_or("?"),
             }
         } else {
-            ProgressOutcome::UpToDate
+            Outcome::UpToDate
         }
     }
 }
@@ -159,5 +172,104 @@ mod tests {
     fn ecosystem_display() {
         assert_eq!(Ecosystem::Maven.to_string(), "Maven");
         assert_eq!(Ecosystem::Pnpm.to_string(), "pnpm");
+    }
+
+    #[test]
+    fn checked_result_fields() {
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "version.junit".to_string(),
+            "5.10.0".to_string(),
+            "5.12.0".to_string(),
+            true,
+            Some("org.junit:junit".to_string()),
+        );
+        assert!(r.outdated);
+        assert!(!r.skipped);
+        assert!(r.error.is_none());
+        assert_eq!(r.latest_version.as_deref(), Some("5.12.0"));
+    }
+
+    #[test]
+    fn skipped_result_fields() {
+        let r = CheckResult::skipped(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "version.alpha".to_string(),
+            "1.0.0-alpha".to_string(),
+            None,
+        );
+        assert!(r.skipped);
+        assert!(!r.outdated);
+        assert!(r.latest_version.is_none());
+    }
+
+    #[test]
+    fn error_result_fields() {
+        let r = CheckResult::error(
+            Ecosystem::Maven,
+            CheckerKind::Plugin,
+            "version.plugin".to_string(),
+            "1.0".to_string(),
+            None,
+            "timeout".to_string(),
+        );
+        assert!(r.error.is_some());
+        assert!(!r.outdated);
+        assert!(!r.skipped);
+    }
+
+    #[test]
+    fn outcome_matches_state() {
+        let up_to_date = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".into(),
+            "1.0".into(),
+            "1.0".into(),
+            false,
+            None,
+        );
+        assert!(matches!(up_to_date.outcome(), Outcome::UpToDate));
+
+        let outdated = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".into(),
+            "1.0".into(),
+            "2.0".into(),
+            true,
+            None,
+        );
+        assert!(matches!(outdated.outcome(), Outcome::Outdated { .. }));
+
+        let skipped = CheckResult::skipped(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".into(),
+            "1.0".into(),
+            None,
+        );
+        assert!(matches!(skipped.outcome(), Outcome::Skipped));
+
+        let error = CheckResult::error(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".into(),
+            "1.0".into(),
+            None,
+            "fail".into(),
+        );
+        assert!(matches!(error.outcome(), Outcome::Error { .. }));
+    }
+
+    #[test]
+    fn checker_kind_display() {
+        assert_eq!(CheckerKind::Dependency.to_string(), "Dependency");
+        assert_eq!(CheckerKind::Plugin.to_string(), "Plugin");
+        assert_eq!(CheckerKind::Node.to_string(), "Node");
+        assert_eq!(CheckerKind::Npm.to_string(), "npm");
+        assert_eq!(CheckerKind::Pnpm.to_string(), "pnpm");
     }
 }

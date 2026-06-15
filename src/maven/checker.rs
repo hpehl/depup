@@ -2,7 +2,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
-use indicatif::MultiProgress;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
@@ -12,7 +11,6 @@ use crate::maven::node::NodeChecker;
 use crate::maven::npm::NpmChecker;
 use crate::maven::pom::ArtifactKind;
 use crate::maven::registry::MavenChecker;
-use crate::progress::{self, Progress};
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 
 enum CheckTask {
@@ -43,35 +41,20 @@ impl CheckTask {
         }
     }
 
-    fn property_name(&self) -> &str {
+    fn source_label(&self, root: &Path) -> String {
         match self {
-            Self::Maven { mapping, .. } => &mapping.property.name,
-            Self::Node { property, .. } | Self::Npm { property, .. } => &property.name,
-        }
-    }
-
-    fn current_value(&self) -> &str {
-        match self {
-            Self::Maven { mapping, .. } => &mapping.property.current_value,
-            Self::Node { property, .. } | Self::Npm { property, .. } => &property.current_value,
-        }
-    }
-
-    fn artifact_label(&self) -> String {
-        match self {
-            Self::Maven { mapping, .. } => {
-                format!("{}:{}", mapping.group_id, mapping.artifact_id)
-            }
-            Self::Node { .. } => "nodejs.org".to_string(),
-            Self::Npm { package, .. } => (*package).to_string(),
+            Self::Maven { mapping, .. } => mapping
+                .referenced_in
+                .strip_prefix(root)
+                .unwrap_or(&mapping.referenced_in)
+                .display()
+                .to_string(),
+            Self::Node { .. } | Self::Npm { .. } => "pom.xml".to_string(),
         }
     }
 }
 
-pub async fn check(root: &Path, json: bool, releases_only: bool) -> Result<Vec<CheckResult>> {
-    if !json {
-        progress::step("\u{1f50d}", "Discovering POM modules...");
-    }
+pub async fn check(root: &Path, releases_only: bool) -> Result<Vec<CheckResult>> {
     let discovery_result = discovery::discover(root)?;
 
     let maven_checker = Arc::new(MavenChecker::new(
@@ -106,47 +89,21 @@ pub async fn check(root: &Path, json: bool, releases_only: bool) -> Result<Vec<C
     }
 
     if tasks.is_empty() {
-        if !json {
-            println!("No version properties found.");
-        }
         return Ok(Vec::new());
     }
 
-    if !json {
-        progress::step(
-            "\u{2699}\u{fe0f}",
-            &format!("Checking {} properties...", tasks.len()),
-        );
-    }
-
-    let results_with_progress = check_all(tasks, json).await;
-    let results: Vec<CheckResult> = results_with_progress.into_iter().map(|(r, _)| r).collect();
+    let results = check_all(root, tasks).await;
     Ok(results)
 }
 
-async fn check_all(tasks: Vec<CheckTask>, json: bool) -> Vec<(CheckResult, Progress)> {
+async fn check_all(root: &Path, tasks: Vec<CheckTask>) -> Vec<CheckResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
-    let multi_progress = MultiProgress::new();
     let mut join_set = JoinSet::new();
 
     for task in tasks {
         let semaphore = Arc::clone(&semaphore);
         let kind = task.kind();
-        let property_name = task.property_name().to_string();
-        let current_value = task.current_value().to_string();
-        let artifact_label = task.artifact_label();
-
-        let progress = if json {
-            Progress::hidden(kind, &property_name, &artifact_label, &current_value)
-        } else {
-            Progress::join(
-                &multi_progress,
-                kind,
-                &property_name,
-                &artifact_label,
-                &current_value,
-            )
-        };
+        let source = task.source_label(root);
 
         join_set.spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
@@ -192,8 +149,7 @@ async fn check_all(tasks: Vec<CheckTask>, json: bool) -> Vec<(CheckResult, Progr
                     )
                 }),
             };
-            progress.finish(result.outcome());
-            (result, progress)
+            result.with_source(source)
         });
     }
 

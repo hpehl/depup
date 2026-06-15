@@ -41,8 +41,8 @@ async fn run() -> Result<()> {
 
     match matches.subcommand() {
         Some(("check", m)) => command::check::check(m).await,
-        Some(("update", m)) => command::update::update(m).await,
-        Some(("audit", m)) => command::audit::audit(m).await,
+        Some(("update", m)) => command::update::update(m),
+        Some(("audit", m)) => command::audit::audit(m),
         Some(("completions", m)) => command::completions::completions(m),
         _ => command::check::check(&matches).await,
     }

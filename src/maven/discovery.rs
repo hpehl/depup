@@ -17,7 +17,6 @@ pub struct ArtifactMapping {
     pub group_id: String,
     pub artifact_id: String,
     pub kind: ArtifactKind,
-    #[allow(dead_code)]
     pub referenced_in: PathBuf,
 }
 
@@ -206,7 +205,7 @@ fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
     for _ in 0..10 {
         match extract_property_reference(&current) {
             Some(prop_name) => match properties.get(&prop_name) {
-                Some(resolved) => current = resolved.clone(),
+                Some(resolved) => current.clone_from(resolved),
                 None => return current,
             },
             None => return current,

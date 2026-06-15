@@ -3,25 +3,15 @@ use std::collections::BTreeSet;
 use console::style;
 
 use crate::json::JsonResult;
-use crate::registry::{CheckResult, CheckerKind, Ecosystem};
+use crate::progress::truncate_middle_pad;
+use crate::registry::{CheckResult, CheckerKind, Ecosystem, Outcome};
+
+const ARTIFACT_WIDTH: usize = 40;
+const VERSION_WIDTH: usize = 30;
+const SOURCE_WIDTH: usize = 25;
 
 pub fn print_json(results: &[CheckResult]) {
-    let json_results: Vec<JsonResult> = results
-        .iter()
-        .map(|r| {
-            let status = status_label(r);
-            JsonResult {
-                ecosystem: r.ecosystem.to_string().to_lowercase(),
-                property: r.property_name.clone(),
-                current: r.current_version.clone(),
-                latest: r.latest_version.clone(),
-                status: status.to_string(),
-                kind: r.kind.to_string().to_lowercase(),
-                error: r.error.clone(),
-                artifact: r.artifact.clone(),
-            }
-        })
-        .collect();
+    let json_results: Vec<JsonResult> = results.iter().map(JsonResult::from).collect();
 
     println!(
         "{}",
@@ -57,18 +47,94 @@ pub fn print_results(results: &[CheckResult]) {
         if multiple {
             print_ecosystem_header(*ecosystem);
         }
-        print_summary(&group);
+        for result in &group {
+            print_result_line(result);
+        }
+        println!();
+    }
+    print_summary(results);
+}
+
+fn print_result_line(result: &CheckResult) {
+    let artifact_name = result
+        .artifact
+        .as_deref()
+        .unwrap_or(&result.property_name);
+    let artifact = truncate_middle_pad(artifact_name, ARTIFACT_WIDTH);
+    let styled_artifact = result.kind.color().apply_to(artifact);
+
+    let version_label = format_version(result);
+    let version = truncate_middle_pad(&version_label, VERSION_WIDTH);
+
+    let source = truncate_middle_pad(&result.source, SOURCE_WIDTH);
+
+    match result.outcome() {
+        Outcome::UpToDate => {
+            println!(
+                "  {} {}  {}  {}  {}",
+                style("\u{2713}").green().bold(),
+                styled_artifact,
+                style(version).white(),
+                style(source).dim(),
+                style("up-to-date").green()
+            );
+        }
+        Outcome::Outdated { latest } => {
+            println!(
+                "  {} {}  {}  {}  {}",
+                style("\u{2192}").yellow().bold(),
+                styled_artifact,
+                style(version).white(),
+                style(source).dim(),
+                style(format!("\u{2192} {latest}")).yellow()
+            );
+        }
+        Outcome::Skipped => {
+            println!(
+                "  {} {}  {}  {}  {}",
+                style("-").dim().bold(),
+                styled_artifact,
+                style(version).dim(),
+                style(source).dim(),
+                style("skipped").dim()
+            );
+        }
+        Outcome::Error { message } => {
+            println!(
+                "  {} {}  {}  {}  {}",
+                style("\u{2717}").red().bold(),
+                styled_artifact,
+                style(version).white(),
+                style(source).dim(),
+                style(message).red()
+            );
+        }
     }
 }
 
-fn print_summary(results: &[&CheckResult]) {
+fn format_version(result: &CheckResult) -> String {
+    if result.current_version.is_empty() {
+        return String::new();
+    }
+    let artifact_name = result
+        .artifact
+        .as_deref()
+        .unwrap_or(&result.property_name);
+    if result.property_name != artifact_name && !result.property_name.contains(':') {
+        format!("{} ({})", result.current_version, result.property_name)
+    } else {
+        result.current_version.clone()
+    }
+}
+
+fn print_summary(results: &[CheckResult]) {
     let total = results.len();
     let outdated = results.iter().filter(|r| r.outdated).count();
     let skipped = results.iter().filter(|r| r.skipped).count();
     let errors = results.iter().filter(|r| r.error.is_some()).count();
     let current = total - outdated - skipped - errors;
 
-    print!("{total} properties checked: ");
+    print!("{total} checked: ");
     print!("{}", style(format!("{current} current")).green());
     if outdated > 0 {
         print!(", {}", style(format!("{outdated} outdated")).yellow());
@@ -90,18 +156,6 @@ fn print_summary(results: &[&CheckResult]) {
     println!("  ({})", legend.join(", "));
 }
 
-fn status_label(result: &CheckResult) -> &'static str {
-    if result.error.is_some() {
-        "error"
-    } else if result.skipped {
-        "skipped"
-    } else if result.outdated {
-        "outdated"
-    } else {
-        "up-to-date"
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,6 +172,7 @@ mod tests {
                 skipped: false,
                 error: None,
                 artifact: Some("org.junit.jupiter:junit-jupiter".to_string()),
+                source: "pom.xml".to_string(),
                 kind: CheckerKind::Dependency,
             },
             CheckResult {
@@ -129,6 +184,7 @@ mod tests {
                 skipped: false,
                 error: None,
                 artifact: Some("react".to_string()),
+                source: "package.json".to_string(),
                 kind: CheckerKind::Pnpm,
             },
         ];
@@ -144,117 +200,144 @@ mod tests {
 
     #[test]
     fn status_label_error() {
-        let r = CheckResult {
-            ecosystem: Ecosystem::Maven,
-            property_name: "p".to_string(),
-            current_version: "1.0".to_string(),
-            latest_version: None,
-            outdated: false,
-            skipped: false,
-            error: Some("fail".to_string()),
-            artifact: None,
-            kind: CheckerKind::Dependency,
-        };
-        assert_eq!(status_label(&r), "error");
+        let r = CheckResult::error(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".to_string(),
+            "1.0".to_string(),
+            None,
+            "fail".to_string(),
+        );
+        assert_eq!(JsonResult::from(&r).status, "error");
     }
 
     #[test]
     fn status_label_outdated() {
-        let r = CheckResult {
-            ecosystem: Ecosystem::Maven,
-            property_name: "p".to_string(),
-            current_version: "1.0".to_string(),
-            latest_version: Some("2.0".to_string()),
-            outdated: true,
-            skipped: false,
-            error: None,
-            artifact: None,
-            kind: CheckerKind::Dependency,
-        };
-        assert_eq!(status_label(&r), "outdated");
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".to_string(),
+            "1.0".to_string(),
+            "2.0".to_string(),
+            true,
+            None,
+        );
+        assert_eq!(JsonResult::from(&r).status, "outdated");
     }
 
     #[test]
     fn status_label_up_to_date() {
-        let r = CheckResult {
-            ecosystem: Ecosystem::Maven,
-            property_name: "p".to_string(),
-            current_version: "1.0".to_string(),
-            latest_version: Some("1.0".to_string()),
-            outdated: false,
-            skipped: false,
-            error: None,
-            artifact: None,
-            kind: CheckerKind::Dependency,
-        };
-        assert_eq!(status_label(&r), "up-to-date");
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".to_string(),
+            "1.0".to_string(),
+            "1.0".to_string(),
+            false,
+            None,
+        );
+        assert_eq!(JsonResult::from(&r).status, "up-to-date");
     }
 
     #[test]
     fn json_output_structure() {
-        let results = vec![CheckResult {
-            ecosystem: Ecosystem::Maven,
-            property_name: "version.junit".to_string(),
-            current_version: "5.10.0".to_string(),
-            latest_version: Some("5.12.0".to_string()),
-            outdated: true,
-            skipped: false,
-            error: None,
-            artifact: Some("org.junit.jupiter:junit-jupiter".to_string()),
-            kind: CheckerKind::Dependency,
-        }];
-
-        let json_results: Vec<JsonResult> = results
-            .iter()
-            .map(|r| JsonResult {
-                ecosystem: r.ecosystem.to_string().to_lowercase(),
-                property: r.property_name.clone(),
-                current: r.current_version.clone(),
-                latest: r.latest_version.clone(),
-                status: status_label(r).to_string(),
-                kind: r.kind.to_string().to_lowercase(),
-                error: r.error.clone(),
-                artifact: r.artifact.clone(),
-            })
-            .collect();
-
-        let json_str = serde_json::to_string(&json_results).unwrap();
-        let parsed: Vec<serde_json::Value> = serde_json::from_str(&json_str).unwrap();
-        assert_eq!(parsed[0]["status"], "outdated");
-        assert_eq!(parsed[0]["kind"], "dependency");
-        assert_eq!(parsed[0]["artifact"], "org.junit.jupiter:junit-jupiter");
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "version.junit".to_string(),
+            "5.10.0".to_string(),
+            "5.12.0".to_string(),
+            true,
+            Some("org.junit.jupiter:junit-jupiter".to_string()),
+        );
+        let json_result = JsonResult::from(&r);
+        assert_eq!(json_result.status, "outdated");
+        assert_eq!(json_result.kind, "dependency");
+        assert_eq!(
+            json_result.artifact.as_deref(),
+            Some("org.junit.jupiter:junit-jupiter")
+        );
     }
 
     #[test]
     fn json_output_includes_ecosystem() {
-        let results = vec![CheckResult {
-            ecosystem: Ecosystem::Maven,
-            property_name: "version.junit".to_string(),
-            current_version: "5.10.0".to_string(),
-            latest_version: Some("5.12.0".to_string()),
-            outdated: true,
-            skipped: false,
-            error: None,
-            artifact: Some("org.junit.jupiter:junit-jupiter".to_string()),
-            kind: CheckerKind::Dependency,
-        }];
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "version.junit".to_string(),
+            "5.10.0".to_string(),
+            "5.12.0".to_string(),
+            true,
+            Some("org.junit.jupiter:junit-jupiter".to_string()),
+        );
+        let json_result = JsonResult::from(&r);
+        assert_eq!(json_result.ecosystem, "maven");
+    }
 
-        let json_results: Vec<JsonResult> = results
-            .iter()
-            .map(|r| JsonResult {
-                ecosystem: r.ecosystem.to_string().to_lowercase(),
-                property: r.property_name.clone(),
-                current: r.current_version.clone(),
-                latest: r.latest_version.clone(),
-                status: "outdated".to_string(),
-                kind: r.kind.to_string().to_lowercase(),
-                error: r.error.clone(),
-                artifact: r.artifact.clone(),
-            })
-            .collect();
+    #[test]
+    fn status_label_skipped() {
+        let r = CheckResult::skipped(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".to_string(),
+            "1.0-alpha".to_string(),
+            None,
+        );
+        assert_eq!(JsonResult::from(&r).status, "skipped");
+    }
 
-        let json_str = serde_json::to_string(&json_results).unwrap();
-        let parsed: Vec<serde_json::Value> = serde_json::from_str(&json_str).unwrap();
-        assert_eq!(parsed[0]["ecosystem"], "maven");
+    #[test]
+    fn format_version_with_property() {
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "version.junit".to_string(),
+            "5.10.0".to_string(),
+            "5.12.0".to_string(),
+            true,
+            Some("org.junit.jupiter:junit-jupiter".to_string()),
+        );
+        assert_eq!(format_version(&r), "5.10.0 (version.junit)");
+    }
+
+    #[test]
+    fn format_version_plain() {
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "com.google.guava:guava".to_string(),
+            "33.0.0-jre".to_string(),
+            "33.4.0-jre".to_string(),
+            true,
+            Some("com.google.guava:guava".to_string()),
+        );
+        assert_eq!(format_version(&r), "33.0.0-jre");
+    }
+
+    #[test]
+    fn format_version_pnpm() {
+        let r = CheckResult::checked(
+            Ecosystem::Pnpm,
+            CheckerKind::Pnpm,
+            "react".to_string(),
+            "18.2.0".to_string(),
+            "19.0.0".to_string(),
+            true,
+            Some("react".to_string()),
+        );
+        assert_eq!(format_version(&r), "18.2.0");
+    }
+
+    #[test]
+    fn format_version_empty() {
+        let r = CheckResult::error(
+            Ecosystem::Pnpm,
+            CheckerKind::Pnpm,
+            "my-app".to_string(),
+            String::new(),
+            None,
+            "pnpm not found".to_string(),
+        );
+        assert_eq!(format_version(&r), "");
     }
 }

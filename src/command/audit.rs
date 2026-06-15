@@ -4,7 +4,8 @@ use console::style;
 
 use crate::args;
 
-pub async fn audit(matches: &ArgMatches) -> Result<()> {
+#[allow(clippy::unnecessary_wraps)]
+pub fn audit(matches: &ArgMatches) -> Result<()> {
     let json = args::is_json(matches);
     if json {
         println!(
