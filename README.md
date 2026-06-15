@@ -2,7 +2,7 @@
 
 Check dependency versions across multiple ecosystems.
 
-`depup` auto-detects project ecosystems in a directory tree and checks all dependencies for newer versions. Currently supports **Maven** and **npm** (with npm, pnpm, yarn classic, and bun package managers).
+`depup` auto-detects project ecosystems in a directory tree and checks all dependencies for newer versions. It supports **Maven** and **npm** (with npm, pnpm, yarn classic, and bun package managers).
 
 ## Installation
 
@@ -48,6 +48,20 @@ depup check --outdated
 # Exclude pre-release versions (alpha, beta, RC, milestone)
 depup check --stable
 
+# Filter by ecosystem
+depup check --maven
+depup check --npm
+
+# Filter by kind
+depup check --dependencies
+depup check --plugins
+depup check --dev-deps
+depup check --tools
+
+# Filter by version property (Maven only)
+depup check --managed          # only dependencies using a version property
+depup check --unmanaged        # only dependencies with plain inline versions
+
 # Generate shell completions (auto-detects shell)
 depup completions
 
@@ -73,9 +87,13 @@ If both Maven and npm ecosystem projects are found in the target path, both are 
 
 ### Maven
 
-Scans multi-module Maven projects, discovers all `${version.*}` properties and the artifacts they control, then checks each against upstream Maven repositories. Works where Maven's `versions:display-property-updates` fails — when properties are defined in a parent POM but referenced in child POMs.
+Scans multi-module Maven projects and checks dependency versions against upstream Maven repositories. Discovers:
 
-Also detects Node.js and package manager version properties in Maven POMs (e.g., `version.node`, `version.npm`, `version.pnpm`, `version.yarn`).
+- **Property references** — any `${...}` property used as a version (e.g., `${junit.version}`, `${version.wildfly}`, `${my.lib.version}`). The only exclusion is `${project.*}` properties which are Maven built-ins.
+- **Plain inline versions** — artifacts with hardcoded version numbers (e.g., `<version>5.10.0</version>`) are also checked.
+- **Tool versions** — Node.js and package manager version properties in Maven POMs (e.g., `version.node`, `version.npm`, `version.pnpm`, `version.yarn`).
+
+Works where Maven's `versions:display-property-updates` fails — when properties are defined in a parent POM but referenced in child POMs.
 
 ### npm
 
@@ -117,8 +135,8 @@ Error codes: `POM_NOT_FOUND`, `POM_PARSE_FAILED`, `HTTP_REQUEST_FAILED`, `CLAP_P
 ### Maven
 
 1. Parses the root `pom.xml` and recursively follows `<modules>` declarations
-2. For every `<dependency>` and `<plugin>` using `${version.*}`, maps the property to its groupId and artifactId
-3. Resolves property values from the root POM's `<properties>` block
+2. For every `<dependency>` and `<plugin>`, extracts the version — either a `${...}` property reference (any name, not just `version.*`) or a plain inline version number
+3. Resolves property values from the root POM's `<properties>` block (supports chained references up to 10 levels)
 4. Queries Maven Central for the latest version of each artifact (via `maven-metadata.xml`)
 5. If not found on Maven Central, queries all `<repositories>` and `<pluginRepositories>` defined in the POMs in parallel
 6. Compares versions using Maven-aware ordering (handles `.Final`, `-SP1`, and other qualifiers)

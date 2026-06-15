@@ -1,10 +1,10 @@
 //! Maven module tree discovery and version property mapping.
 //!
 //! Walks the module tree starting from the root `pom.xml`, follows `<modules>`
-//! declarations recursively, and maps each artifact's `${version.*}` reference
-//! back to the property value in the root POM's `<properties>`.
-//! Also handles artifacts with plain (non-property) versions and collects
-//! repositories declared across all POMs.
+//! declarations recursively, and maps each artifact's version — either any
+//! `${...}` property reference or a plain inline version — back to the
+//! resolved value from the root POM's `<properties>`. Skips `${project.*}`
+//! built-ins. Also collects repositories declared across all POMs.
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;

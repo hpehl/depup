@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `depup` is a Rust CLI that checks dependency versions across multiple ecosystems. It currently supports:
 
-- **Maven** — Discovers version properties (`${version.*}`) across multi-module Maven projects and checks them against Maven Central and custom repositories.
+- **Maven** — Discovers version properties (any `${...}` reference, not just `${version.*}`) and plain inline versions across multi-module Maven projects and checks them against Maven Central and custom repositories.
 - **npm** — Discovers npm ecosystem projects in a directory tree and checks for outdated packages. Supports multiple package managers: npm, pnpm, yarn (classic), and bun. Auto-detects the package manager by lock file or `packageManager` field in `package.json`.
 
 Auto-detection picks the ecosystem based on project files (`pom.xml` → Maven, lock file or `packageManager` field → npm ecosystem).
@@ -59,7 +59,7 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 - **`pom.rs`** — Parses POM XML using quick-xml's event-based reader (not serde). This is intentional: serde can't handle `<properties>` blocks with arbitrary child element names as a `HashMap<String, String>`. Handles XML namespaces.
 
-- **`discovery.rs`** — Walks the module tree starting from root `pom.xml`, follows `<modules>` declarations recursively. For each artifact with a `${version.*}` version reference, maps it back to the property value in the root POM's `<properties>`. Also collects `<repositories>` and `<pluginRepositories>` from all POMs, deduplicates by URL.
+- **`discovery.rs`** — Walks the module tree starting from root `pom.xml`, follows `<modules>` declarations recursively. For each artifact, extracts the version — either any `${...}` property reference (skipping `${project.*}`) or a plain inline version number. Maps property references back to values in the root POM's `<properties>` (supports chained resolution up to 10 levels). Also collects `<repositories>` and `<pluginRepositories>` from all POMs, deduplicates by URL.
 
 - **`maven_central.rs`** — Unified Maven repository checker using `maven-metadata.xml`. Tries Maven Central first; if not found, queries custom repositories in parallel. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default.
 
