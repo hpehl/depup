@@ -14,10 +14,10 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::constants::MAX_CONCURRENT_REQUESTS;
+use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::maven::discovery::{self, ArtifactMapping, VersionProperty};
 use crate::maven::maven_central::MavenChecker;
 use crate::maven::tool::{ToolCheckerRegistry, ToolVersionChecker};
-use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 
 /// A single unit of work: either a Maven artifact check or a tool version check.
 enum CheckTask {

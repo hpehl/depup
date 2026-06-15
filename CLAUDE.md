@@ -31,11 +31,11 @@ cargo fmt                                 # format
 
 ## Architecture
 
-The check pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking. The update pipeline reuses the check pipeline to identify outdated dependencies, then applies updates: **Check → Filter Outdated → Update → Report**.
+The check pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking. The update pipeline reuses the check pipeline to identify outdated dependencies, then applies updates: **Check → Filter Outdated → Update → Report**. The audit pipeline reuses the check pipeline to collect dependency versions, then queries OSV.dev for known vulnerabilities: **Check → Filter → OSV Batch Query → Fetch Details → Report**.
 
 ### CLI Layer
 
-- **`app.rs`** — Defines the clap `Command` tree using the builder API (not derive macros). Subcommands: `check` (auto-detects all ecosystems), `update` (stub), `audit` (stub), `completions`. Global `--json` flag. Styled help text. Separated from `main.rs` so the completion system can build the command tree independently.
+- **`app.rs`** — Defines the clap `Command` tree using the builder API (not derive macros). Subcommands: `check`, `update`, `audit`, `completions`. Global `--json` flag. Styled help text. Separated from `main.rs` so the completion system can build the command tree independently.
 
 - **`main.rs`** — Entry point. Wires `CompleteEnv` for dynamic shell completions, dispatches subcommands (`check`, `update`, `audit`, `completions`), handles top-level error reporting with JSON error envelope support.
 
@@ -43,9 +43,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### Command Layer (`src/command/`)
 
-- **`mod.rs`** — Shared `not_implemented()` helper for stub subcommands (used by `audit`).
-
-- **`pipeline.rs`** — Shared discovery and check pipeline used by both `check` and `update`. Discovers Maven (via `pom.xml`) and npm (via lockfiles), runs all checks concurrently with `JoinSet`, returns `(Vec<VersionResult>, Vec<NpmProject>)`.
+- **`pipeline.rs`** — Shared discovery and check pipeline used by `check`, `update`, and `audit`. Contains `detect_ecosystems()` (shared ecosystem detection from filters + project files) and `run_checks()` (discovers Maven via `pom.xml` and npm via lockfiles, runs all checks concurrently with `JoinSet`, returns `(Vec<VersionResult>, Vec<NpmProject>)`).
 
 - **`check.rs`** — Orchestrates the check subcommand. Calls `pipeline::run_checks()`, applies `Filter`, outputs results as table or JSON. Exits with code 1 when outdated dependencies are found.
 
@@ -55,7 +53,9 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
   - Supports all check filters (`--managed`, `--dependencies`, `--include`, `--exclude`, etc.) plus `--dry-run`.
   - Output mirrors check: grouped by ecosystem/kind, summary line, timing, exit code 1 on errors.
 
-- **`audit.rs`** — Stub delegating to `not_implemented()`.
+- **`audit/`** — Audit subcommand module:
+  - **`mod.rs`** — Orchestrates the audit subcommand. Calls `pipeline::run_checks()` to discover dependencies with versions, filters out tool versions, queries OSV.dev via `osv::audit()`, applies severity filter, outputs results as table or JSON. Same output style as check/update: progress bar, grouped table, summary line, timing. Exit code 1 when vulnerabilities are found.
+  - **`osv.rs`** — OSV.dev API client for vulnerability auditing. Queries the batch endpoint (`POST /v1/querybatch`) with dependency coordinates and versions, fetches full vulnerability details from individual endpoints (`GET /v1/vulns/{id}`). Maps `Ecosystem::Maven` to OSV's `"Maven"` and `Ecosystem::Npm` to `"npm"`. Deduplicates queries and vuln IDs. Extracts severity from CVSS scores or ecosystem/database-specific labels. Skips tool versions.
 
 - **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
 
@@ -100,9 +100,9 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### Shared Layer
 
-- **`filter.rs`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-deps`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, and `--include`/`--exclude` glob patterns matched against artifact names (Maven `groupId:artifactId`, npm package name). Wildcards use `*` only (no regex).
+- **`filter.rs`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-deps`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, `--include`/`--exclude` glob patterns, and `--severity` (audit only). Wildcards use `*` only (no regex).
 
-- **`dependency.rs`** — Core types shared across check and update pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `VersionStatus`/`VersionResult` for the shared pipeline, `UpdateStatus`/`UpdateResult` for the update pipeline. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry. Factory methods `UpdateResult::updated()` and `UpdateResult::error()` build from a `VersionResult`.
+- **`dependency.rs`** — Core types shared across all pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `VersionStatus`/`VersionResult` for the check pipeline, `UpdateStatus`/`UpdateResult` for the update pipeline, `Severity`/`Vulnerability`/`AuditResult` for the audit pipeline. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry.
 
 - **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver.
 

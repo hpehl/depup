@@ -17,11 +17,11 @@ use tokio::time::Instant;
 
 use crate::app;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
+use crate::dependency::{Ecosystem, UpdateResult, VersionResult};
 use crate::filter::Filter;
 use crate::json::UpdateJsonResult;
 use crate::output;
 use crate::progress;
-use crate::dependency::{VersionResult, Ecosystem, UpdateResult};
 
 pub async fn update(matches: &ArgMatches) -> Result<()> {
     let path = app::path_argument(matches);
@@ -32,9 +32,7 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
     let instant = Instant::now();
     let root = path.canonicalize().unwrap_or_else(|_| path.clone());
 
-    let do_maven =
-        filter.ecosystem.is_none_or(|e| e != Ecosystem::Npm) && root.join("pom.xml").exists();
-    let do_npm = filter.ecosystem.is_none_or(|e| e != Ecosystem::Maven);
+    let (do_maven, do_npm) = super::pipeline::detect_ecosystems(&filter, &root);
 
     // Phase 1: Check for outdated dependencies
     let (check_results, npm_projects) =

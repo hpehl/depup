@@ -10,7 +10,7 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use super::{PackageManager, PackageManagerChecker, pm_bun, pm_npm, pm_pnpm, pm_yarn};
-use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
+use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::version;
 
 /// Runs `list_packages` and `outdated_packages` concurrently for any checker.
@@ -50,13 +50,7 @@ pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<Vers
             } else {
                 DependencyKind::NpmDep
             };
-            let id = Dependency::new(
-                Ecosystem::Npm,
-                kind,
-                name.clone(),
-                None,
-                source.clone(),
-            );
+            let id = Dependency::new(Ecosystem::Npm, kind, name.clone(), None, source.clone());
             if let Some(entry) = outdated.get(&id.artifact) {
                 let is_outdated = version::is_newer(&entry.current, &entry.latest);
                 VersionResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)

@@ -70,9 +70,15 @@ pub fn build_app() -> Command {
         )
 }
 
-/// Adds include/exclude arguments for artifact name filtering.
-fn include_exclude_args(cmd: Command) -> Command {
+/// Adds arguments shared by check, update, and audit: path, include/exclude,
+/// stable, managed/unmanaged, and ecosystem filters.
+fn common_filter_args(cmd: Command) -> Command {
     cmd.arg(
+        Arg::new("path")
+            .default_value(".")
+            .help("Path to the project root (auto-detects ecosystems)"),
+    )
+    .arg(
         Arg::new("include")
             .long("include")
             .action(ArgAction::Append)
@@ -83,21 +89,6 @@ fn include_exclude_args(cmd: Command) -> Command {
             .long("exclude")
             .action(ArgAction::Append)
             .help("Exclude artifacts matching a glob pattern (e.g., '*:guava', '@scope/*')"),
-    )
-}
-
-/// Adds check-specific arguments: path, filtering, and ecosystem selection flags.
-fn check_args(cmd: Command) -> Command {
-    include_exclude_args(cmd).arg(
-        Arg::new("path")
-            .default_value(".")
-            .help("Path to the project root (auto-detects ecosystems)"),
-    )
-    .arg(
-        Arg::new("outdated")
-            .long("outdated")
-            .action(ArgAction::SetTrue)
-            .help("Only show outdated dependencies"),
     )
     .arg(
         Arg::new("stable")
@@ -132,7 +123,11 @@ fn check_args(cmd: Command) -> Command {
             .action(ArgAction::SetTrue)
             .help("Only show npm ecosystem results"),
     )
-    .arg(
+}
+
+/// Kind filter arguments including --tools (used by check and update).
+fn kind_args_with_tools(cmd: Command) -> Command {
+    cmd.arg(
         Arg::new("dependencies")
             .long("dependencies")
             .action(ArgAction::SetTrue)
@@ -162,74 +157,41 @@ fn check_args(cmd: Command) -> Command {
     )
 }
 
-fn update_args(cmd: Command) -> Command {
-    include_exclude_args(cmd).arg(
-        Arg::new("path")
-            .default_value(".")
-            .help("Path to the project root (auto-detects ecosystems)"),
-    )
-    .arg(
-        Arg::new("stable")
-            .long("stable")
-            .visible_alias("releases-only")
-            .action(ArgAction::SetTrue)
-            .help("Exclude pre-release versions (alpha, beta, CR, RC, milestone)"),
-    )
-    .arg(
-        Arg::new("managed")
-            .long("managed")
-            .action(ArgAction::SetTrue)
-            .conflicts_with("unmanaged")
-            .help("Only update dependencies with a version property (Maven only)"),
-    )
-    .arg(
-        Arg::new("unmanaged")
-            .long("unmanaged")
-            .action(ArgAction::SetTrue)
-            .help("Only update dependencies without a version property (Maven only)"),
-    )
-    .arg(
-        Arg::new("maven")
-            .long("maven")
-            .action(ArgAction::SetTrue)
-            .conflicts_with("npm")
-            .help("Only update Maven ecosystem"),
-    )
-    .arg(
-        Arg::new("npm")
-            .long("npm")
-            .action(ArgAction::SetTrue)
-            .help("Only update npm ecosystem"),
-    )
-    .arg(
+/// Kind filter arguments without --tools (used by audit).
+fn kind_args_without_tools(cmd: Command) -> Command {
+    cmd.arg(
         Arg::new("dependencies")
             .long("dependencies")
             .action(ArgAction::SetTrue)
-            .conflicts_with_all(["plugins", "dev-deps", "tools"])
-            .help("Only update dependencies"),
+            .conflicts_with_all(["plugins", "dev-deps"])
+            .help("Only show dependencies"),
     )
     .arg(
         Arg::new("plugins")
             .long("plugins")
             .action(ArgAction::SetTrue)
-            .conflicts_with_all(["dev-deps", "tools"])
-            .help("Only update plugins"),
+            .conflicts_with("dev-deps")
+            .help("Only show plugins"),
     )
     .arg(
         Arg::new("dev-deps")
             .long("dev-deps")
             .action(ArgAction::SetTrue)
-            .conflicts_with("tools")
-            .help("Only update dev dependencies"),
+            .help("Only show dev dependencies"),
     )
-    .arg(
-        Arg::new("tools")
-            .long("tools")
-            .visible_alias("other")
+}
+
+fn check_args(cmd: Command) -> Command {
+    kind_args_with_tools(common_filter_args(cmd)).arg(
+        Arg::new("outdated")
+            .long("outdated")
             .action(ArgAction::SetTrue)
-            .help("Only update tool versions (Node.js, package manager versions)"),
+            .help("Only show outdated dependencies"),
     )
-    .arg(
+}
+
+fn update_args(cmd: Command) -> Command {
+    kind_args_with_tools(common_filter_args(cmd)).arg(
         Arg::new("dry-run")
             .long("dry-run")
             .action(ArgAction::SetTrue)
@@ -238,9 +200,10 @@ fn update_args(cmd: Command) -> Command {
 }
 
 fn audit_args(cmd: Command) -> Command {
-    cmd.arg(
-        Arg::new("path")
-            .default_value(".")
-            .help("Path to the project root"),
+    kind_args_without_tools(common_filter_args(cmd)).arg(
+        Arg::new("severity")
+            .long("severity")
+            .value_parser(["critical", "high", "medium", "low"])
+            .help("Only show vulnerabilities at or above this severity level"),
     )
 }

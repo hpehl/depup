@@ -577,16 +577,62 @@ fn include_filter_update_dry_run() {
 }
 
 #[test]
-fn audit_stub_returns_not_implemented_json() {
+fn audit_no_project_returns_empty_json() {
+    let dir = tempfile::TempDir::new().unwrap();
     let output = depup()
         .arg("audit")
         .arg("--json")
+        .arg(dir.path().to_str().unwrap())
         .output()
         .expect("Failed to run depup");
 
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("Invalid JSON output");
-    assert_eq!(envelope["error"]["code"], "NOT_IMPLEMENTED");
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("Invalid JSON output");
+    assert_eq!(parsed, serde_json::json!([]));
+}
+
+#[test]
+fn audit_severity_flag_accepts_valid_values() {
+    let dir = tempfile::TempDir::new().unwrap();
+    for level in &["critical", "high", "medium", "low"] {
+        let output = depup()
+            .arg("audit")
+            .arg("--severity")
+            .arg(level)
+            .arg(dir.path().to_str().unwrap())
+            .output()
+            .expect("Failed to run depup");
+        assert!(
+            output.status.success(),
+            "audit --severity {level} should succeed"
+        );
+    }
+}
+
+#[test]
+fn audit_severity_flag_rejects_invalid_value() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let output = depup()
+        .arg("audit")
+        .arg("--severity")
+        .arg("extreme")
+        .arg(dir.path().to_str().unwrap())
+        .output()
+        .expect("Failed to run depup");
+    assert!(!output.status.success());
+}
+
+#[test]
+fn audit_ecosystem_filter_conflict() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let output = depup()
+        .arg("audit")
+        .arg("--maven")
+        .arg("--npm")
+        .arg(dir.path().to_str().unwrap())
+        .output()
+        .expect("Failed to run depup");
+    assert!(!output.status.success());
 }

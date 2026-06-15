@@ -9,8 +9,10 @@ use std::collections::BTreeSet;
 
 use console::style;
 
-use crate::json::{JsonResult, UpdateJsonResult};
-use crate::dependency::{VersionResult, VersionStatus, DependencyKind, Ecosystem, UpdateResult};
+use crate::dependency::{
+    AuditResult, DependencyKind, Ecosystem, Severity, UpdateResult, VersionResult, VersionStatus,
+};
+use crate::json::{AuditJsonResult, JsonResult, UpdateJsonResult};
 
 const ARTIFACT_WIDTH: usize = 40;
 const VERSION_WIDTH: usize = 30;
@@ -42,6 +44,18 @@ fn kind_group_label(kind: DependencyKind) -> &'static str {
         DependencyKind::NpmDep => "Dependencies",
         DependencyKind::NpmDevDep => "Dev Dependencies",
     }
+}
+
+/// Prints a kind legend suffix like `  (● Dependency, ■ Plugin)` at the end of a summary line.
+fn print_kind_legend(kinds: &[DependencyKind]) {
+    let mut sorted = kinds.to_vec();
+    sorted.sort();
+    sorted.dedup();
+    let legend: Vec<String> = sorted
+        .iter()
+        .map(|k| format!("{} {k}", kind_color(*k).apply_to(kind_symbol(*k))))
+        .collect();
+    println!("  ({})", legend.join(", "));
 }
 
 /// Prints results as a JSON array to stdout.
@@ -238,14 +252,8 @@ fn print_summary(results: &[VersionResult]) {
         print!(", {}", style(format!("{errors} errors")).red());
     }
 
-    let mut kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind()).collect();
-    kinds.sort();
-    kinds.dedup();
-    let legend: Vec<String> = kinds
-        .iter()
-        .map(|k| format!("{} {k}", kind_color(*k).apply_to(kind_symbol(*k))))
-        .collect();
-    println!("  ({})", legend.join(", "));
+    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind()).collect();
+    print_kind_legend(&kinds);
 }
 
 /// Prints update results as a JSON array to stdout.
@@ -305,6 +313,144 @@ fn print_update_line(result: &UpdateResult) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Audit output
+// ---------------------------------------------------------------------------
+
+/// Prints audit results as a JSON array to stdout.
+pub fn print_audit_json(results: &[AuditResult]) {
+    let json_results: Vec<AuditJsonResult> = results.iter().map(AuditJsonResult::from).collect();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json_results).unwrap_or_else(|_| "[]".to_string())
+    );
+}
+
+/// Prints a styled audit results table, grouped by ecosystem and kind.
+pub fn print_audit_results(results: &[AuditResult]) {
+    if results.is_empty() {
+        println!("{}", style("No dependencies to show.").dim());
+        return;
+    }
+
+    print_grouped(
+        results,
+        |r| r.ecosystem,
+        |r| r.kind,
+        |r| r.artifact.as_str(),
+        print_audit_line,
+    );
+    print_audit_summary(results);
+}
+
+fn severity_style(severity: Severity) -> console::Style {
+    match severity {
+        Severity::Critical => console::Style::new().red().bold(),
+        Severity::High => console::Style::new().red(),
+        Severity::Medium => console::Style::new().yellow(),
+        Severity::Low => console::Style::new().dim(),
+        Severity::Unknown => console::Style::new().dim(),
+    }
+}
+
+fn print_audit_line(result: &AuditResult) {
+    let artifact = truncate_middle_pad(&result.artifact, ARTIFACT_WIDTH);
+    let styled_artifact = kind_color(result.kind).apply_to(artifact);
+
+    let version = truncate_middle_pad(&result.version, VERSION_WIDTH);
+    let source = truncate_middle_pad(&result.source, SOURCE_WIDTH);
+
+    if result.vulnerabilities.is_empty() {
+        println!(
+            "  {} {}  {}  {}  {}",
+            style("\u{2713}").green().bold(),
+            styled_artifact,
+            style(version).white(),
+            style(source).dim(),
+            style("no vulnerabilities").green()
+        );
+    } else {
+        let count = result.vulnerabilities.len();
+        let max_sev = result.max_severity();
+        let label = if count == 1 {
+            "vulnerability".to_string()
+        } else {
+            "vulnerabilities".to_string()
+        };
+        println!(
+            "  {} {}  {}  {}  {}",
+            style("\u{2717}").red().bold(),
+            styled_artifact,
+            style(version).white(),
+            style(source).dim(),
+            severity_style(max_sev).apply_to(format!("{count} {label}")),
+        );
+        for vuln in &result.vulnerabilities {
+            let id_and_aliases = if vuln.aliases.is_empty() {
+                vuln.id.clone()
+            } else {
+                format!("{} ({})", vuln.id, vuln.aliases.join(", "))
+            };
+            let summary = if vuln.summary.is_empty() {
+                String::new()
+            } else {
+                let truncated = truncate_middle_pad(&vuln.summary, 60);
+                format!(" {truncated}")
+            };
+            println!(
+                "      {} {}{}",
+                severity_style(vuln.severity).apply_to(format!("[{}]", vuln.severity)),
+                style(id_and_aliases).dim(),
+                style(summary).dim(),
+            );
+        }
+    }
+}
+
+fn print_audit_summary(results: &[AuditResult]) {
+    let total = results.len();
+    let vulnerable = results.iter().filter(|r| r.is_vulnerable()).count();
+    let clean = total - vulnerable;
+
+    print!("{total} audited: ");
+    print!("{}", style(format!("{clean} clean")).green());
+    if vulnerable > 0 {
+        print!(", {}", style(format!("{vulnerable} vulnerable")).red());
+
+        let all_vulns: Vec<Severity> = results
+            .iter()
+            .flat_map(|r| r.vulnerabilities.iter().map(|v| v.severity))
+            .collect();
+        let critical = all_vulns
+            .iter()
+            .filter(|s| **s == Severity::Critical)
+            .count();
+        let high = all_vulns.iter().filter(|s| **s == Severity::High).count();
+        let medium = all_vulns.iter().filter(|s| **s == Severity::Medium).count();
+        let low = all_vulns.iter().filter(|s| **s == Severity::Low).count();
+
+        let mut parts = Vec::new();
+        if critical > 0 {
+            parts.push(format!("{critical} critical"));
+        }
+        if high > 0 {
+            parts.push(format!("{high} high"));
+        }
+        if medium > 0 {
+            parts.push(format!("{medium} medium"));
+        }
+        if low > 0 {
+            parts.push(format!("{low} low"));
+        }
+        if !parts.is_empty() {
+            print!(" ({})", parts.join(", "));
+        }
+    }
+
+    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind).collect();
+    print_kind_legend(&kinds);
+}
+
 fn print_update_summary(results: &[UpdateResult]) {
     let total = results.len();
     let errors = results.iter().filter(|r| r.is_error()).count();
@@ -314,14 +460,8 @@ fn print_update_summary(results: &[UpdateResult]) {
         print!(", {}", style(format!("{errors} errors")).red());
     }
 
-    let mut kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind).collect();
-    kinds.sort();
-    kinds.dedup();
-    let legend: Vec<String> = kinds
-        .iter()
-        .map(|k| format!("{} {k}", kind_color(*k).apply_to(kind_symbol(*k))))
-        .collect();
-    println!("  ({})", legend.join(", "));
+    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind).collect();
+    print_kind_legend(&kinds);
 }
 
 #[cfg(test)]

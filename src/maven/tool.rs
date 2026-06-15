@@ -11,10 +11,10 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use crate::dependency::VersionResult;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::node::NodeChecker;
 use crate::maven::pm_versions::PmVersionsChecker;
-use crate::dependency::VersionResult;
 
 /// Trait for checking tool version properties against their respective registries.
 pub trait ToolVersionChecker: Send + Sync {

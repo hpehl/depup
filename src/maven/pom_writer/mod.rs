@@ -9,7 +9,7 @@
 mod inline;
 mod properties;
 
-pub use inline::{update_inline_versions, InlineVersionUpdate};
+pub use inline::{InlineVersionUpdate, update_inline_versions};
 pub use properties::update_properties;
 
 use crate::error::DepupError;

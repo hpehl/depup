@@ -10,10 +10,10 @@ use clap::ArgMatches;
 use tokio::time::Instant;
 
 use crate::app;
+use crate::dependency::VersionResult;
 use crate::filter::Filter;
 use crate::output;
 use crate::progress;
-use crate::dependency::{VersionResult, Ecosystem};
 
 /// Main entry point for the `check` subcommand.
 pub async fn check(matches: &ArgMatches) -> Result<()> {
@@ -24,9 +24,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     let instant = Instant::now();
     let root = path.canonicalize().unwrap_or_else(|_| path.clone());
 
-    let do_maven =
-        filter.ecosystem.is_none_or(|e| e != Ecosystem::Npm) && root.join("pom.xml").exists();
-    let do_npm = filter.ecosystem.is_none_or(|e| e != Ecosystem::Maven);
+    let (do_maven, do_npm) = super::pipeline::detect_ecosystems(&filter, &root);
 
     let (all_results, _npm_projects) =
         super::pipeline::run_checks(&root, do_maven, do_npm, filter.stable, json).await?;

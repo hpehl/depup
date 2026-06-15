@@ -7,7 +7,7 @@
 
 use clap::ArgMatches;
 
-use crate::dependency::{VersionResult, DependencyKind, Ecosystem};
+use crate::dependency::{DependencyKind, Ecosystem, Severity, VersionResult};
 
 /// Safely reads a boolean flag, returning `false` if the flag is not defined.
 fn try_get_flag(matches: &ArgMatches, name: &str) -> bool {
@@ -31,7 +31,9 @@ pub enum KindFilter {
 impl KindFilter {
     fn matches(self, kind: DependencyKind) -> bool {
         match self {
-            Self::Dependencies => matches!(kind, DependencyKind::Dependency | DependencyKind::NpmDep),
+            Self::Dependencies => {
+                matches!(kind, DependencyKind::Dependency | DependencyKind::NpmDep)
+            }
             Self::Plugins => kind == DependencyKind::Plugin,
             Self::DevDeps => kind == DependencyKind::NpmDevDep,
             Self::ToolVersions => kind == DependencyKind::ToolVersion,
@@ -88,6 +90,7 @@ pub struct Filter {
     pub kind: Option<KindFilter>,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
+    pub severity: Option<Severity>,
 }
 
 impl Filter {
@@ -124,6 +127,12 @@ impl Filter {
             None
         };
 
+        let severity = matches
+            .try_get_one::<String>("severity")
+            .ok()
+            .flatten()
+            .map(|s| Severity::from_str_label(s));
+
         let include: Vec<String> = matches
             .try_get_many::<String>("include")
             .ok()
@@ -146,6 +155,15 @@ impl Filter {
             kind,
             include,
             exclude,
+            severity,
+        }
+    }
+
+    /// Returns true if the given severity meets the minimum threshold.
+    pub fn matches_severity(&self, severity: Severity) -> bool {
+        match self.severity {
+            Some(min) => severity >= min,
+            None => true,
         }
     }
 
@@ -174,11 +192,18 @@ impl Filter {
             return false;
         }
         if !self.include.is_empty()
-            && !self.include.iter().any(|p| glob_matches(p, result.artifact()))
+            && !self
+                .include
+                .iter()
+                .any(|p| glob_matches(p, result.artifact()))
         {
             return false;
         }
-        if self.exclude.iter().any(|p| glob_matches(p, result.artifact())) {
+        if self
+            .exclude
+            .iter()
+            .any(|p| glob_matches(p, result.artifact()))
+        {
             return false;
         }
         true
@@ -279,6 +304,7 @@ mod tests {
             kind: None,
             include: Vec::new(),
             exclude: Vec::new(),
+            severity: None,
         }
     }
 

@@ -114,6 +114,44 @@ For npm, `depup update` delegates to the detected package manager's native updat
 
 The exit code is `0` when all updates succeed, `1` when any update fails.
 
+### Audit
+
+```bash
+# Audit all dependencies for known vulnerabilities
+depup audit
+
+# Audit a specific project
+depup audit /path/to/project
+
+# JSON output
+depup audit --json
+
+# Filter by minimum severity level
+depup audit --severity critical      # only critical vulnerabilities
+depup audit --severity high          # critical + high
+
+# Filter by ecosystem
+depup audit --maven
+depup audit --npm
+
+# Filter by kind
+depup audit --dependencies
+depup audit --plugins
+depup audit --dev-deps
+
+# Filter by version property (Maven only)
+depup audit --managed
+depup audit --unmanaged
+
+# Filter by artifact name (glob wildcards)
+depup audit --include 'org.wildfly:*'
+depup audit --exclude '*:guava'
+```
+
+The audit subcommand queries [OSV.dev](https://osv.dev/) for known vulnerabilities in all discovered dependencies. It works for both Maven and npm ecosystems using the same unified API. Tool versions (Node.js, package manager versions) are skipped.
+
+The exit code is `0` when no vulnerabilities are found, `1` when any are detected.
+
 ### Completions
 
 ```bash
@@ -135,7 +173,7 @@ If both Maven and npm ecosystem projects are found in the target path, both are 
 |---------|-------------|
 | `check` | Check dependencies for newer versions |
 | `update` | Update outdated dependencies in place |
-| `audit` | Audit dependencies for known vulnerabilities (not yet implemented) |
+| `audit` | Audit dependencies for known vulnerabilities via [OSV.dev](https://osv.dev/) |
 | `completions` | Generate and install shell completions |
 
 ## Ecosystems
@@ -201,6 +239,23 @@ Done in 1s
 ```
 
 The exit code is `0` when all updates succeed, `1` when any update fails.
+
+### Audit Output
+
+```
+  [2/2] ████████████████████████████████ Fetching vulnerability details...
+
+  ✓ org.wildfly:wildfly-ee                         35.0.0    pom.xml    no vulnerabilities
+  ✗ com.fasterxml.jackson.core:jackson-databind     2.15.0    pom.xml    2 vulnerabilities
+      [CRITICAL] GHSA-xxxx-yyyy (CVE-2024-1234)    Deserialization of untrusted data
+      [HIGH]     GHSA-aaaa-bbbb (CVE-2024-5678)    Server-side request forgery
+
+2 audited: 1 clean, 1 vulnerable (1 critical, 1 high)  (● Dependency)
+
+Done in 3s
+```
+
+The exit code is `0` when no vulnerabilities are found, `1` when any are detected.
 
 ## JSON Mode
 

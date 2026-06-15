@@ -15,14 +15,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--dry-run` flag to preview updates without making changes (JSON status: `would_update`)
   - Structured JSON output with `ecosystem`, `kind`, `managed`, `artifact`, `source`, `old_version`, `new_version` fields
   - Summary line, elapsed time, progress bar, and exit code 1 on errors (mirrors `check` output)
-- `--include`/`--exclude` glob filters for both `check` and `update` (e.g., `--include 'org.junit:*'`, `--exclude '*:guava'`, `--include 'react*'`)
+- `--include`/`--exclude` glob filters for `check`, `update`, and `audit` (e.g., `--include 'org.junit:*'`, `--exclude '*:guava'`, `--include 'react*'`)
+- `audit` subcommand for checking dependencies against known vulnerabilities via [OSV.dev](https://osv.dev/)
+  - Queries both Maven and npm ecosystems using the OSV batch API
+  - Fetches full vulnerability details including CVE aliases, severity (CVSS-based), summaries, and advisory URLs
+  - `--severity` filter to show only vulnerabilities at or above a threshold (critical, high, medium, low)
+  - Supports all check filters: `--maven`/`--npm`, `--dependencies`/`--plugins`/`--dev-deps`, `--managed`/`--unmanaged`, `--include`/`--exclude`
+  - Structured JSON output with vulnerability details
+  - Grouped table output with severity-colored labels, summary line, and timing
+  - Exit code 1 when vulnerabilities are found
+  - Tool versions (Node.js, package managers) are skipped
 
 ### Changed
 
-- Extract shared discovery+check pipeline into `command::pipeline` (used by both `check` and `update`)
+- Extract shared CLI argument builders (`common_filter_args`, `kind_args_with_tools`, `kind_args_without_tools`) to eliminate duplication across `check`, `update`, and `audit`
+- Extract `pipeline::detect_ecosystems()` for shared ecosystem detection logic
+- Extract `print_kind_legend()` helper to deduplicate summary output across all subcommands
+- Move OSV client into `command::audit::osv` submodule (only used by audit)
+- Restructure `command/audit.rs` into `command/audit/` module directory
+- Extract shared discovery+check pipeline into `command::pipeline` (used by `check`, `update`, and `audit`)
 - Extract shared types into `dependency.rs` (previously spread across `registry.rs` and ecosystem modules)
 - Split `pom_writer.rs` into `pom_writer/` module with `properties.rs` and `inline.rs` sub-modules
-- Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary)
+- Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary`)
+
+### Removed
+
+- Remove `not_implemented()` stub helper (all subcommands are now implemented)
 
 ## [0.1.0] - 2026-06-15
 

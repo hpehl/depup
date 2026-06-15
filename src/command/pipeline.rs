@@ -1,4 +1,4 @@
-//! Shared discovery and check pipeline used by both `check` and `update` commands.
+//! Shared discovery and check pipeline used by `check`, `update`, and `audit`.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -9,9 +9,18 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::constants::MAX_CONCURRENT_REQUESTS;
+use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::filter::Filter;
 use crate::npm::discovery::NpmProject;
 use crate::progress;
-use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
+
+/// Determines which ecosystems to discover based on filters and project files.
+pub fn detect_ecosystems(filter: &Filter, root: &Path) -> (bool, bool) {
+    let do_maven =
+        filter.ecosystem.is_none_or(|e| e != Ecosystem::Npm) && root.join("pom.xml").exists();
+    let do_npm = filter.ecosystem.is_none_or(|e| e != Ecosystem::Maven);
+    (do_maven, do_npm)
+}
 
 /// Discovers dependencies and runs checks across all ecosystems.
 ///

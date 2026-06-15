@@ -11,10 +11,10 @@ use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 
 use crate::constants::{self, MAVEN_CENTRAL_URL};
+use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::error::DepupError;
 use crate::maven::discovery::ArtifactMapping;
 use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
-use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 use crate::version::{self, Version};
 
 /// Checks Maven artifacts against Maven Central and custom repositories.

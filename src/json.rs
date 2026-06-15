@@ -5,7 +5,9 @@
 
 use serde::Serialize;
 
-use crate::dependency::{VersionResult, VersionStatus, UpdateResult, UpdateStatus};
+use crate::dependency::{
+    AuditResult, UpdateResult, UpdateStatus, VersionResult, VersionStatus, Vulnerability,
+};
 
 /// Flat JSON representation of a single dependency check result.
 #[derive(Debug, Serialize)]
@@ -83,6 +85,62 @@ impl From<&UpdateResult> for UpdateJsonResult {
             error,
             artifact: Some(r.artifact.clone()),
             source: r.source.clone(),
+        }
+    }
+}
+
+/// Flat JSON representation of a single dependency audit result.
+#[derive(Debug, Serialize)]
+pub struct AuditJsonResult {
+    pub ecosystem: String,
+    pub artifact: String,
+    pub version: String,
+    pub kind: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub source: String,
+    pub vulnerable: bool,
+    pub vulnerabilities: Vec<VulnerabilityJson>,
+}
+
+/// JSON representation of a single vulnerability.
+#[derive(Debug, Serialize)]
+pub struct VulnerabilityJson {
+    pub id: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub summary: String,
+    pub severity: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+impl From<&AuditResult> for AuditJsonResult {
+    fn from(r: &AuditResult) -> Self {
+        Self {
+            ecosystem: r.ecosystem.to_string().to_lowercase(),
+            artifact: r.artifact.clone(),
+            version: r.version.clone(),
+            kind: r.kind.to_string().to_lowercase(),
+            source: r.source.clone(),
+            vulnerable: r.is_vulnerable(),
+            vulnerabilities: r
+                .vulnerabilities
+                .iter()
+                .map(VulnerabilityJson::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<&Vulnerability> for VulnerabilityJson {
+    fn from(v: &Vulnerability) -> Self {
+        Self {
+            id: v.id.clone(),
+            aliases: v.aliases.clone(),
+            summary: v.summary.clone(),
+            severity: v.severity.to_string().to_lowercase(),
+            url: v.url.clone(),
         }
     }
 }

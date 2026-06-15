@@ -11,10 +11,10 @@ use anyhow::Result;
 use serde::Deserialize;
 
 use crate::constants::{self, NODEJS_DIST_URL};
+use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionChecker;
-use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 use crate::version;
 
 /// Property name patterns that trigger Node.js version checking.

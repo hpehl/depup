@@ -6,6 +6,7 @@
 mod app;
 mod command;
 mod constants;
+mod dependency;
 mod error;
 mod filter;
 mod json;
@@ -13,7 +14,6 @@ mod maven;
 mod npm;
 mod output;
 mod progress;
-mod dependency;
 mod version;
 
 use anyhow::Result;
@@ -50,7 +50,7 @@ async fn run() -> Result<()> {
     match matches.subcommand() {
         Some(("check", m)) => command::check::check(m).await,
         Some(("update", m)) => command::update::update(m).await,
-        Some(("audit", m)) => command::audit::audit(m),
+        Some(("audit", m)) => command::audit::audit(m).await,
         Some(("completions", m)) => command::completions::completions(m),
         _ => unreachable!("subcommand_required is set"),
     }
