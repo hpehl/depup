@@ -11,7 +11,6 @@ use crate::registry::{CheckResult, Ecosystem};
 
 /// Summary of a single property update.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct UpdateResult {
     pub property: String,
     pub old_version: String,
@@ -32,7 +31,6 @@ pub struct UpdateResult {
 /// A tuple of (updated results, skipped messages).
 /// Updated results contain property name, old/new versions, and POM path.
 /// Skipped messages describe inline versions that cannot be auto-updated.
-#[allow(dead_code)]
 pub fn apply_updates(
     root: &Path,
     results: &[CheckResult],

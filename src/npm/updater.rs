@@ -8,7 +8,6 @@ use super::{PackageManager, PackageManagerChecker, pm_bun, pm_npm, pm_pnpm, pm_y
 
 /// Summary of an npm project update.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct NpmUpdateResult {
     pub project_name: String,
     pub package_manager: PackageManager,
@@ -17,7 +16,6 @@ pub struct NpmUpdateResult {
 }
 
 /// Runs the native update command for a single npm project.
-#[allow(dead_code)]
 pub async fn update_project(project: &NpmProject, root: &Path) -> NpmUpdateResult {
     let relative = project
         .path

@@ -96,7 +96,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
 
 /// Spawns npm project checks concurrently with semaphore-based rate limiting.
 /// On failure, produces an error `CheckResult` rather than propagating the error.
-fn spawn_npm_checks(
+pub fn spawn_npm_checks(
     join_set: &mut JoinSet<Vec<CheckResult>>,
     projects: Vec<NpmProject>,
     root: &Path,

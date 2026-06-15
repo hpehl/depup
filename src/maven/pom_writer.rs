@@ -23,7 +23,6 @@ use crate::error::DepupError;
 ///
 /// # Returns
 /// The updated XML string with properties replaced, or the original if updates is empty
-#[allow(dead_code)]
 pub fn update_properties(xml: &str, updates: &HashMap<String, String>) -> Result<String> {
     if updates.is_empty() {
         return Ok(xml.to_string());

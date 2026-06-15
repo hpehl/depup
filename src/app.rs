@@ -150,7 +150,33 @@ fn update_args(cmd: Command) -> Command {
     cmd.arg(
         Arg::new("path")
             .default_value(".")
-            .help("Path to the project root"),
+            .help("Path to the project root (auto-detects ecosystems)"),
+    )
+    .arg(
+        Arg::new("stable")
+            .long("stable")
+            .visible_alias("releases-only")
+            .action(ArgAction::SetTrue)
+            .help("Exclude pre-release versions (alpha, beta, CR, RC, milestone)"),
+    )
+    .arg(
+        Arg::new("maven")
+            .long("maven")
+            .action(ArgAction::SetTrue)
+            .conflicts_with("npm")
+            .help("Only update Maven ecosystem"),
+    )
+    .arg(
+        Arg::new("npm")
+            .long("npm")
+            .action(ArgAction::SetTrue)
+            .help("Only update npm ecosystem"),
+    )
+    .arg(
+        Arg::new("dry-run")
+            .long("dry-run")
+            .action(ArgAction::SetTrue)
+            .help("Show what would be updated without making changes"),
     )
 }
 
