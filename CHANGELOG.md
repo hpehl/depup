@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `update` subcommand for updating outdated dependencies
+- Maven: format-preserving POM property updates (preserves comments, whitespace, indentation)
+- npm: delegates to native package manager update commands (npm, pnpm, yarn, bun)
+- `--dry-run` flag to preview updates without making changes
+- `--maven` / `--npm` flags to limit updates to a single ecosystem
+- `--stable` flag to only update to stable releases (reused from `check`)
+
 ### Changed
 
 - Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary)

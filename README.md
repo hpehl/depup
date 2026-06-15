@@ -32,6 +32,8 @@ This installs the `depup` binary to `~/.cargo/bin/` which should be in your `$PA
 
 ## Usage
 
+### Check
+
 ```bash
 # Check current directory (auto-detects ecosystems)
 depup check
@@ -61,7 +63,40 @@ depup check --tools
 # Filter by version property (Maven only)
 depup check --managed          # only dependencies using a version property
 depup check --unmanaged        # only dependencies with plain inline versions
+```
 
+### Update
+
+```bash
+# Update all outdated dependencies
+depup update
+
+# Update a specific project
+depup update /path/to/project
+
+# Preview what would be updated (no changes made)
+depup update --dry-run
+
+# Only update to stable releases (exclude pre-release versions)
+depup update --stable
+
+# Update only Maven dependencies
+depup update --maven
+
+# Update only npm dependencies
+depup update --npm
+
+# JSON output
+depup update --json
+```
+
+For Maven, `depup update` rewrites `<properties>` values in POM files while preserving all formatting, comments, and indentation. Only managed properties (`${...}` references) are updated — inline version numbers are reported as skipped.
+
+For npm, `depup update` delegates to the detected package manager's native update command (`npm update`, `pnpm update`, `yarn upgrade`, `bun update`).
+
+### Completions
+
+```bash
 # Generate shell completions (auto-detects shell)
 depup completions
 
@@ -78,8 +113,8 @@ If both Maven and npm ecosystem projects are found in the target path, both are 
 
 | Command | Description |
 |---------|-------------|
-| `check` | Check dependencies for newer versions (default) |
-| `update` | Update dependencies to their latest versions (not yet implemented) |
+| `check` | Check dependencies for newer versions |
+| `update` | Update outdated dependencies in place |
 | `audit` | Audit dependencies for known vulnerabilities (not yet implemented) |
 | `completions` | Generate and install shell completions |
 

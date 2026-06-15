@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-`depup` is a Rust CLI that checks dependency versions across multiple ecosystems. It currently supports:
+`depup` is a Rust CLI that checks and updates dependency versions across multiple ecosystems. It currently supports:
 
 - **Maven** — Discovers version properties (any `${...}` reference, not just `${version.*}`) and plain inline versions across multi-module Maven projects and checks them against Maven Central and custom repositories.
 - **npm** — Discovers npm ecosystem projects in a directory tree and checks for outdated packages. Supports multiple package managers: npm, pnpm, yarn (classic), and bun. Auto-detects the package manager by lock file or `packageManager` field in `package.json`.
@@ -31,7 +31,7 @@ cargo fmt                                 # format
 
 ## Architecture
 
-The pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking.
+The check pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking. The update pipeline reuses the check pipeline to identify outdated dependencies, then applies updates: **Check → Filter Outdated → Update → Report**.
 
 ### CLI Layer
 
@@ -43,15 +43,22 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 ### Command Layer (`src/command/`)
 
-- **`mod.rs`** — Shared `not_implemented()` helper for stub subcommands (used by `update` and `audit`).
+- **`mod.rs`** — Shared `not_implemented()` helper for stub subcommands (used by `audit`).
 
 - **`check.rs`** — Orchestrates check pipelines across all ecosystems:
   - `check()` — Discovers all ecosystems in the target path (Maven if `pom.xml` exists, npm if lockfile or `packageManager` field exists), runs all found, merges results.
-  - `spawn_npm_checks()` — Extracted helper that spawns npm project checks concurrently with semaphore-based rate limiting.
+  - `spawn_npm_checks()` — Public helper that spawns npm project checks concurrently with semaphore-based rate limiting. Reused by `update.rs`.
   - Both ecosystems use `tokio::task::JoinSet` for parallel checks.
   - Output: combined table or JSON across all ecosystems.
 
-- **`update.rs`** / **`audit.rs`** — Stubs delegating to `not_implemented()`.
+- **`update.rs`** — Orchestrates update pipelines across all ecosystems:
+  - Reuses the check pipeline to discover outdated dependencies.
+  - For Maven: calls `maven::updater::apply_updates()` to rewrite POM properties in place.
+  - For npm: calls `npm::updater::update_project()` for each discovered project concurrently.
+  - Supports `--dry-run`, `--maven`, `--npm`, `--stable` flags.
+  - Output: updated/skipped summary table or JSON.
+
+- **`audit.rs`** — Stub delegating to `not_implemented()`.
 
 - **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
 
@@ -67,11 +74,15 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 - **`node.rs`** — Checks Node.js version properties found in Maven POMs (e.g., `version.node`) against the Node.js distribution index.
 
+- **`pom_writer.rs`** — Surgical POM property updater. Replaces property values inside `<properties>` blocks without altering formatting, comments, or whitespace. Works at the byte level using quick-xml only to locate element boundaries, then splices new values into the original text.
+
+- **`updater.rs`** — Bridges check results to POM file writes. Filters to Maven + outdated, groups by source POM, calls `pom_writer::update_properties`, writes back. Skips unmanaged inline versions.
+
 - **`pm_versions.rs`** — Checks package manager tool version properties found in Maven POMs (e.g., `version.npm`, `version.pnpm`, `version.yarn`) against the npm registry.
 
 ### npm Ecosystem (`src/npm/`)
 
-- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait, shared `read_dev_dependency_names()` utility. Each PM implements `list_packages()` and `outdated_packages()` via the trait.
+- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait with `list_packages()`, `outdated_packages()`, and `update_packages()` methods, shared `read_dev_dependency_names()` utility.
 
 - **`checker.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `CheckResult` values.
 
@@ -84,6 +95,8 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 - **`pm_yarn.rs`** — Yarn classic checker: parses NDJSON from `yarn list --json` and `yarn outdated --json`. Uses shared `read_dev_dependency_names()`.
 
 - **`pm_bun.rs`** — Bun checker: reads `package.json` + `node_modules/*/package.json` for versions, `bun outdated --format json` for updates.
+
+- **`updater.rs`** — Orchestrates npm updates by delegating to each project's package manager native update command (`npm update`, `pnpm update`, `yarn upgrade`, `bun update`).
 
 ### Shared Layer
 
