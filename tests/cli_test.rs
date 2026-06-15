@@ -105,18 +105,116 @@ fn json_output_includes_artifact() {
 }
 
 #[test]
-fn update_stub_returns_not_implemented_json() {
+fn update_dry_run_shows_would_update() {
     let output = depup()
         .arg("update")
         .arg("--json")
+        .arg("--dry-run")
+        .arg(&fixture_dir("multi-module"))
         .output()
         .expect("Failed to run depup");
 
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("Invalid JSON output");
-    assert_eq!(envelope["error"]["code"], "NOT_IMPLEMENTED");
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert_eq!(
+            result["status"].as_str().unwrap(),
+            "would_update",
+            "Dry run should report would_update status"
+        );
+    }
+}
+
+#[test]
+fn update_maven_modifies_pom() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let fixture = fixture_dir("update-test");
+    let pom_src = fixture.join("pom.xml");
+    let pom_dst = tmp.path().join("pom.xml");
+    std::fs::copy(&pom_src, &pom_dst).unwrap();
+
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .arg(tmp.path())
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let pom_content = std::fs::read_to_string(&pom_dst).unwrap();
+    assert!(
+        !pom_content.contains("<version.junit>5.10.0</version.junit>"),
+        "POM should have been updated with a newer junit version"
+    );
+    assert!(pom_content.contains("<!-- Intentionally old versions for update testing -->"));
+    assert!(pom_content.contains("xmlns=\"http://maven.apache.org/POM/4.0.0\""));
+}
+
+#[test]
+fn update_preserves_pom_formatting() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let fixture = fixture_dir("update-test");
+    let pom_src = fixture.join("pom.xml");
+    let pom_dst = tmp.path().join("pom.xml");
+    std::fs::copy(&pom_src, &pom_dst).unwrap();
+
+    let original = std::fs::read_to_string(&pom_dst).unwrap();
+
+    let output = depup()
+        .arg("update")
+        .arg(tmp.path())
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let updated = std::fs::read_to_string(&pom_dst).unwrap();
+    assert_eq!(
+        original.lines().count(),
+        updated.lines().count(),
+        "Update should preserve POM line count"
+    );
+}
+
+#[test]
+fn update_no_project_returns_empty_json() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .arg(tmp.path())
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "[]");
+}
+
+#[test]
+fn update_maven_only_flag() {
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .arg("--dry-run")
+        .arg("--maven")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert_eq!(result["ecosystem"].as_str().unwrap(), "maven");
+    }
 }
 
 #[test]
