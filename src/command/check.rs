@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::ArgMatches;
+use indicatif::ProgressBar;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
@@ -23,13 +24,19 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
 
     let has_maven = root.join("pom.xml").exists();
 
-    if !json {
-        progress::step("\u{1f50d}", "Discovering dependencies...");
-    }
-
+    // Discovery phase
+    let maven_prepared = if has_maven {
+        Some(crate::maven::checker::discover(&root, releases_only)?)
+    } else {
+        None
+    };
     let pnpm_projects = crate::pnpm::discovery::discover(&root);
 
-    if !has_maven && pnpm_projects.is_empty() {
+    let maven_count = maven_prepared.as_ref().map_or(0, |p| p.count());
+    let pnpm_count = pnpm_projects.len();
+    let total = maven_count + pnpm_count;
+
+    if total == 0 {
         if json {
             println!("[]");
         } else {
@@ -38,18 +45,20 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         return Ok(());
     }
 
-    if !json {
-        progress::step("\u{2699}\u{fe0f}", "Checking...");
-    }
+    // Check phase with progress bar
+    let bar = if json {
+        ProgressBar::hidden()
+    } else {
+        progress::bar(total as u64)
+    };
 
     let mut join_set: JoinSet<Vec<CheckResult>> = JoinSet::new();
 
-    if has_maven {
+    if let Some(prepared) = maven_prepared {
         let root = root.clone();
+        let bar = bar.clone();
         join_set.spawn(async move {
-            crate::maven::checker::check(&root, releases_only)
-                .await
-                .unwrap_or_default()
+            crate::maven::checker::check(&root, prepared, &bar).await
         });
     }
 
@@ -60,9 +69,11 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
             let project_path = project.path.clone();
             let project_name = project.name.clone();
             let root = root.clone();
+            let bar = bar.clone();
             join_set.spawn(async move {
                 let _permit = semaphore.acquire().await.unwrap();
-                crate::pnpm::check_project(&project_path, &root)
+                bar.set_message(project_name.clone());
+                let results = crate::pnpm::check_project(&project_path, &root)
                     .await
                     .unwrap_or_else(|e| {
                         let source = project_path
@@ -80,7 +91,9 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
                             e.to_string(),
                         )
                         .with_source(source)]
-                    })
+                    });
+                bar.inc(1);
+                results
             });
         }
     }
@@ -90,6 +103,8 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     for batch in results {
         all_results.extend(batch);
     }
+
+    bar.finish_and_clear();
 
     let filtered: Vec<CheckResult> = if outdated {
         all_results.into_iter().filter(|r| r.outdated).collect()

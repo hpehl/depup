@@ -1,9 +1,16 @@
 use console::style;
-use indicatif::HumanDuration;
+use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
 use tokio::time::Instant;
 
-pub fn step(emoji: &str, message: &str) {
-    println!("{emoji} {message}");
+pub fn bar(total: u64) -> ProgressBar {
+    let bar = ProgressBar::new(total);
+    bar.set_style(
+        ProgressStyle::default_bar()
+            .template("  [{pos}/{len}] {bar:30} {msg}")
+            .expect("Invalid bar template")
+            .progress_chars("\u{2588}\u{2592}\u{2591}"),
+    );
+    bar
 }
 
 pub fn done(instant: Instant) {

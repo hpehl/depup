@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
+use indicatif::ProgressBar;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
@@ -41,6 +42,16 @@ impl CheckTask {
         }
     }
 
+    fn label(&self) -> String {
+        match self {
+            Self::Maven { mapping, .. } => {
+                format!("{}:{}", mapping.group_id, mapping.artifact_id)
+            }
+            Self::Node { .. } => "nodejs.org".to_string(),
+            Self::Npm { package, .. } => (*package).to_string(),
+        }
+    }
+
     fn source_label(&self, root: &Path) -> String {
         match self {
             Self::Maven { mapping, .. } => mapping
@@ -54,7 +65,17 @@ impl CheckTask {
     }
 }
 
-pub async fn check(root: &Path, releases_only: bool) -> Result<Vec<CheckResult>> {
+pub struct PreparedChecks {
+    tasks: Vec<CheckTask>,
+}
+
+impl PreparedChecks {
+    pub fn count(&self) -> usize {
+        self.tasks.len()
+    }
+}
+
+pub fn discover(root: &Path, releases_only: bool) -> Result<PreparedChecks> {
     let discovery_result = discovery::discover(root)?;
 
     let maven_checker = Arc::new(MavenChecker::new(
@@ -88,25 +109,23 @@ pub async fn check(root: &Path, releases_only: bool) -> Result<Vec<CheckResult>>
         }
     }
 
-    if tasks.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let results = check_all(root, tasks).await;
-    Ok(results)
+    Ok(PreparedChecks { tasks })
 }
 
-async fn check_all(root: &Path, tasks: Vec<CheckTask>) -> Vec<CheckResult> {
+pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> Vec<CheckResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let mut join_set = JoinSet::new();
 
-    for task in tasks {
+    for task in prepared.tasks {
         let semaphore = Arc::clone(&semaphore);
         let kind = task.kind();
+        let label = task.label();
         let source = task.source_label(root);
+        let bar = bar.clone();
 
         join_set.spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
+            bar.set_message(label);
             let result = match task {
                 CheckTask::Maven {
                     ref mapping,
@@ -149,6 +168,7 @@ async fn check_all(root: &Path, tasks: Vec<CheckTask>) -> Vec<CheckResult> {
                     )
                 }),
             };
+            bar.inc(1);
             result.with_source(source)
         });
     }
