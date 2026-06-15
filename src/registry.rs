@@ -209,6 +209,70 @@ impl CheckResult {
     }
 }
 
+/// The outcome of updating a dependency version.
+#[derive(Debug, Clone)]
+pub enum UpdateStatus {
+    Updated,
+    Error { message: String },
+}
+
+/// Result of updating a single dependency.
+#[derive(Debug, Clone)]
+pub struct UpdateResult {
+    pub ecosystem: Ecosystem,
+    pub kind: CheckerKind,
+    pub property_name: String,
+    pub artifact: Option<String>,
+    pub source: String,
+    pub has_version_property: bool,
+    pub old_version: String,
+    pub new_version: String,
+    pub status: UpdateStatus,
+}
+
+impl UpdateResult {
+    pub fn updated(check: &CheckResult, new_version: String) -> Self {
+        Self {
+            ecosystem: check.ecosystem(),
+            kind: check.kind(),
+            property_name: check.property_name().to_string(),
+            artifact: check.artifact().map(ToString::to_string),
+            source: check.source().to_string(),
+            has_version_property: check.has_version_property(),
+            old_version: check.current_version.clone(),
+            new_version,
+            status: UpdateStatus::Updated,
+        }
+    }
+
+    pub fn error(check: &CheckResult, message: String) -> Self {
+        let new_version = check.latest_version().unwrap_or("").to_string();
+        Self {
+            ecosystem: check.ecosystem(),
+            kind: check.kind(),
+            property_name: check.property_name().to_string(),
+            artifact: check.artifact().map(ToString::to_string),
+            source: check.source().to_string(),
+            has_version_property: check.has_version_property(),
+            old_version: check.current_version.clone(),
+            new_version,
+            status: UpdateStatus::Error { message },
+        }
+    }
+
+    pub fn is_error(&self) -> bool {
+        matches!(self.status, UpdateStatus::Error { .. })
+    }
+
+    #[cfg(test)]
+    pub fn error_message(&self) -> Option<&str> {
+        match &self.status {
+            UpdateStatus::Error { message } => Some(message),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +407,23 @@ mod tests {
     fn check_id_with_version_property_false() {
         let id = dep_id().with_version_property(false);
         assert!(!id.has_version_property);
+    }
+
+    #[test]
+    fn update_result_from_check_result() {
+        let check = CheckResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
+        let update = UpdateResult::updated(&check, "5.12.0".into());
+        assert_eq!(update.ecosystem, Ecosystem::Maven);
+        assert_eq!(update.old_version, "5.10.0");
+        assert_eq!(update.new_version, "5.12.0");
+        assert!(!update.is_error());
+    }
+
+    #[test]
+    fn update_result_error() {
+        let check = CheckResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
+        let update = UpdateResult::error(&check, "write failed".into());
+        assert!(update.is_error());
+        assert_eq!(update.error_message(), Some("write failed"));
     }
 }

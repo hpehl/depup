@@ -160,6 +160,19 @@ fn update_args(cmd: Command) -> Command {
             .help("Exclude pre-release versions (alpha, beta, CR, RC, milestone)"),
     )
     .arg(
+        Arg::new("managed")
+            .long("managed")
+            .action(ArgAction::SetTrue)
+            .conflicts_with("unmanaged")
+            .help("Only update dependencies with a version property (Maven only)"),
+    )
+    .arg(
+        Arg::new("unmanaged")
+            .long("unmanaged")
+            .action(ArgAction::SetTrue)
+            .help("Only update dependencies without a version property (Maven only)"),
+    )
+    .arg(
         Arg::new("maven")
             .long("maven")
             .action(ArgAction::SetTrue)
@@ -171,6 +184,34 @@ fn update_args(cmd: Command) -> Command {
             .long("npm")
             .action(ArgAction::SetTrue)
             .help("Only update npm ecosystem"),
+    )
+    .arg(
+        Arg::new("dependencies")
+            .long("dependencies")
+            .action(ArgAction::SetTrue)
+            .conflicts_with_all(["plugins", "dev-deps", "tools"])
+            .help("Only update dependencies"),
+    )
+    .arg(
+        Arg::new("plugins")
+            .long("plugins")
+            .action(ArgAction::SetTrue)
+            .conflicts_with_all(["dev-deps", "tools"])
+            .help("Only update plugins"),
+    )
+    .arg(
+        Arg::new("dev-deps")
+            .long("dev-deps")
+            .action(ArgAction::SetTrue)
+            .conflicts_with("tools")
+            .help("Only update dev dependencies"),
+    )
+    .arg(
+        Arg::new("tools")
+            .long("tools")
+            .visible_alias("other")
+            .action(ArgAction::SetTrue)
+            .help("Only update tool versions (Node.js, package manager versions)"),
     )
     .arg(
         Arg::new("dry-run")

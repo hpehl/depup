@@ -9,8 +9,8 @@ use std::collections::BTreeSet;
 
 use console::style;
 
-use crate::json::JsonResult;
-use crate::registry::{CheckResult, CheckStatus, CheckerKind, Ecosystem};
+use crate::json::{JsonResult, UpdateJsonResult};
+use crate::registry::{CheckResult, CheckStatus, CheckerKind, Ecosystem, UpdateResult};
 
 const ARTIFACT_WIDTH: usize = 40;
 const VERSION_WIDTH: usize = 30;
@@ -197,6 +197,119 @@ fn print_summary(results: &[CheckResult]) {
     }
 
     let mut kinds: Vec<CheckerKind> = results.iter().map(|r| r.kind()).collect();
+    kinds.sort();
+    kinds.dedup();
+    let legend: Vec<String> = kinds
+        .iter()
+        .map(|k| format!("{} {k}", k.color().apply_to(k.symbol())))
+        .collect();
+    println!("  ({})", legend.join(", "));
+}
+
+/// Prints update results as a JSON array to stdout.
+pub fn print_update_json(results: &[UpdateJsonResult]) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".to_string())
+    );
+}
+
+/// Prints a styled update results table, grouped by ecosystem and kind.
+pub fn print_update_results(results: &[UpdateResult]) {
+    if results.is_empty() {
+        return;
+    }
+
+    let ecosystems: Vec<Ecosystem> = results
+        .iter()
+        .map(|r| r.ecosystem)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+
+    let multiple_ecosystems = ecosystems.len() > 1;
+    for ecosystem in &ecosystems {
+        let mut group: Vec<&UpdateResult> = results
+            .iter()
+            .filter(|r| r.ecosystem == *ecosystem)
+            .collect();
+        group.sort_by(|a, b| {
+            a.kind.cmp(&b.kind).then_with(|| {
+                let a_name = a.artifact.as_deref().unwrap_or(&a.property_name);
+                let b_name = b.artifact.as_deref().unwrap_or(&b.property_name);
+                a_name.cmp(b_name)
+            })
+        });
+
+        if multiple_ecosystems {
+            print_ecosystem_header(*ecosystem);
+        }
+
+        let kinds: Vec<CheckerKind> = group
+            .iter()
+            .map(|r| r.kind)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let multiple_kinds = kinds.len() > 1;
+
+        for kind in &kinds {
+            if multiple_kinds {
+                println!("  {}", style(kind.group_label()).dim().bold());
+            }
+            for result in group.iter().filter(|r| r.kind == *kind) {
+                print_update_line(result);
+            }
+        }
+        println!();
+    }
+    print_update_summary(results);
+}
+
+fn print_update_line(result: &UpdateResult) {
+    let artifact_name = result.artifact.as_deref().unwrap_or(&result.property_name);
+    let artifact = truncate_middle_pad(artifact_name, ARTIFACT_WIDTH);
+    let styled_artifact = result.kind.color().apply_to(artifact);
+
+    let version_label = format!("{} \u{2192} {}", result.old_version, result.new_version);
+    let version = truncate_middle_pad(&version_label, VERSION_WIDTH);
+
+    let source = truncate_middle_pad(&result.source, SOURCE_WIDTH);
+
+    match &result.status {
+        crate::registry::UpdateStatus::Updated => {
+            println!(
+                "  {} {}  {}  {}  {}",
+                style("\u{2713}").green().bold(),
+                styled_artifact,
+                style(version).white(),
+                style(source).dim(),
+                style("updated").green()
+            );
+        }
+        crate::registry::UpdateStatus::Error { message } => {
+            println!(
+                "  {} {}  {}  {}  {}",
+                style("\u{2717}").red().bold(),
+                styled_artifact,
+                style(version).white(),
+                style(source).dim(),
+                style(message).red()
+            );
+        }
+    }
+}
+
+fn print_update_summary(results: &[UpdateResult]) {
+    let total = results.len();
+    let errors = results.iter().filter(|r| r.is_error()).count();
+
+    print!("{total} updated");
+    if errors > 0 {
+        print!(", {}", style(format!("{errors} errors")).red());
+    }
+
+    let mut kinds: Vec<CheckerKind> = results.iter().map(|r| r.kind).collect();
     kinds.sort();
     kinds.dedup();
     let legend: Vec<String> = kinds

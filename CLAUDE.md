@@ -45,18 +45,15 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`mod.rs`** — Shared `not_implemented()` helper for stub subcommands (used by `audit`).
 
-- **`check.rs`** — Orchestrates check pipelines across all ecosystems:
-  - `check()` — Discovers all ecosystems in the target path (Maven if `pom.xml` exists, npm if lockfile or `packageManager` field exists), runs all found, merges results.
-  - `spawn_npm_checks()` — Public helper that spawns npm project checks concurrently with semaphore-based rate limiting. Reused by `update.rs`.
-  - Both ecosystems use `tokio::task::JoinSet` for parallel checks.
-  - Output: combined table or JSON across all ecosystems.
+- **`pipeline.rs`** — Shared discovery and check pipeline used by both `check` and `update`. Discovers Maven (via `pom.xml`) and npm (via lockfiles), runs all checks concurrently with `JoinSet`, returns `(Vec<CheckResult>, Vec<NpmProject>)`.
 
-- **`update.rs`** — Orchestrates update pipelines across all ecosystems:
-  - Reuses the check pipeline to discover outdated dependencies.
-  - For Maven: calls `maven::updater::apply_updates()` to rewrite POM properties in place.
-  - For npm: calls `npm::updater::update_project()` for each discovered project concurrently.
-  - Supports `--dry-run`, `--maven`, `--npm`, `--stable` flags.
-  - Output: updated/skipped summary table or JSON.
+- **`check.rs`** — Orchestrates the check subcommand. Calls `pipeline::run_checks()`, applies `Filter`, outputs results as table or JSON. Exits with code 1 when outdated dependencies are found.
+
+- **`update.rs`** — Orchestrates the update subcommand. Calls `pipeline::run_checks()`, applies `Filter` to select which outdated deps to update, then:
+  - Maven: calls `maven::updater::apply_updates()` to rewrite POM files in place.
+  - npm: calls `npm::updater::update_project()` for each project with outdated deps.
+  - Supports all check filters (`--managed`, `--dependencies`, etc.) plus `--dry-run`.
+  - Output mirrors check: grouped by ecosystem/kind, summary line, timing, exit code 1 on errors.
 
 - **`audit.rs`** — Stub delegating to `not_implemented()`.
 
@@ -100,7 +97,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### Shared Layer
 
-- **`registry.rs`** — Core types: `Ecosystem` enum (Maven, Npm), `CheckerKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `CheckId` struct (groups identity fields: ecosystem, kind, property name, artifact, source, has_version_property), `CheckStatus` enum (UpToDate, Outdated, Skipped, Error), and `CheckResult` struct combining `CheckId`, current version, and `CheckStatus`. Factory methods: `checked()`, `skipped()`, `error()`. Accessor methods for all fields.
+- **`registry.rs`** — Core types shared across check and update pipelines. `Ecosystem` enum (Maven, Npm), `CheckerKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `CheckId`/`CheckStatus`/`CheckResult` for check pipeline, `UpdateStatus`/`UpdateResult` for update pipeline. `UpdateResult` carries the same identity fields as `CheckResult` (ecosystem, kind, property name, artifact, source) plus old/new versions and update status. Factory methods `UpdateResult::updated()` and `UpdateResult::error()` build from a `CheckResult`.
 
 - **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver.
 

@@ -5,30 +5,15 @@ use std::path::Path;
 
 use super::discovery::NpmProject;
 use super::{PackageManager, PackageManagerChecker, pm_bun, pm_npm, pm_pnpm, pm_yarn};
+use crate::registry::{CheckResult, UpdateResult};
 
-/// Summary of an npm project update.
-#[derive(Debug)]
-pub struct NpmUpdateResult {
-    pub project_name: String,
-    pub package_manager: PackageManager,
-    pub success: bool,
-    pub message: String,
-}
-
-/// Runs the native update command for a single npm project.
-pub async fn update_project(project: &NpmProject, root: &Path) -> NpmUpdateResult {
-    let relative = project
-        .path
-        .strip_prefix(root)
-        .unwrap_or(&project.path)
-        .display()
-        .to_string();
-    let display_name = if relative.is_empty() {
-        project.name.clone()
-    } else {
-        relative
-    };
-
+/// Runs the native update command for a single npm project and maps the
+/// outcome back to one `UpdateResult` per outdated dependency.
+pub async fn update_project(
+    project: &NpmProject,
+    _root: &Path,
+    outdated: &[CheckResult],
+) -> Vec<UpdateResult> {
     let result = match project.package_manager {
         PackageManager::Npm => pm_npm::Npm.update_packages(&project.path).await,
         PackageManager::Pnpm => pm_pnpm::Pnpm.update_packages(&project.path).await,
@@ -37,17 +22,13 @@ pub async fn update_project(project: &NpmProject, root: &Path) -> NpmUpdateResul
     };
 
     match result {
-        Ok(output) => NpmUpdateResult {
-            project_name: display_name,
-            package_manager: project.package_manager,
-            success: true,
-            message: output,
-        },
-        Err(e) => NpmUpdateResult {
-            project_name: display_name,
-            package_manager: project.package_manager,
-            success: false,
-            message: e.to_string(),
-        },
+        Ok(_) => outdated
+            .iter()
+            .map(|r| UpdateResult::updated(r, r.latest_version().unwrap_or("").to_string()))
+            .collect(),
+        Err(e) => outdated
+            .iter()
+            .map(|r| UpdateResult::error(r, e.to_string()))
+            .collect(),
     }
 }

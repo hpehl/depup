@@ -1,27 +1,19 @@
 //! Orchestrates check pipelines across all ecosystems.
 //!
 //! Auto-detects Maven (via `pom.xml`) and npm (via lockfiles or `packageManager` field),
-//! runs all discovered checks concurrently using `JoinSet`, applies CLI filters,
+//! runs all discovered checks concurrently via the shared pipeline, applies CLI filters,
 //! and outputs results as a table or JSON. Exits with code 1 if any outdated
 //! dependencies are found.
 
-use std::path::Path;
-use std::sync::Arc;
-
 use anyhow::Result;
 use clap::ArgMatches;
-use indicatif::ProgressBar;
-use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
 use tokio::time::Instant;
 
 use crate::app;
-use crate::constants::MAX_CONCURRENT_REQUESTS;
 use crate::filter::Filter;
-use crate::npm::discovery::NpmProject;
 use crate::output;
 use crate::progress;
-use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
+use crate::registry::{CheckResult, Ecosystem};
 
 /// Main entry point for the `check` subcommand.
 pub async fn check(matches: &ArgMatches) -> Result<()> {
@@ -32,20 +24,14 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     let instant = Instant::now();
     let root = path.canonicalize().unwrap_or_else(|_| path.clone());
 
-    let has_maven = root.join("pom.xml").exists();
+    let do_maven =
+        filter.ecosystem.is_none_or(|e| e != Ecosystem::Npm) && root.join("pom.xml").exists();
+    let do_npm = filter.ecosystem.is_none_or(|e| e != Ecosystem::Maven);
 
-    let maven_prepared = if has_maven {
-        Some(crate::maven::checker::discover(&root, filter.stable)?)
-    } else {
-        None
-    };
-    let npm_projects = crate::npm::discovery::discover(&root);
+    let (all_results, _npm_projects) =
+        super::pipeline::run_checks(&root, do_maven, do_npm, filter.stable, json).await?;
 
-    let maven_count = maven_prepared.as_ref().map_or(0, |p| p.count());
-    let npm_count = npm_projects.len();
-    let total = maven_count + npm_count;
-
-    if total == 0 {
+    if all_results.is_empty() {
         if json {
             println!("[]");
         } else {
@@ -53,26 +39,6 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         }
         return Ok(());
     }
-
-    let bar = if json {
-        ProgressBar::hidden()
-    } else {
-        progress::bar(total as u64)
-    };
-
-    let mut join_set: JoinSet<Vec<CheckResult>> = JoinSet::new();
-
-    if let Some(prepared) = maven_prepared {
-        let root = root.clone();
-        let bar = bar.clone();
-        join_set.spawn(async move { crate::maven::checker::check(&root, prepared, &bar).await });
-    }
-
-    spawn_npm_checks(&mut join_set, npm_projects, &root, &bar);
-
-    let all_results: Vec<CheckResult> = join_set.join_all().await.into_iter().flatten().collect();
-
-    bar.finish_and_clear();
 
     let filtered: Vec<CheckResult> = all_results
         .into_iter()
@@ -92,50 +58,4 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Spawns npm project checks concurrently with semaphore-based rate limiting.
-/// On failure, produces an error `CheckResult` rather than propagating the error.
-pub fn spawn_npm_checks(
-    join_set: &mut JoinSet<Vec<CheckResult>>,
-    projects: Vec<NpmProject>,
-    root: &Path,
-    bar: &ProgressBar,
-) {
-    if projects.is_empty() {
-        return;
-    }
-
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
-    for project in projects {
-        let semaphore = Arc::clone(&semaphore);
-        let root = root.to_path_buf();
-        let bar = bar.clone();
-        join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
-            bar.set_message(format!("{} ({})", project.name, project.package_manager));
-            let project_name = project.name.clone();
-            let project_path = project.path.clone();
-            let results = crate::npm::checker::check_project(&project, &root)
-                .await
-                .unwrap_or_else(|e| {
-                    let source = project_path
-                        .strip_prefix(&root)
-                        .unwrap_or(&project_path)
-                        .join("package.json")
-                        .display()
-                        .to_string();
-                    let id = CheckId::new(
-                        Ecosystem::Npm,
-                        CheckerKind::NpmDep,
-                        project_name,
-                        None,
-                        source,
-                    );
-                    vec![CheckResult::error(id, String::new(), e.to_string())]
-                });
-            bar.inc(1);
-            results
-        });
-    }
 }

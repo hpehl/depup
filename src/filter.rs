@@ -7,6 +7,16 @@ use clap::ArgMatches;
 
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
 
+/// Safely reads a boolean flag, returning `false` if the flag is not defined.
+fn try_get_flag(matches: &ArgMatches, name: &str) -> bool {
+    matches
+        .try_get_one::<bool>(name)
+        .ok()
+        .flatten()
+        .copied()
+        .unwrap_or(false)
+}
+
 /// Which dependency kind(s) to include in the output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KindFilter {
@@ -42,38 +52,41 @@ pub struct Filter {
 
 impl Filter {
     /// Constructs a filter from the parsed CLI arguments.
+    ///
+    /// Safely handles flags that may not be defined for all subcommands
+    /// (e.g., `outdated` is only on `check`, not `update`).
     pub fn from_matches(matches: &ArgMatches) -> Self {
-        let managed = if matches.get_flag("managed") {
+        let managed = if try_get_flag(matches, "managed") {
             Some(true)
-        } else if matches.get_flag("unmanaged") {
+        } else if try_get_flag(matches, "unmanaged") {
             Some(false)
         } else {
             None
         };
 
-        let ecosystem = if matches.get_flag("maven") {
+        let ecosystem = if try_get_flag(matches, "maven") {
             Some(Ecosystem::Maven)
-        } else if matches.get_flag("npm") {
+        } else if try_get_flag(matches, "npm") {
             Some(Ecosystem::Npm)
         } else {
             None
         };
 
-        let kind = if matches.get_flag("dependencies") {
+        let kind = if try_get_flag(matches, "dependencies") {
             Some(KindFilter::Dependencies)
-        } else if matches.get_flag("plugins") {
+        } else if try_get_flag(matches, "plugins") {
             Some(KindFilter::Plugins)
-        } else if matches.get_flag("dev-deps") {
+        } else if try_get_flag(matches, "dev-deps") {
             Some(KindFilter::DevDeps)
-        } else if matches.get_flag("tools") {
+        } else if try_get_flag(matches, "tools") {
             Some(KindFilter::ToolVersions)
         } else {
             None
         };
 
         Self {
-            outdated: matches.get_flag("outdated"),
-            stable: matches.get_flag("stable"),
+            outdated: try_get_flag(matches, "outdated"),
+            stable: try_get_flag(matches, "stable"),
             managed,
             ecosystem,
             kind,

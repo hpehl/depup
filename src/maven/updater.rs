@@ -2,21 +2,12 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 
 use crate::maven::pom_writer::{self, InlineVersionUpdate};
-use crate::registry::{CheckResult, Ecosystem};
-
-/// Summary of a single property update.
-#[derive(Debug, Clone)]
-pub struct UpdateResult {
-    pub property: String,
-    pub old_version: String,
-    pub new_version: String,
-    pub pom_path: PathBuf,
-}
+use crate::registry::{CheckResult, UpdateResult};
 
 /// Applies updates to POM files for all outdated Maven check results.
 ///
@@ -25,69 +16,41 @@ pub struct UpdateResult {
 ///
 /// # Arguments
 /// * `root` - Root directory of the Maven project
-/// * `results` - All check results from discovery and checking
+/// * `outdated` - Pre-filtered outdated Maven check results
 ///
 /// # Returns
-/// A tuple of (updated results, skipped messages).
-/// Updated results contain property/artifact name, old/new versions, and POM path.
-/// Skipped is returned empty for API compatibility but is no longer used.
-pub fn apply_updates(
-    root: &Path,
-    results: &[CheckResult],
-) -> Result<(Vec<UpdateResult>, Vec<String>)> {
-    let mut updated_results = Vec::new();
-
-    // Filter to only Maven + Outdated results
-    let maven_outdated: Vec<&CheckResult> = results
-        .iter()
-        .filter(|r| r.ecosystem() == Ecosystem::Maven && r.is_outdated())
-        .collect();
+/// A vector of `UpdateResult` entries — one per updated dependency.
+pub fn apply_updates(root: &Path, outdated: &[CheckResult]) -> Result<Vec<UpdateResult>> {
+    let mut update_results = Vec::new();
 
     // Group ALL updates (managed + inline) by POM path
-    struct PomUpdates {
-        properties: HashMap<String, (String, String)>, // property_name -> (old, new)
-        inline: Vec<(String, String, String, String)>, // (groupId, artifactId, old, new)
+    struct PomUpdates<'a> {
+        properties: HashMap<String, &'a CheckResult>,
+        inline: Vec<&'a CheckResult>,
     }
 
-    let mut updates_by_pom: HashMap<PathBuf, PomUpdates> = HashMap::new();
+    let mut updates_by_pom: HashMap<String, PomUpdates> = HashMap::new();
 
-    for result in maven_outdated {
-        let pom_path = root.join(result.source());
-        let new_version = result
-            .latest_version()
-            .expect("outdated result must have latest version")
-            .to_string();
+    for result in outdated {
+        let source = result.source().to_string();
 
-        let entry = updates_by_pom
-            .entry(pom_path)
-            .or_insert_with(|| PomUpdates {
-                properties: HashMap::new(),
-                inline: Vec::new(),
-            });
+        let entry = updates_by_pom.entry(source).or_insert_with(|| PomUpdates {
+            properties: HashMap::new(),
+            inline: Vec::new(),
+        });
 
         if result.has_version_property() {
-            // Managed property update
-            entry.properties.insert(
-                result.property_name().to_string(),
-                (result.current_version.clone(), new_version),
-            );
+            entry
+                .properties
+                .insert(result.property_name().to_string(), result);
         } else {
-            // Inline version update
-            // property_name is "groupId:artifactId" for inline versions
-            let coords = result.property_name();
-            if let Some((group_id, artifact_id)) = coords.split_once(':') {
-                entry.inline.push((
-                    group_id.to_string(),
-                    artifact_id.to_string(),
-                    result.current_version.clone(),
-                    new_version,
-                ));
-            }
+            entry.inline.push(result);
         }
     }
 
     // Read, update, write each POM
-    for (pom_path, pom_updates) in updates_by_pom {
+    for (source, pom_updates) in updates_by_pom {
+        let pom_path = root.join(&source);
         let xml = fs::read_to_string(&pom_path)
             .with_context(|| format!("Failed to read POM at {}", pom_path.display()))?;
 
@@ -98,7 +61,14 @@ pub fn apply_updates(
             let property_map: HashMap<String, String> = pom_updates
                 .properties
                 .iter()
-                .map(|(prop, (_old, new))| (prop.clone(), new.clone()))
+                .map(|(prop, r)| {
+                    (
+                        prop.clone(),
+                        r.latest_version()
+                            .expect("outdated result must have latest version")
+                            .to_string(),
+                    )
+                })
                 .collect();
 
             updated_xml =
@@ -112,10 +82,18 @@ pub fn apply_updates(
             let inline_updates: Vec<InlineVersionUpdate> = pom_updates
                 .inline
                 .iter()
-                .map(|(gid, aid, _old, new)| InlineVersionUpdate {
-                    group_id: gid.clone(),
-                    artifact_id: aid.clone(),
-                    new_version: new.clone(),
+                .filter_map(|r| {
+                    let coords = r.property_name();
+                    coords
+                        .split_once(':')
+                        .map(|(gid, aid)| InlineVersionUpdate {
+                            group_id: gid.to_string(),
+                            artifact_id: aid.to_string(),
+                            new_version: r
+                                .latest_version()
+                                .expect("outdated result must have latest version")
+                                .to_string(),
+                        })
                 })
                 .collect();
 
@@ -125,39 +103,50 @@ pub fn apply_updates(
                 })?;
         }
 
-        fs::write(&pom_path, updated_xml)
-            .with_context(|| format!("Failed to write updated POM to {}", pom_path.display()))?;
-
-        // Record what was updated
-        for (property, (old_version, new_version)) in pom_updates.properties {
-            updated_results.push(UpdateResult {
-                property,
-                old_version,
-                new_version,
-                pom_path: pom_path.clone(),
-            });
-        }
-
-        for (group_id, artifact_id, old_version, new_version) in pom_updates.inline {
-            updated_results.push(UpdateResult {
-                property: format!("{}:{}", group_id, artifact_id),
-                old_version,
-                new_version,
-                pom_path: pom_path.clone(),
-            });
+        match fs::write(&pom_path, updated_xml) {
+            Ok(()) => {
+                // Record successful updates
+                for check_result in pom_updates.properties.values() {
+                    update_results.push(UpdateResult::updated(
+                        check_result,
+                        check_result
+                            .latest_version()
+                            .expect("outdated result must have latest version")
+                            .to_string(),
+                    ));
+                }
+                for check_result in &pom_updates.inline {
+                    update_results.push(UpdateResult::updated(
+                        check_result,
+                        check_result
+                            .latest_version()
+                            .expect("outdated result must have latest version")
+                            .to_string(),
+                    ));
+                }
+            }
+            Err(e) => {
+                let message = format!("Failed to write POM: {e}");
+                for check_result in pom_updates.properties.values() {
+                    update_results.push(UpdateResult::error(check_result, message.clone()));
+                }
+                for check_result in &pom_updates.inline {
+                    update_results.push(UpdateResult::error(check_result, message.clone()));
+                }
+            }
         }
     }
 
-    // Sort updated results by property name
-    updated_results.sort_by(|a, b| a.property.cmp(&b.property));
+    // Sort by property name for stable output
+    update_results.sort_by(|a, b| a.property_name.cmp(&b.property_name));
 
-    Ok((updated_results, Vec::new()))
+    Ok(update_results)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::{CheckId, CheckerKind};
+    use crate::registry::{CheckId, CheckerKind, Ecosystem};
     use tempfile::TempDir;
 
     fn outdated_result(
@@ -206,15 +195,13 @@ mod tests {
             true,
         )];
 
-        let (updated, skipped) = apply_updates(temp.path(), &results).unwrap();
+        let updated = apply_updates(temp.path(), &results).unwrap();
 
         assert_eq!(updated.len(), 1);
-        assert_eq!(updated[0].property, "version.foo");
+        assert_eq!(updated[0].property_name, "version.foo");
         assert_eq!(updated[0].old_version, "1.0.0");
         assert_eq!(updated[0].new_version, "1.1.0");
-        assert_eq!(updated[0].pom_path, pom_path);
-
-        assert!(skipped.is_empty());
+        assert!(!updated[0].is_error());
 
         // Verify the POM was actually updated
         let updated_xml = fs::read_to_string(&pom_path).unwrap();
@@ -248,15 +235,13 @@ mod tests {
             false,
         )];
 
-        let (updated, skipped) = apply_updates(temp.path(), &results).unwrap();
+        let updated = apply_updates(temp.path(), &results).unwrap();
 
         assert_eq!(updated.len(), 1);
-        assert_eq!(updated[0].property, "com.google.guava:guava");
+        assert_eq!(updated[0].property_name, "com.google.guava:guava");
         assert_eq!(updated[0].old_version, "30.0");
         assert_eq!(updated[0].new_version, "31.0");
-        assert_eq!(updated[0].pom_path, pom_path);
-
-        assert!(skipped.is_empty());
+        assert!(!updated[0].is_error());
 
         // Verify the POM was actually updated
         let updated_xml = fs::read_to_string(&pom_path).unwrap();
@@ -278,51 +263,14 @@ mod tests {
 
         fs::write(&pom_path, xml).unwrap();
 
-        let results = vec![CheckResult::checked(
-            CheckId::new(
-                Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "version.foo".to_string(),
-                Some("com.example:foo".to_string()),
-                "pom.xml".to_string(),
-            )
-            .with_version_property(true),
-            "1.0.0".to_string(),
-            "1.0.0".to_string(),
-            false, // not outdated
-        )];
-
-        let (updated, skipped) = apply_updates(temp.path(), &results).unwrap();
+        // Pass an empty slice since the caller pre-filters to outdated
+        let updated = apply_updates(temp.path(), &[]).unwrap();
 
         assert!(updated.is_empty());
-        assert!(skipped.is_empty());
 
         // POM should be unchanged
         let unchanged_xml = fs::read_to_string(&pom_path).unwrap();
         assert_eq!(unchanged_xml, xml);
-    }
-
-    #[test]
-    fn skips_non_maven_results() {
-        let temp = TempDir::new().unwrap();
-
-        let results = vec![CheckResult::checked(
-            CheckId::new(
-                Ecosystem::Npm,
-                CheckerKind::NpmDep,
-                "react".to_string(),
-                None,
-                "package.json".to_string(),
-            ),
-            "17.0.0".to_string(),
-            "18.0.0".to_string(),
-            true,
-        )];
-
-        let (updated, skipped) = apply_updates(temp.path(), &results).unwrap();
-
-        assert!(updated.is_empty());
-        assert!(skipped.is_empty());
     }
 
     #[test]
@@ -369,15 +317,14 @@ mod tests {
             ),
         ];
 
-        let (updated, skipped) = apply_updates(temp.path(), &results).unwrap();
+        let updated = apply_updates(temp.path(), &results).unwrap();
 
         assert_eq!(updated.len(), 2);
-        assert!(skipped.is_empty());
 
         // Find the property update
         let property_update = updated
             .iter()
-            .find(|u| u.property == "version.junit")
+            .find(|u| u.property_name == "version.junit")
             .unwrap();
         assert_eq!(property_update.old_version, "5.10.0");
         assert_eq!(property_update.new_version, "5.11.0");
@@ -385,7 +332,7 @@ mod tests {
         // Find the inline update
         let inline_update = updated
             .iter()
-            .find(|u| u.property == "com.google.guava:guava")
+            .find(|u| u.property_name == "com.google.guava:guava")
             .unwrap();
         assert_eq!(inline_update.old_version, "33.0.0-jre");
         assert_eq!(inline_update.new_version, "33.4.0-jre");

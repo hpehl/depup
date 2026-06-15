@@ -250,6 +250,86 @@ fn update_modifies_inline_versions() {
 }
 
 #[test]
+fn update_dry_run_json_has_structured_fields() {
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .arg("--dry-run")
+        .arg(&fixture_dir("plain-versions"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    assert!(!results.is_empty());
+    for result in &results {
+        assert!(result.get("ecosystem").is_some(), "must have ecosystem");
+        assert!(result.get("property").is_some(), "must have property");
+        assert!(result.get("old_version").is_some(), "must have old_version");
+        assert!(result.get("new_version").is_some(), "must have new_version");
+        assert!(result.get("kind").is_some(), "must have kind");
+        assert!(result.get("managed").is_some(), "must have managed");
+        assert!(result.get("status").is_some(), "must have status");
+        assert!(result.get("source").is_some(), "must have source");
+    }
+}
+
+#[test]
+fn update_managed_filter() {
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .arg("--dry-run")
+        .arg("--managed")
+        .arg(&fixture_dir("plain-versions"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert!(
+            result["managed"].as_bool().unwrap(),
+            "--managed should only include managed deps"
+        );
+    }
+}
+
+#[test]
+fn update_dependencies_filter() {
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .arg("--dry-run")
+        .arg("--dependencies")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert_eq!(
+            result["kind"].as_str().unwrap(),
+            "dependency",
+            "--dependencies should only include dependencies"
+        );
+    }
+}
+
+#[test]
 fn json_output_includes_ecosystem() {
     let output = depup()
         .arg("check")

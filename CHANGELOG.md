@@ -13,11 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Maven: format-preserving POM updates for both managed properties and inline versions (preserves comments, whitespace, indentation)
 - npm: delegates to native package manager update commands (npm, pnpm, yarn, bun)
 - `--dry-run` flag to preview updates without making changes
-- `--maven` / `--npm` flags to limit updates to a single ecosystem
-- `--stable` flag to only update to stable releases (reused from `check`)
+- Same filtering flags as `check`: `--maven`/`--npm`, `--managed`/`--unmanaged`, `--dependencies`/`--plugins`/`--dev-deps`/`--tools`, `--stable`
+- Structured JSON output with `ecosystem`, `kind`, `managed`, `artifact`, `source` fields (consistent with `check --json`)
+- Summary line, elapsed time, and exit code 1 on errors (mirrors `check` output)
 
 ### Changed
 
+- Extract shared discovery+check pipeline into `command::pipeline` (used by both `check` and `update`)
 - Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary)
 
 ## [0.1.0] - 2026-06-15

@@ -80,11 +80,19 @@ depup update --dry-run
 # Only update to stable releases (exclude pre-release versions)
 depup update --stable
 
-# Update only Maven dependencies
+# Filter by ecosystem
 depup update --maven
-
-# Update only npm dependencies
 depup update --npm
+
+# Filter by kind
+depup update --dependencies
+depup update --plugins
+depup update --dev-deps
+depup update --tools
+
+# Filter by version property (Maven only)
+depup update --managed          # only update managed version properties
+depup update --unmanaged        # only update inline versions
 
 # JSON output
 depup update --json
@@ -93,6 +101,8 @@ depup update --json
 For Maven, `depup update` rewrites version numbers in POM files while preserving all formatting, comments, and indentation. Both managed properties (`${...}` references in `<properties>` blocks) and plain inline versions (`<version>5.10.0</version>` inside dependency/plugin blocks) are updated.
 
 For npm, `depup update` delegates to the detected package manager's native update command (`npm update`, `pnpm update`, `yarn upgrade`, `bun update`).
+
+The exit code is `0` when all updates succeed, `1` when any update fails.
 
 ### Completions
 
