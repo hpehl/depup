@@ -218,6 +218,38 @@ fn update_maven_only_flag() {
 }
 
 #[test]
+fn update_modifies_inline_versions() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let fixture = fixture_dir("plain-versions");
+    let pom_src = fixture.join("pom.xml");
+    let pom_dst = tmp.path().join("pom.xml");
+    std::fs::copy(&pom_src, &pom_dst).unwrap();
+
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .arg(tmp.path())
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let pom_content = std::fs::read_to_string(&pom_dst).unwrap();
+    assert!(
+        !pom_content.contains("<version>33.0.0-jre</version>"),
+        "Inline guava version should have been updated"
+    );
+    assert!(
+        !pom_content.contains("<version.junit>5.10.0</version.junit>"),
+        "Managed junit version should have been updated too"
+    );
+    assert!(
+        pom_content.contains("xmlns=\"http://maven.apache.org/POM/4.0.0\""),
+        "XML namespace should be preserved"
+    );
+}
+
+#[test]
 fn json_output_includes_ecosystem() {
     let output = depup()
         .arg("check")
