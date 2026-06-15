@@ -3,6 +3,11 @@ name = "depup"
 version = "0.1.0"
 edition = "2024"
 description = "Check dependency versions across Maven and npm ecosystems"
+license = "Apache-2.0"
+repository = "https://github.com/hpehl/depup"
+homepage = "https://github.com/hpehl/depup"
+authors = ["Harald Pehl <harald.pehl@gmail.com>"]
+rust-version = "1.85"
 
 [dependencies]
 anyhow = "1"
