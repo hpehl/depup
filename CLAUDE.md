@@ -29,8 +29,6 @@ cargo clippy                              # lint
 cargo fmt                                 # format
 ```
 
-The integration test (`tests/discovery_test.rs`) hits Maven Central — it requires network access.
-
 ## Architecture
 
 The pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking.
@@ -43,20 +41,19 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 - **`args.rs`** — Helper functions to extract typed arguments from clap `ArgMatches`.
 
-- **`constants.rs`** — Static values: Maven Central URL, concurrency limits, HTTP timeout.
+- **`constants.rs`** — Static values: Maven Central URL, Node.js dist URL, npm registry URL, concurrency limits, HTTP timeout, shared HTTP client factory.
 
 ### Command Layer (`src/command/`)
 
+- **`mod.rs`** — Shared `not_implemented()` helper for stub subcommands (used by `update` and `audit`).
+
 - **`check.rs`** — Orchestrates check pipelines across all ecosystems:
-  - `check()` — Discovers all ecosystems in the target path (Maven if `pom.xml` exists, pnpm if lockfile exists), runs all found, merges results.
-  - Maven path: discover POM modules, check versions concurrently with progress spinners, sort/filter results.
-  - pnpm path: discover pnpm projects, run `pnpm outdated --format json` on each, aggregate results.
-  - Both use `tokio::task::JoinSet` for parallel checks with semaphore-based rate limiting.
+  - `check()` — Discovers all ecosystems in the target path (Maven if `pom.xml` exists, npm if lockfile or `packageManager` field exists), runs all found, merges results.
+  - `spawn_npm_checks()` — Extracted helper that spawns npm project checks concurrently with semaphore-based rate limiting.
+  - Both ecosystems use `tokio::task::JoinSet` for parallel checks.
   - Output: combined table or JSON across all ecosystems.
 
-- **`update.rs`** — Stub for future `update` subcommand.
-
-- **`audit.rs`** — Stub for future `audit` subcommand.
+- **`update.rs`** / **`audit.rs`** — Stubs delegating to `not_implemented()`.
 
 - **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
 
@@ -68,35 +65,39 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 - **`registry.rs`** — Unified Maven repository checker using `maven-metadata.xml`. Tries Maven Central first; if not found, queries custom repositories in parallel. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default.
 
-- **`node.rs`** / **`npm.rs`** — Checkers for Node.js and npm/pnpm/yarn version properties found in Maven POMs (orphan properties like `version.node`).
+- **`checker.rs`** — Orchestrates Maven checks. Wraps discovery, builds `CheckTask` variants (Maven artifact, Node.js version, package manager version), and runs them concurrently with progress reporting.
+
+- **`node.rs`** — Checks Node.js version properties found in Maven POMs (e.g., `version.node`) against the Node.js distribution index.
+
+- **`pm_versions.rs`** — Checks package manager tool version properties found in Maven POMs (e.g., `version.npm`, `version.pnpm`, `version.yarn`) against the npm registry.
 
 ### npm Ecosystem (`src/npm/`)
 
-- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait, and `check_project()` dispatcher. Each PM implements `list_packages()` and `outdated_packages()` via the trait.
+- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait, shared `read_dev_dependency_names()` utility, `run_checks()` generic dispatcher, and `check_project()` entry point. Each PM implements `list_packages()` and `outdated_packages()` via the trait; `check_project()` dispatches through `run_checks()`.
 
 - **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
 
-- **`pm_npm.rs`** — npm checker: `npm list --json` + `npm outdated --json`. Reads `package.json` to classify dev dependencies.
+- **`pm_npm.rs`** — npm checker: `npm list --json` + `npm outdated --json`. Uses shared `read_dev_dependency_names()` to classify dev dependencies.
 
 - **`pm_pnpm.rs`** — pnpm checker: `pnpm list --json` + `pnpm outdated --format json`.
 
-- **`pm_yarn.rs`** — Yarn classic checker: parses NDJSON from `yarn list --json` and `yarn outdated --json`.
+- **`pm_yarn.rs`** — Yarn classic checker: parses NDJSON from `yarn list --json` and `yarn outdated --json`. Uses shared `read_dev_dependency_names()`.
 
 - **`pm_bun.rs`** — Bun checker: reads `package.json` + `node_modules/*/package.json` for versions, `bun outdated --format json` for updates.
 
 ### Shared Layer
 
-- **`registry.rs`** — `CheckResult` struct and `CheckerKind` enum (Dependency, Plugin, Node, NpmPkg, NpmDep, NpmDevDep) used by all ecosystems. Each kind has a display color and symbol.
+- **`registry.rs`** — `Ecosystem` enum (Maven, Npm), `CheckerKind` enum (Dependency, Plugin, Node, NpmPkg, NpmDep, NpmDevDep), `CheckResult` struct, and `Outcome` enum. Each kind has a display color, symbol, and group label. `CheckResult` constructors (`checked`, `skipped`, `error`) take all fields including `source` — no post-construction mutation.
 
 - **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver.
 
 - **`error.rs`** — Structured error types with `thiserror`. `DepupError` carries a stable `DepupErrorCode` for machine consumption. `JsonErrorEnvelope` provides structured JSON error output when `--json` is active.
 
-- **`json.rs`** — Serializable output types (`JsonResult`) for JSON mode.
+- **`json.rs`** — Serializable output types (`JsonResult`) for JSON mode. Converts `CheckResult` to a flat JSON-friendly struct.
 
-- **`output.rs`** — Summary table (colored via `console` crate) and JSON formatters.
+- **`output.rs`** — Summary table (colored via `console` crate) and JSON formatters. Groups results by ecosystem and kind with section headers.
 
-- **`progress.rs`** — Progress bars using `indicatif`. Braille spinner with `MultiProgress` for concurrent checks. Hidden in JSON mode.
+- **`progress.rs`** — Progress bars using `indicatif`. Block-style bar with `MultiProgress` for concurrent checks. Hidden in JSON mode.
 
 ## Patterns
 
@@ -109,6 +110,7 @@ These patterns are shared with the `mgt` and `wado` CLI tools:
 - **`JoinSet`** for parallel async operations (not `futures::join_all`)
 - **Command module organization** — each subcommand in `src/command/`
 - **Shell completions** via `clap_complete` with `unstable-dynamic` feature
+- **Trait-based dispatch** — `PackageManagerChecker` trait with `run_checks()` generic helper
 
 ## Known Quirks
 

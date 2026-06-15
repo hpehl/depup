@@ -54,10 +54,7 @@ impl PackageManagerChecker for Pnpm {
         Ok(packages)
     }
 
-    async fn outdated_packages(
-        &self,
-        dir: &Path,
-    ) -> Result<HashMap<String, OutdatedEntry>> {
+    async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>> {
         let output = Command::new("pnpm")
             .args(["outdated", "--format", "json"])
             .current_dir(dir)
@@ -79,9 +76,7 @@ impl PackageManagerChecker for Pnpm {
         }
 
         let packages: HashMap<String, PnpmOutdatedEntry> = serde_json::from_str(&stdout)
-            .with_context(|| {
-                format!("Failed to parse pnpm outdated JSON in {}", dir.display())
-            })?;
+            .with_context(|| format!("Failed to parse pnpm outdated JSON in {}", dir.display()))?;
 
         Ok(packages
             .into_iter()

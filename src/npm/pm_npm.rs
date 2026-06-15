@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{OutdatedEntry, PackageManagerChecker};
+use super::{OutdatedEntry, PackageManagerChecker, read_dev_dependency_names};
 
 pub struct Npm;
 
@@ -62,10 +62,7 @@ impl PackageManagerChecker for Npm {
         Ok(packages)
     }
 
-    async fn outdated_packages(
-        &self,
-        dir: &Path,
-    ) -> Result<HashMap<String, OutdatedEntry>> {
+    async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>> {
         let output = Command::new("npm")
             .args(["outdated", "--json"])
             .current_dir(dir)
@@ -81,9 +78,7 @@ impl PackageManagerChecker for Npm {
         }
 
         let packages: HashMap<String, OutdatedOutput> = serde_json::from_str(&stdout)
-            .with_context(|| {
-                format!("Failed to parse npm outdated JSON in {}", dir.display())
-            })?;
+            .with_context(|| format!("Failed to parse npm outdated JSON in {}", dir.display()))?;
 
         Ok(packages
             .into_iter()
@@ -98,17 +93,4 @@ impl PackageManagerChecker for Npm {
             })
             .collect())
     }
-}
-
-fn read_dev_dependency_names(dir: &Path) -> std::collections::HashSet<String> {
-    let Ok(content) = std::fs::read_to_string(dir.join("package.json")) else {
-        return std::collections::HashSet::new();
-    };
-    let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return std::collections::HashSet::new();
-    };
-    pkg.get("devDependencies")
-        .and_then(|v| v.as_object())
-        .map(|obj| obj.keys().cloned().collect())
-        .unwrap_or_default()
 }

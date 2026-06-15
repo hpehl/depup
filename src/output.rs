@@ -44,11 +44,13 @@ pub fn print_results(results: &[CheckResult]) {
             .iter()
             .filter(|r| r.ecosystem == *ecosystem)
             .collect();
-        group.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| {
-            let a_name = a.artifact.as_deref().unwrap_or(&a.property_name);
-            let b_name = b.artifact.as_deref().unwrap_or(&b.property_name);
-            a_name.cmp(b_name)
-        }));
+        group.sort_by(|a, b| {
+            a.kind.cmp(&b.kind).then_with(|| {
+                let a_name = a.artifact.as_deref().unwrap_or(&a.property_name);
+                let b_name = b.artifact.as_deref().unwrap_or(&b.property_name);
+                a_name.cmp(b_name)
+            })
+        });
 
         if multiple_ecosystems {
             print_ecosystem_header(*ecosystem);
@@ -76,10 +78,7 @@ pub fn print_results(results: &[CheckResult]) {
 }
 
 fn print_result_line(result: &CheckResult) {
-    let artifact_name = result
-        .artifact
-        .as_deref()
-        .unwrap_or(&result.property_name);
+    let artifact_name = result.artifact.as_deref().unwrap_or(&result.property_name);
     let artifact = truncate_middle_pad(artifact_name, ARTIFACT_WIDTH);
     let styled_artifact = result.kind.color().apply_to(artifact);
 
@@ -136,10 +135,7 @@ fn format_version(result: &CheckResult) -> String {
     if result.current_version.is_empty() {
         return String::new();
     }
-    let artifact_name = result
-        .artifact
-        .as_deref()
-        .unwrap_or(&result.property_name);
+    let artifact_name = result.artifact.as_deref().unwrap_or(&result.property_name);
     if result.property_name != artifact_name && !result.property_name.contains(':') {
         format!("{} ({})", result.current_version, result.property_name)
     } else {
@@ -183,30 +179,26 @@ mod tests {
     #[test]
     fn print_table_groups_by_ecosystem() {
         let results = vec![
-            CheckResult {
-                ecosystem: Ecosystem::Maven,
-                property_name: "version.junit".to_string(),
-                current_version: "5.10.0".to_string(),
-                latest_version: Some("5.12.0".to_string()),
-                outdated: true,
-                skipped: false,
-                error: None,
-                artifact: Some("org.junit.jupiter:junit-jupiter".to_string()),
-                source: "pom.xml".to_string(),
-                kind: CheckerKind::Dependency,
-            },
-            CheckResult {
-                ecosystem: Ecosystem::Npm,
-                property_name: "react".to_string(),
-                current_version: "18.0.0".to_string(),
-                latest_version: Some("19.0.0".to_string()),
-                outdated: true,
-                skipped: false,
-                error: None,
-                artifact: Some("react".to_string()),
-                source: "package.json".to_string(),
-                kind: CheckerKind::NpmDep,
-            },
+            CheckResult::checked(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "version.junit".to_string(),
+                "5.10.0".to_string(),
+                "5.12.0".to_string(),
+                true,
+                Some("org.junit.jupiter:junit-jupiter".to_string()),
+                "pom.xml".to_string(),
+            ),
+            CheckResult::checked(
+                Ecosystem::Npm,
+                CheckerKind::NpmDep,
+                "react".to_string(),
+                "18.0.0".to_string(),
+                "19.0.0".to_string(),
+                true,
+                Some("react".to_string()),
+                "package.json".to_string(),
+            ),
         ];
 
         let ecosystems: Vec<Ecosystem> = results
@@ -227,6 +219,7 @@ mod tests {
             "1.0".to_string(),
             None,
             "fail".to_string(),
+            String::new(),
         );
         assert_eq!(JsonResult::from(&r).status, "error");
     }
@@ -241,6 +234,7 @@ mod tests {
             "2.0".to_string(),
             true,
             None,
+            String::new(),
         );
         assert_eq!(JsonResult::from(&r).status, "outdated");
     }
@@ -255,6 +249,7 @@ mod tests {
             "1.0".to_string(),
             false,
             None,
+            String::new(),
         );
         assert_eq!(JsonResult::from(&r).status, "up-to-date");
     }
@@ -269,6 +264,7 @@ mod tests {
             "5.12.0".to_string(),
             true,
             Some("org.junit.jupiter:junit-jupiter".to_string()),
+            String::new(),
         );
         let json_result = JsonResult::from(&r);
         assert_eq!(json_result.status, "outdated");
@@ -289,6 +285,7 @@ mod tests {
             "5.12.0".to_string(),
             true,
             Some("org.junit.jupiter:junit-jupiter".to_string()),
+            String::new(),
         );
         let json_result = JsonResult::from(&r);
         assert_eq!(json_result.ecosystem, "maven");
@@ -302,6 +299,7 @@ mod tests {
             "p".to_string(),
             "1.0-alpha".to_string(),
             None,
+            String::new(),
         );
         assert_eq!(JsonResult::from(&r).status, "skipped");
     }
@@ -316,6 +314,7 @@ mod tests {
             "5.12.0".to_string(),
             true,
             Some("org.junit.jupiter:junit-jupiter".to_string()),
+            String::new(),
         );
         assert_eq!(format_version(&r), "5.10.0 (version.junit)");
     }
@@ -330,12 +329,13 @@ mod tests {
             "33.4.0-jre".to_string(),
             true,
             Some("com.google.guava:guava".to_string()),
+            String::new(),
         );
         assert_eq!(format_version(&r), "33.0.0-jre");
     }
 
     #[test]
-    fn format_version_pnpm() {
+    fn format_version_npm() {
         let r = CheckResult::checked(
             Ecosystem::Npm,
             CheckerKind::NpmDep,
@@ -344,6 +344,7 @@ mod tests {
             "19.0.0".to_string(),
             true,
             Some("react".to_string()),
+            String::new(),
         );
         assert_eq!(format_version(&r), "18.2.0");
     }
@@ -357,6 +358,7 @@ mod tests {
             String::new(),
             None,
             "pnpm not found".to_string(),
+            String::new(),
         );
         assert_eq!(format_version(&r), "");
     }

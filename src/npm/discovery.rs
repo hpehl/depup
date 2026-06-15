@@ -132,21 +132,13 @@ mod tests {
 
     fn setup_project(dir: &Path, name: &str, lock_file: &str) {
         fs::create_dir_all(dir).unwrap();
-        fs::write(
-            dir.join("package.json"),
-            format!(r#"{{"name": "{name}"}}"#),
-        )
-        .unwrap();
+        fs::write(dir.join("package.json"), format!(r#"{{"name": "{name}"}}"#)).unwrap();
         fs::write(dir.join(lock_file), "").unwrap();
     }
 
     fn setup_bare_project(dir: &Path, name: &str) {
         fs::create_dir_all(dir).unwrap();
-        fs::write(
-            dir.join("package.json"),
-            format!(r#"{{"name": "{name}"}}"#),
-        )
-        .unwrap();
+        fs::write(dir.join("package.json"), format!(r#"{{"name": "{name}"}}"#)).unwrap();
     }
 
     // -- lock file detection --
@@ -305,11 +297,7 @@ mod tests {
 
         let member = root.join("packages").join("child");
         fs::create_dir_all(&member).unwrap();
-        fs::write(
-            member.join("package.json"),
-            r#"{"name": "child"}"#,
-        )
-        .unwrap();
+        fs::write(member.join("package.json"), r#"{"name": "child"}"#).unwrap();
         fs::write(member.join("package-lock.json"), "{}").unwrap();
 
         let projects = discover(root);

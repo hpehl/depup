@@ -4,7 +4,7 @@ mod pm_npm;
 mod pm_pnpm;
 mod pm_yarn;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::Result;
@@ -31,7 +31,6 @@ impl PackageManager {
             Self::Bun => "bun",
         }
     }
-
 }
 
 impl std::fmt::Display for PackageManager {
@@ -51,6 +50,26 @@ pub trait PackageManagerChecker {
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>>;
 }
 
+pub fn read_dev_dependency_names(dir: &Path) -> HashSet<String> {
+    let Ok(content) = std::fs::read_to_string(dir.join("package.json")) else {
+        return HashSet::new();
+    };
+    let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return HashSet::new();
+    };
+    pkg.get("devDependencies")
+        .and_then(|v| v.as_object())
+        .map(|obj| obj.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+async fn run_checks(
+    checker: &impl PackageManagerChecker,
+    dir: &Path,
+) -> Result<(Vec<(String, String, bool)>, HashMap<String, OutdatedEntry>)> {
+    tokio::try_join!(checker.list_packages(dir), checker.outdated_packages(dir))
+}
+
 pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<CheckResult>> {
     let source = project
         .path
@@ -61,34 +80,10 @@ pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<Chec
         .to_string();
 
     let (installed, outdated) = match project.package_manager {
-        PackageManager::Npm => {
-            let checker = pm_npm::Npm;
-            tokio::try_join!(
-                checker.list_packages(&project.path),
-                checker.outdated_packages(&project.path),
-            )?
-        }
-        PackageManager::Pnpm => {
-            let checker = pm_pnpm::Pnpm;
-            tokio::try_join!(
-                checker.list_packages(&project.path),
-                checker.outdated_packages(&project.path),
-            )?
-        }
-        PackageManager::Yarn => {
-            let checker = pm_yarn::Yarn;
-            tokio::try_join!(
-                checker.list_packages(&project.path),
-                checker.outdated_packages(&project.path),
-            )?
-        }
-        PackageManager::Bun => {
-            let checker = pm_bun::Bun;
-            tokio::try_join!(
-                checker.list_packages(&project.path),
-                checker.outdated_packages(&project.path),
-            )?
-        }
+        PackageManager::Npm => run_checks(&pm_npm::Npm, &project.path).await?,
+        PackageManager::Pnpm => run_checks(&pm_pnpm::Pnpm, &project.path).await?,
+        PackageManager::Yarn => run_checks(&pm_yarn::Yarn, &project.path).await?,
+        PackageManager::Bun => run_checks(&pm_bun::Bun, &project.path).await?,
     };
 
     let mut results: Vec<CheckResult> = installed
@@ -109,6 +104,7 @@ pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<Chec
                     entry.latest.clone(),
                     is_outdated,
                     Some(name),
+                    source.clone(),
                 )
             } else {
                 CheckResult::checked(
@@ -119,9 +115,9 @@ pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<Chec
                     current,
                     false,
                     Some(name),
+                    source.clone(),
                 )
             }
-            .with_source(source.clone())
         })
         .collect();
 

@@ -2,7 +2,7 @@
 
 Check dependency versions across multiple ecosystems.
 
-`depup` auto-detects project ecosystems in a directory tree and checks all dependencies for newer versions. Currently supports **Maven** and **pnpm**.
+`depup` auto-detects project ecosystems in a directory tree and checks all dependencies for newer versions. Currently supports **Maven** and **npm** (with npm, pnpm, yarn classic, and bun package managers).
 
 ## Installation
 
@@ -40,7 +40,7 @@ depup completions fish
 
 The `check` subcommand is the default — `depup /path` is equivalent to `depup check /path`.
 
-If both Maven and pnpm projects are found in the target path, both are checked and results are combined.
+If both Maven and npm ecosystem projects are found in the target path, both are checked and results are combined.
 
 ## Subcommands
 
@@ -57,23 +57,27 @@ If both Maven and pnpm projects are found in the target path, both are checked a
 
 Scans multi-module Maven projects, discovers all `${version.*}` properties and the artifacts they control, then checks each against upstream Maven repositories. Works where Maven's `versions:display-property-updates` fails — when properties are defined in a parent POM but referenced in child POMs.
 
-Also detects Node.js and npm/pnpm/yarn version properties in Maven POMs (e.g., `version.node`, `version.npm`).
+Also detects Node.js and package manager version properties in Maven POMs (e.g., `version.node`, `version.npm`, `version.pnpm`, `version.yarn`).
 
-### pnpm
+### npm
 
-Discovers pnpm projects in the directory tree (via `pnpm-lock.yaml` or `packageManager` field in `package.json`), runs `pnpm outdated --format json` on each, and aggregates results. Workspace members are skipped — only root projects are checked.
+Discovers npm ecosystem projects in the directory tree by detecting the package manager via lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or the `packageManager` field in `package.json`. Runs the appropriate package manager's outdated command on each discovered project and aggregates results. Workspace members are skipped — only root projects are checked.
+
+Supported package managers: **npm**, **pnpm**, **yarn** (classic), **bun**.
 
 ## Example Output
 
 ```
-🔍 Discovering POM modules...
-⚙️ Checking 4 properties...
-  ✓ version.compiler.plugin  org.apache.maven.plugins:maven-compiler-plugin  3.13.0    up-to-date
-  → version.junit            org.junit.jupiter:junit-jupiter                 5.10.0    → 5.12.2
-  ✓ version.javadoc.plugin   org.apache.maven.plugins:maven-javadoc-plugin   3.12.0    up-to-date
-  ✓ version.mockito          org.mockito:mockito-core                        5.18.0    up-to-date
+  [2/4] ████████████████████████████▓░ org.junit.jupiter:junit-jupiter
 
-4 properties checked: 3 current, 1 outdated  (■ Dependency, ■ Plugin)
+  Dependencies
+  ✓ org.apache.maven.plugins:maven-compiler-plugin  3.13.0    up-to-date
+  → org.junit.jupiter:junit-jupiter                 5.10.0    → 5.12.2
+  Plugins
+  ✓ org.apache.maven.plugins:maven-javadoc-plugin   3.12.0    up-to-date
+  ✓ org.mockito:mockito-core                        5.18.0    up-to-date
+
+4 checked: 3 current, 1 outdated  (● Dependency, ■ Plugin)
 
 Done in 1s
 ```
@@ -101,12 +105,13 @@ Error codes: `POM_NOT_FOUND`, `POM_PARSE_FAILED`, `REGISTRY_LOOKUP_FAILED`, `NO_
 5. If not found on Maven Central, queries all `<repositories>` and `<pluginRepositories>` defined in the POMs in parallel
 6. Compares versions using Maven-aware ordering (handles `.Final`, `-SP1`, and other qualifiers)
 
-### pnpm
+### npm
 
-1. Walks the directory tree finding directories with `pnpm-lock.yaml` or `packageManager: "pnpm@..."` in `package.json`
-2. Skips `node_modules/` and workspace members
-3. Runs `pnpm outdated --format json` on each discovered project
-4. Parses and aggregates results
+1. Walks the directory tree finding directories with a recognized lock file or `packageManager` field in `package.json`
+2. Auto-detects the package manager (npm, pnpm, yarn, or bun) from the lock file type or `packageManager` field
+3. Skips `node_modules/` and workspace members
+4. Runs each package manager's list and outdated commands in JSON mode
+5. Parses and aggregates results across all discovered projects
 
 ## Version Filtering
 
@@ -135,7 +140,7 @@ Supported shells: bash, zsh, fish, elvish, powershell.
 
 - Rust 1.85+ (edition 2024)
 - Network access to Maven Central (`repo1.maven.org`) and any custom repositories defined in the project's POMs
-- `pnpm` installed and on PATH (for pnpm ecosystem)
+- For npm ecosystem checks: the respective package manager (npm, pnpm, yarn, or bun) must be installed and on PATH
 
 ## License
 

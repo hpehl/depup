@@ -8,13 +8,13 @@ use crate::version;
 
 const NPM_PACKAGES: &[(&str, &str)] = &[("npm", "npm"), ("pnpm", "pnpm"), ("yarn", "yarn")];
 
-pub struct NpmChecker {
+pub struct PmVersionsChecker {
     client: reqwest::Client,
     #[allow(dead_code)]
     releases_only: bool,
 }
 
-impl NpmChecker {
+impl PmVersionsChecker {
     pub fn new(releases_only: bool) -> Self {
         Self {
             client: constants::http_client(),
@@ -33,7 +33,12 @@ impl NpmChecker {
         None
     }
 
-    pub async fn check(&self, property: &VersionProperty, package: &str) -> Result<CheckResult> {
+    pub async fn check(
+        &self,
+        property: &VersionProperty,
+        package: &str,
+        source: &str,
+    ) -> Result<CheckResult> {
         let url = format!("{NPM_REGISTRY_URL}/{package}");
 
         let resp = self
@@ -61,6 +66,7 @@ impl NpmChecker {
         let prop_name = property.name.clone();
         let current = property.current_value.clone();
         let artifact = Some(package.to_string());
+        let source = source.to_string();
 
         match latest {
             Some(latest) => {
@@ -73,6 +79,7 @@ impl NpmChecker {
                     latest,
                     is_outdated,
                     artifact,
+                    source,
                 ))
             }
             None => Ok(CheckResult::error(
@@ -82,6 +89,7 @@ impl NpmChecker {
                 current,
                 artifact,
                 format!("No latest version found for {package}"),
+                source,
             )),
         }
     }
@@ -93,18 +101,18 @@ mod tests {
 
     #[test]
     fn matches_npm_packages() {
-        assert_eq!(NpmChecker::matches("version.npm"), Some("npm"));
-        assert_eq!(NpmChecker::matches("npm.version"), Some("npm"));
-        assert_eq!(NpmChecker::matches("version.pnpm"), Some("pnpm"));
-        assert_eq!(NpmChecker::matches("pnpm.version"), Some("pnpm"));
-        assert_eq!(NpmChecker::matches("version.yarn"), Some("yarn"));
-        assert_eq!(NpmChecker::matches("yarn.version"), Some("yarn"));
+        assert_eq!(PmVersionsChecker::matches("version.npm"), Some("npm"));
+        assert_eq!(PmVersionsChecker::matches("npm.version"), Some("npm"));
+        assert_eq!(PmVersionsChecker::matches("version.pnpm"), Some("pnpm"));
+        assert_eq!(PmVersionsChecker::matches("pnpm.version"), Some("pnpm"));
+        assert_eq!(PmVersionsChecker::matches("version.yarn"), Some("yarn"));
+        assert_eq!(PmVersionsChecker::matches("yarn.version"), Some("yarn"));
     }
 
     #[test]
     fn does_not_match_unrelated() {
-        assert_eq!(NpmChecker::matches("version.junit"), None);
-        assert_eq!(NpmChecker::matches("npm"), None);
-        assert_eq!(NpmChecker::matches("version.node"), None);
+        assert_eq!(PmVersionsChecker::matches("version.junit"), None);
+        assert_eq!(PmVersionsChecker::matches("npm"), None);
+        assert_eq!(PmVersionsChecker::matches("version.node"), None);
     }
 }

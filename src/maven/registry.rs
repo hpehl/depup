@@ -53,12 +53,13 @@ fn checker_kind(kind: ArtifactKind) -> CheckerKind {
 }
 
 impl MavenChecker {
-    pub async fn check(&self, mapping: &ArtifactMapping) -> Result<CheckResult> {
+    pub async fn check(&self, mapping: &ArtifactMapping, source: &str) -> Result<CheckResult> {
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
         let kind = checker_kind(mapping.kind);
         let prop_name = mapping.property.name.clone();
         let current = mapping.property.current_value.clone();
         let artifact_opt = Some(artifact.clone());
+        let source = source.to_string();
 
         let maven_error = |msg: String| -> Result<CheckResult> {
             Ok(CheckResult::error(
@@ -68,6 +69,7 @@ impl MavenChecker {
                 current.clone(),
                 artifact_opt.clone(),
                 msg,
+                source.clone(),
             ))
         };
 
@@ -81,6 +83,7 @@ impl MavenChecker {
                 prop_name,
                 current,
                 artifact_opt,
+                source,
             ));
         }
 
@@ -145,6 +148,7 @@ impl MavenChecker {
             latest,
             is_outdated,
             artifact_opt,
+            source,
         ))
     }
 }

@@ -44,10 +44,7 @@ impl PackageManagerChecker for Bun {
         Ok(packages)
     }
 
-    async fn outdated_packages(
-        &self,
-        dir: &Path,
-    ) -> Result<HashMap<String, OutdatedEntry>> {
+    async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>> {
         let output = Command::new("bun")
             .args(["outdated", "--format", "json"])
             .current_dir(dir)
@@ -63,9 +60,7 @@ impl PackageManagerChecker for Bun {
         }
 
         let packages: HashMap<String, OutdatedOutput> = serde_json::from_str(&stdout)
-            .with_context(|| {
-                format!("Failed to parse bun outdated JSON in {}", dir.display())
-            })?;
+            .with_context(|| format!("Failed to parse bun outdated JSON in {}", dir.display()))?;
 
         Ok(packages
             .into_iter()
@@ -83,11 +78,10 @@ impl PackageManagerChecker for Bun {
 }
 
 fn get_installed_version(dir: &Path, package: &str) -> Option<String> {
-    let pkg_json = dir
-        .join("node_modules")
-        .join(package)
-        .join("package.json");
+    let pkg_json = dir.join("node_modules").join(package).join("package.json");
     let content = std::fs::read_to_string(pkg_json).ok()?;
     let pkg: serde_json::Value = serde_json::from_str(&content).ok()?;
-    pkg.get("version").and_then(|v| v.as_str()).map(String::from)
+    pkg.get("version")
+        .and_then(|v| v.as_str())
+        .map(String::from)
 }

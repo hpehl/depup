@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -9,6 +10,7 @@ use tokio::time::Instant;
 
 use crate::args;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
+use crate::npm::discovery::NpmProject;
 use crate::output;
 use crate::progress;
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
@@ -24,7 +26,6 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
 
     let has_maven = root.join("pom.xml").exists();
 
-    // Discovery phase
     let maven_prepared = if has_maven {
         Some(crate::maven::checker::discover(&root, releases_only)?)
     } else {
@@ -45,7 +46,6 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         return Ok(());
     }
 
-    // Check phase with progress bar
     let bar = if json {
         ProgressBar::hidden()
     } else {
@@ -57,52 +57,12 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
     if let Some(prepared) = maven_prepared {
         let root = root.clone();
         let bar = bar.clone();
-        join_set.spawn(async move {
-            crate::maven::checker::check(&root, prepared, &bar).await
-        });
+        join_set.spawn(async move { crate::maven::checker::check(&root, prepared, &bar).await });
     }
 
-    if !npm_projects.is_empty() {
-        let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
-        for project in npm_projects {
-            let semaphore = Arc::clone(&semaphore);
-            let root = root.clone();
-            let bar = bar.clone();
-            join_set.spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
-                bar.set_message(format!("{} ({})", project.name, project.package_manager));
-                let project_name = project.name.clone();
-                let project_path = project.path.clone();
-                let results = crate::npm::check_project(&project, &root)
-                    .await
-                    .unwrap_or_else(|e| {
-                        let source = project_path
-                            .strip_prefix(&root)
-                            .unwrap_or(&project_path)
-                            .join("package.json")
-                            .display()
-                            .to_string();
-                        vec![CheckResult::error(
-                            Ecosystem::Npm,
-                            CheckerKind::NpmDep,
-                            project_name,
-                            String::new(),
-                            None,
-                            e.to_string(),
-                        )
-                        .with_source(source)]
-                    });
-                bar.inc(1);
-                results
-            });
-        }
-    }
+    spawn_npm_checks(&mut join_set, npm_projects, &root, &bar);
 
-    let mut all_results: Vec<CheckResult> = Vec::new();
-    let results = join_set.join_all().await;
-    for batch in results {
-        all_results.extend(batch);
-    }
+    let all_results: Vec<CheckResult> = join_set.join_all().await.into_iter().flatten().collect();
 
     bar.finish_and_clear();
 
@@ -120,10 +80,54 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         progress::done(instant);
     }
 
-    let has_outdated = filtered.iter().any(|r| r.outdated);
-    if has_outdated {
+    if filtered.iter().any(|r| r.outdated) {
         std::process::exit(1);
     }
 
     Ok(())
+}
+
+fn spawn_npm_checks(
+    join_set: &mut JoinSet<Vec<CheckResult>>,
+    projects: Vec<NpmProject>,
+    root: &Path,
+    bar: &ProgressBar,
+) {
+    if projects.is_empty() {
+        return;
+    }
+
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
+    for project in projects {
+        let semaphore = Arc::clone(&semaphore);
+        let root = root.to_path_buf();
+        let bar = bar.clone();
+        join_set.spawn(async move {
+            let _permit = semaphore.acquire().await.unwrap();
+            bar.set_message(format!("{} ({})", project.name, project.package_manager));
+            let project_name = project.name.clone();
+            let project_path = project.path.clone();
+            let results = crate::npm::check_project(&project, &root)
+                .await
+                .unwrap_or_else(|e| {
+                    let source = project_path
+                        .strip_prefix(&root)
+                        .unwrap_or(&project_path)
+                        .join("package.json")
+                        .display()
+                        .to_string();
+                    vec![CheckResult::error(
+                        Ecosystem::Npm,
+                        CheckerKind::NpmDep,
+                        project_name,
+                        String::new(),
+                        None,
+                        e.to_string(),
+                        source,
+                    )]
+                });
+            bar.inc(1);
+            results
+        });
+    }
 }

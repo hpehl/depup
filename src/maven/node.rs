@@ -50,7 +50,7 @@ impl NodeChecker {
         NODE_PATTERNS.contains(&property_name)
     }
 
-    pub async fn check(&self, property: &VersionProperty) -> Result<CheckResult> {
+    pub async fn check(&self, property: &VersionProperty, source: &str) -> Result<CheckResult> {
         let resp = self
             .client
             .get(NODEJS_DIST_URL)
@@ -85,6 +85,7 @@ impl NodeChecker {
         let artifact = Some("nodejs.org".to_string());
         let prop_name = property.name.clone();
         let current = property.current_value.clone();
+        let source = source.to_string();
 
         if versions.is_empty() {
             return Ok(CheckResult::error(
@@ -94,6 +95,7 @@ impl NodeChecker {
                 current,
                 artifact,
                 "No Node.js versions found".to_string(),
+                source,
             ));
         }
 
@@ -105,6 +107,7 @@ impl NodeChecker {
                 current,
                 artifact,
                 "Could not determine latest Node.js version".to_string(),
+                source,
             ));
         };
 
@@ -118,6 +121,7 @@ impl NodeChecker {
             latest,
             is_outdated,
             artifact,
+            source,
         ))
     }
 }

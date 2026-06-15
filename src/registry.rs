@@ -91,6 +91,7 @@ pub enum Outcome<'a> {
 }
 
 impl CheckResult {
+    #[allow(clippy::too_many_arguments)]
     pub fn checked(
         ecosystem: Ecosystem,
         kind: CheckerKind,
@@ -99,6 +100,7 @@ impl CheckResult {
         latest_version: String,
         is_outdated: bool,
         artifact: Option<String>,
+        source: String,
     ) -> Self {
         Self {
             ecosystem,
@@ -109,7 +111,7 @@ impl CheckResult {
             skipped: false,
             error: None,
             artifact,
-            source: String::new(),
+            source,
             kind,
         }
     }
@@ -120,6 +122,7 @@ impl CheckResult {
         property_name: String,
         current_version: String,
         artifact: Option<String>,
+        source: String,
     ) -> Self {
         Self {
             ecosystem,
@@ -130,7 +133,7 @@ impl CheckResult {
             skipped: true,
             error: None,
             artifact,
-            source: String::new(),
+            source,
             kind,
         }
     }
@@ -142,6 +145,7 @@ impl CheckResult {
         current_version: String,
         artifact: Option<String>,
         error: String,
+        source: String,
     ) -> Self {
         Self {
             ecosystem,
@@ -152,14 +156,9 @@ impl CheckResult {
             skipped: false,
             error: Some(error),
             artifact,
-            source: String::new(),
+            source,
             kind,
         }
-    }
-
-    pub fn with_source(mut self, source: String) -> Self {
-        self.source = source;
-        self
     }
 
     pub fn outcome(&self) -> Outcome<'_> {
@@ -197,6 +196,7 @@ mod tests {
             "5.12.0".to_string(),
             true,
             Some("org.junit:junit".to_string()),
+            String::new(),
         );
         assert!(r.outdated);
         assert!(!r.skipped);
@@ -212,6 +212,7 @@ mod tests {
             "version.alpha".to_string(),
             "1.0.0-alpha".to_string(),
             None,
+            String::new(),
         );
         assert!(r.skipped);
         assert!(!r.outdated);
@@ -227,6 +228,7 @@ mod tests {
             "1.0".to_string(),
             None,
             "timeout".to_string(),
+            String::new(),
         );
         assert!(r.error.is_some());
         assert!(!r.outdated);
@@ -243,6 +245,7 @@ mod tests {
             "1.0".into(),
             false,
             None,
+            String::new(),
         );
         assert!(matches!(up_to_date.outcome(), Outcome::UpToDate));
 
@@ -254,6 +257,7 @@ mod tests {
             "2.0".into(),
             true,
             None,
+            String::new(),
         );
         assert!(matches!(outdated.outcome(), Outcome::Outdated { .. }));
 
@@ -263,6 +267,7 @@ mod tests {
             "p".into(),
             "1.0".into(),
             None,
+            String::new(),
         );
         assert!(matches!(skipped.outcome(), Outcome::Skipped));
 
@@ -273,6 +278,7 @@ mod tests {
             "1.0".into(),
             None,
             "fail".into(),
+            String::new(),
         );
         assert!(matches!(error.outcome(), Outcome::Error { .. }));
     }

@@ -39,3 +39,74 @@ impl From<&CheckResult> for JsonResult {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::{CheckerKind, Ecosystem};
+
+    #[test]
+    fn json_result_round_trip() {
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "version.junit".to_string(),
+            "5.10.0".to_string(),
+            "5.12.0".to_string(),
+            true,
+            Some("org.junit.jupiter:junit-jupiter".to_string()),
+            "pom.xml".to_string(),
+        );
+        let json_result = JsonResult::from(&r);
+        let serialized = serde_json::to_string(&json_result).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(parsed["ecosystem"], "maven");
+        assert_eq!(parsed["property"], "version.junit");
+        assert_eq!(parsed["current"], "5.10.0");
+        assert_eq!(parsed["latest"], "5.12.0");
+        assert_eq!(parsed["status"], "outdated");
+        assert_eq!(parsed["kind"], "dependency");
+        assert_eq!(parsed["artifact"], "org.junit.jupiter:junit-jupiter");
+        assert!(parsed.get("error").is_none());
+    }
+
+    #[test]
+    fn json_result_error_includes_error_field() {
+        let r = CheckResult::error(
+            Ecosystem::Npm,
+            CheckerKind::NpmDep,
+            "react".to_string(),
+            "18.0.0".to_string(),
+            Some("react".to_string()),
+            "not found".to_string(),
+            String::new(),
+        );
+        let json_result = JsonResult::from(&r);
+        let serialized = serde_json::to_string(&json_result).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(parsed["status"], "error");
+        assert_eq!(parsed["error"], "not found");
+    }
+
+    #[test]
+    fn json_result_skips_none_fields() {
+        let r = CheckResult::checked(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "p".to_string(),
+            "1.0".to_string(),
+            "1.0".to_string(),
+            false,
+            None,
+            String::new(),
+        );
+        let json_result = JsonResult::from(&r);
+        let serialized = serde_json::to_string(&json_result).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+
+        assert!(parsed.get("error").is_none());
+        assert!(parsed.get("artifact").is_none());
+    }
+}

@@ -9,7 +9,7 @@ use tokio::task::JoinSet;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
 use crate::maven::discovery::{self, ArtifactMapping, VersionProperty};
 use crate::maven::node::NodeChecker;
-use crate::maven::npm::NpmChecker;
+use crate::maven::pm_versions::PmVersionsChecker;
 use crate::maven::pom::ArtifactKind;
 use crate::maven::registry::MavenChecker;
 use crate::registry::{CheckResult, CheckerKind, Ecosystem};
@@ -26,7 +26,7 @@ enum CheckTask {
     Npm {
         property: VersionProperty,
         package: &'static str,
-        checker: Arc<NpmChecker>,
+        checker: Arc<PmVersionsChecker>,
     },
 }
 
@@ -83,7 +83,7 @@ pub fn discover(root: &Path, releases_only: bool) -> Result<PreparedChecks> {
         discovery_result.repositories,
     ));
     let node_checker = Arc::new(NodeChecker::new(releases_only));
-    let npm_checker = Arc::new(NpmChecker::new(releases_only));
+    let npm_checker = Arc::new(PmVersionsChecker::new(releases_only));
 
     let mut tasks: Vec<CheckTask> = discovery_result
         .mappings
@@ -100,7 +100,7 @@ pub fn discover(root: &Path, releases_only: bool) -> Result<PreparedChecks> {
                 property,
                 checker: Arc::clone(&node_checker),
             });
-        } else if let Some(package) = NpmChecker::matches(&property.name) {
+        } else if let Some(package) = PmVersionsChecker::matches(&property.name) {
             tasks.push(CheckTask::Npm {
                 property,
                 package,
@@ -130,7 +130,7 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
                 CheckTask::Maven {
                     ref mapping,
                     ref checker,
-                } => checker.check(mapping).await.unwrap_or_else(|e| {
+                } => checker.check(mapping, &source).await.unwrap_or_else(|e| {
                     CheckResult::error(
                         Ecosystem::Maven,
                         kind,
@@ -138,12 +138,13 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
                         mapping.property.current_value.clone(),
                         Some(format!("{}:{}", mapping.group_id, mapping.artifact_id)),
                         e.to_string(),
+                        source.clone(),
                     )
                 }),
                 CheckTask::Node {
                     ref property,
                     ref checker,
-                } => checker.check(property).await.unwrap_or_else(|e| {
+                } => checker.check(property, &source).await.unwrap_or_else(|e| {
                     CheckResult::error(
                         Ecosystem::Maven,
                         kind,
@@ -151,25 +152,30 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
                         property.current_value.clone(),
                         Some("nodejs.org".to_string()),
                         e.to_string(),
+                        source.clone(),
                     )
                 }),
                 CheckTask::Npm {
                     ref property,
                     package,
                     ref checker,
-                } => checker.check(property, package).await.unwrap_or_else(|e| {
-                    CheckResult::error(
-                        Ecosystem::Maven,
-                        kind,
-                        property.name.clone(),
-                        property.current_value.clone(),
-                        Some(package.to_string()),
-                        e.to_string(),
-                    )
-                }),
+                } => checker
+                    .check(property, package, &source)
+                    .await
+                    .unwrap_or_else(|e| {
+                        CheckResult::error(
+                            Ecosystem::Maven,
+                            kind,
+                            property.name.clone(),
+                            property.current_value.clone(),
+                            Some(package.to_string()),
+                            e.to_string(),
+                            source.clone(),
+                        )
+                    }),
             };
             bar.inc(1);
-            result.with_source(source)
+            result
         });
     }
 
