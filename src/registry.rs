@@ -21,6 +21,7 @@ pub enum CheckerKind {
     Node,
     Npm,
     Pnpm,
+    PnpmDev,
 }
 
 impl std::fmt::Display for CheckerKind {
@@ -31,6 +32,7 @@ impl std::fmt::Display for CheckerKind {
             Self::Node => write!(f, "Node"),
             Self::Npm => write!(f, "npm"),
             Self::Pnpm => write!(f, "pnpm"),
+            Self::PnpmDev => write!(f, "pnpm (dev)"),
         }
     }
 }
@@ -42,7 +44,7 @@ impl CheckerKind {
             Self::Plugin => console::Style::new().magenta(),
             Self::Node => console::Style::new().green(),
             Self::Npm => console::Style::new().yellow(),
-            Self::Pnpm => console::Style::new().blue(),
+            Self::Pnpm | Self::PnpmDev => console::Style::new().blue(),
         }
     }
 
@@ -51,7 +53,18 @@ impl CheckerKind {
             Self::Dependency => "\u{25cf}",
             Self::Plugin => "\u{25a0}",
             Self::Node => "\u{25b2}",
-            Self::Npm | Self::Pnpm => "\u{25c6}",
+            Self::Npm | Self::Pnpm | Self::PnpmDev => "\u{25c6}",
+        }
+    }
+
+    pub fn group_label(self) -> &'static str {
+        match self {
+            Self::Dependency => "Dependencies",
+            Self::Plugin => "Plugins",
+            Self::Node => "Node",
+            Self::Npm => "npm",
+            Self::Pnpm => "Dependencies",
+            Self::PnpmDev => "Dev Dependencies",
         }
     }
 }
@@ -271,5 +284,6 @@ mod tests {
         assert_eq!(CheckerKind::Node.to_string(), "Node");
         assert_eq!(CheckerKind::Npm.to_string(), "npm");
         assert_eq!(CheckerKind::Pnpm.to_string(), "pnpm");
+        assert_eq!(CheckerKind::PnpmDev.to_string(), "pnpm (dev)");
     }
 }

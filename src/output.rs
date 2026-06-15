@@ -38,17 +38,37 @@ pub fn print_results(results: &[CheckResult]) {
         .into_iter()
         .collect();
 
-    let multiple = ecosystems.len() > 1;
+    let multiple_ecosystems = ecosystems.len() > 1;
     for ecosystem in &ecosystems {
-        let group: Vec<&CheckResult> = results
+        let mut group: Vec<&CheckResult> = results
             .iter()
             .filter(|r| r.ecosystem == *ecosystem)
             .collect();
-        if multiple {
+        group.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| {
+            let a_name = a.artifact.as_deref().unwrap_or(&a.property_name);
+            let b_name = b.artifact.as_deref().unwrap_or(&b.property_name);
+            a_name.cmp(b_name)
+        }));
+
+        if multiple_ecosystems {
             print_ecosystem_header(*ecosystem);
         }
-        for result in &group {
-            print_result_line(result);
+
+        let kinds: Vec<CheckerKind> = group
+            .iter()
+            .map(|r| r.kind)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let multiple_kinds = kinds.len() > 1;
+
+        for kind in &kinds {
+            if multiple_kinds {
+                println!("  {}", style(kind.group_label()).dim().bold());
+            }
+            for result in group.iter().filter(|r| r.kind == *kind) {
+                print_result_line(result);
+            }
         }
         println!();
     }

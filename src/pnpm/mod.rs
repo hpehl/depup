@@ -43,12 +43,17 @@ pub async fn check_project(project_dir: &Path, root: &Path) -> Result<Vec<CheckR
 
     let mut results: Vec<CheckResult> = installed
         .into_iter()
-        .map(|(name, current)| {
+        .map(|(name, current, is_dev)| {
+            let kind = if is_dev {
+                CheckerKind::PnpmDev
+            } else {
+                CheckerKind::Pnpm
+            };
             if let Some(entry) = outdated.get(&name) {
                 let is_outdated = version::is_newer(&entry.current, &entry.latest);
                 CheckResult::checked(
                     Ecosystem::Pnpm,
-                    CheckerKind::Pnpm,
+                    kind,
                     name.clone(),
                     entry.current.clone(),
                     entry.latest.clone(),
@@ -58,7 +63,7 @@ pub async fn check_project(project_dir: &Path, root: &Path) -> Result<Vec<CheckR
             } else {
                 CheckResult::checked(
                     Ecosystem::Pnpm,
-                    CheckerKind::Pnpm,
+                    kind,
                     name.clone(),
                     current.clone(),
                     current,
@@ -74,7 +79,7 @@ pub async fn check_project(project_dir: &Path, root: &Path) -> Result<Vec<CheckR
     Ok(results)
 }
 
-async fn list_packages(project_dir: &Path) -> Result<Vec<(String, String)>> {
+async fn list_packages(project_dir: &Path) -> Result<Vec<(String, String, bool)>> {
     let output = Command::new("pnpm")
         .args(["list", "--json", "--depth", "0"])
         .current_dir(project_dir)
@@ -99,10 +104,10 @@ async fn list_packages(project_dir: &Path) -> Result<Vec<(String, String)>> {
     let mut packages = Vec::new();
     for entry in entries {
         for (name, info) in entry.dependencies {
-            packages.push((name, info.version));
+            packages.push((name, info.version, false));
         }
         for (name, info) in entry.dev_dependencies {
-            packages.push((name, info.version));
+            packages.push((name, info.version, true));
         }
     }
     Ok(packages)
