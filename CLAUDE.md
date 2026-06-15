@@ -45,14 +45,14 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`mod.rs`** — Shared `not_implemented()` helper for stub subcommands (used by `audit`).
 
-- **`pipeline.rs`** — Shared discovery and check pipeline used by both `check` and `update`. Discovers Maven (via `pom.xml`) and npm (via lockfiles), runs all checks concurrently with `JoinSet`, returns `(Vec<CheckResult>, Vec<NpmProject>)`.
+- **`pipeline.rs`** — Shared discovery and check pipeline used by both `check` and `update`. Discovers Maven (via `pom.xml`) and npm (via lockfiles), runs all checks concurrently with `JoinSet`, returns `(Vec<VersionResult>, Vec<NpmProject>)`.
 
 - **`check.rs`** — Orchestrates the check subcommand. Calls `pipeline::run_checks()`, applies `Filter`, outputs results as table or JSON. Exits with code 1 when outdated dependencies are found.
 
 - **`update.rs`** — Orchestrates the update subcommand. Calls `pipeline::run_checks()`, applies `Filter` to select which outdated deps to update, then:
-  - Maven: calls `maven::updater::apply_updates()` to rewrite POM files in place.
-  - npm: calls `npm::updater::update_project()` for each project with outdated deps.
-  - Supports all check filters (`--managed`, `--dependencies`, etc.) plus `--dry-run`.
+  - Maven: calls `maven::updater::apply_updates()` to rewrite POM files in place, with per-POM progress bar.
+  - npm: calls `npm::updater::update_project()` for each project with outdated deps, with per-project progress bar.
+  - Supports all check filters (`--managed`, `--dependencies`, `--include`, `--exclude`, etc.) plus `--dry-run`.
   - Output mirrors check: grouped by ecosystem/kind, summary line, timing, exit code 1 on errors.
 
 - **`audit.rs`** — Stub delegating to `not_implemented()`.
@@ -71,7 +71,10 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`node.rs`** — Checks Node.js version properties found in Maven POMs (e.g., `version.node`) against the Node.js distribution index.
 
-- **`pom_writer.rs`** — Surgical POM version updater. Two public functions: `update_properties()` replaces values in `<properties>` blocks, `update_inline_versions()` replaces `<version>` elements inside dependency/plugin blocks matched by `groupId:artifactId` coordinates. Both use a shared `Replacement`/`apply_replacements()` pattern — quick-xml locates byte ranges, string splicing preserves formatting.
+- **`pom_writer/`** — Surgical POM version updater, split into focused sub-modules:
+  - **`mod.rs`** — Shared `Replacement` struct, `apply_replacements()` string splicing, `local_name()` XML helper.
+  - **`properties.rs`** — `update_properties()`: replaces values in `<properties>` blocks.
+  - **`inline.rs`** — `update_inline_versions()`: replaces `<version>` elements inside dependency/plugin blocks matched by `groupId:artifactId` coordinates. Includes `InlineVersionUpdate` type and predicates for artifact block detection.
 
 - **`updater.rs`** — Bridges check results to POM file writes. Filters to Maven + outdated, groups by source POM. For each POM, applies property updates then inline version updates in sequence. Both managed and unmanaged versions are updated.
 
@@ -81,7 +84,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait with `list_packages()`, `outdated_packages()`, and `update_packages()` methods, shared `read_dev_dependency_names()` utility.
 
-- **`checker.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `CheckResult` values.
+- **`checker.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `VersionResult` values.
 
 - **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
 
@@ -97,15 +100,17 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### Shared Layer
 
-- **`registry.rs`** — Core types shared across check and update pipelines. `Ecosystem` enum (Maven, Npm), `CheckerKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `CheckId`/`CheckStatus`/`CheckResult` for check pipeline, `UpdateStatus`/`UpdateResult` for update pipeline. `UpdateResult` carries the same identity fields as `CheckResult` (ecosystem, kind, property name, artifact, source) plus old/new versions and update status. Factory methods `UpdateResult::updated()` and `UpdateResult::error()` build from a `CheckResult`.
+- **`filter.rs`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-deps`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, and `--include`/`--exclude` glob patterns matched against artifact names (Maven `groupId:artifactId`, npm package name). Wildcards use `*` only (no regex).
+
+- **`dependency.rs`** — Core types shared across check and update pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `VersionStatus`/`VersionResult` for the shared pipeline, `UpdateStatus`/`UpdateResult` for the update pipeline. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry. Factory methods `UpdateResult::updated()` and `UpdateResult::error()` build from a `VersionResult`.
 
 - **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver.
 
 - **`error.rs`** — Structured error types with `thiserror`. `DepupError` carries a stable `DepupErrorCode` for machine consumption. `JsonErrorEnvelope` provides structured JSON error output when `--json` is active.
 
-- **`json.rs`** — Serializable output types (`JsonResult`) for JSON mode. Converts `CheckResult` to a flat JSON-friendly struct.
+- **`json.rs`** — Serializable output types (`JsonResult`) for JSON mode. Converts `VersionResult` to a flat JSON-friendly struct.
 
-- **`output.rs`** — Summary table (colored via `console` crate) and JSON formatters. Groups results by ecosystem and kind with section headers.
+- **`output.rs`** — Summary table (colored via `console` crate) and JSON formatters. Groups results by ecosystem and kind with section headers. Also contains `DependencyKind` presentation helpers (`kind_color`, `kind_symbol`, `kind_group_label`) — separated from the data model for clean SoC.
 
 - **`progress.rs`** — Progress bars using `indicatif`. Block-style bar with `MultiProgress` for concurrent checks. Hidden in JSON mode.
 

@@ -14,7 +14,7 @@ use anyhow::Result;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::node::NodeChecker;
 use crate::maven::pm_versions::PmVersionsChecker;
-use crate::registry::CheckResult;
+use crate::dependency::VersionResult;
 
 /// Trait for checking tool version properties against their respective registries.
 pub trait ToolVersionChecker: Send + Sync {
@@ -27,7 +27,7 @@ pub trait ToolVersionChecker: Send + Sync {
         &'a self,
         property: &'a VersionProperty,
         source: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<VersionResult>> + Send + 'a>>;
 }
 
 /// Registry of all available tool version checkers.

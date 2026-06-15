@@ -5,14 +5,14 @@ use std::path::Path;
 
 use super::discovery::NpmProject;
 use super::{PackageManager, PackageManagerChecker, pm_bun, pm_npm, pm_pnpm, pm_yarn};
-use crate::registry::{CheckResult, UpdateResult};
+use crate::dependency::{VersionResult, UpdateResult};
 
 /// Runs the native update command for a single npm project and maps the
 /// outcome back to one `UpdateResult` per outdated dependency.
 pub async fn update_project(
     project: &NpmProject,
     _root: &Path,
-    outdated: &[CheckResult],
+    outdated: &[VersionResult],
 ) -> Vec<UpdateResult> {
     let result = match project.package_manager {
         PackageManager::Npm => pm_npm::Npm.update_packages(&project.path).await,

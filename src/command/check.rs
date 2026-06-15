@@ -13,7 +13,7 @@ use crate::app;
 use crate::filter::Filter;
 use crate::output;
 use crate::progress;
-use crate::registry::{CheckResult, Ecosystem};
+use crate::dependency::{VersionResult, Ecosystem};
 
 /// Main entry point for the `check` subcommand.
 pub async fn check(matches: &ArgMatches) -> Result<()> {
@@ -40,7 +40,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         return Ok(());
     }
 
-    let filtered: Vec<CheckResult> = all_results
+    let filtered: Vec<VersionResult> = all_results
         .into_iter()
         .filter(|r| filter.matches(r))
         .collect();

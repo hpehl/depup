@@ -2,7 +2,7 @@
 //!
 //! Dispatches to the appropriate package manager implementation, runs
 //! `list` and `outdated` commands concurrently via `tokio::try_join!`,
-//! and merges the results into `CheckResult` values.
+//! and merges the results into `VersionResult` values.
 
 use std::path::Path;
 
@@ -10,7 +10,7 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use super::{PackageManager, PackageManagerChecker, pm_bun, pm_npm, pm_pnpm, pm_yarn};
-use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
+use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 use crate::version;
 
 /// Runs `list_packages` and `outdated_packages` concurrently for any checker.
@@ -26,7 +26,7 @@ async fn run_checks(
 
 /// Checks a single npm project for outdated dependencies.
 /// Dispatches to the detected package manager and merges installed + outdated data.
-pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<CheckResult>> {
+pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<VersionResult>> {
     let source = project
         .path
         .strip_prefix(root)
@@ -42,30 +42,30 @@ pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<Chec
         PackageManager::Bun => run_checks(&pm_bun::Bun, &project.path).await?,
     };
 
-    let mut results: Vec<CheckResult> = installed
+    let mut results: Vec<VersionResult> = installed
         .into_iter()
         .map(|(name, current, is_dev)| {
             let kind = if is_dev {
-                CheckerKind::NpmDevDep
+                DependencyKind::NpmDevDep
             } else {
-                CheckerKind::NpmDep
+                DependencyKind::NpmDep
             };
-            let id = CheckId::new(
+            let id = Dependency::new(
                 Ecosystem::Npm,
                 kind,
                 name.clone(),
-                Some(name),
+                None,
                 source.clone(),
             );
-            if let Some(entry) = outdated.get(&id.property_name) {
+            if let Some(entry) = outdated.get(&id.artifact) {
                 let is_outdated = version::is_newer(&entry.current, &entry.latest);
-                CheckResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)
+                VersionResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)
             } else {
-                CheckResult::checked(id, current.clone(), current, false)
+                VersionResult::checked(id, current.clone(), current, false)
             }
         })
         .collect();
 
-    results.sort_by(|a, b| a.property_name().cmp(b.property_name()));
+    results.sort_by(|a, b| a.artifact().cmp(b.artifact()));
     Ok(results)
 }

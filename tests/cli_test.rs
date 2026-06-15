@@ -502,6 +502,81 @@ fn unmanaged_filter_only_unmanaged() {
 }
 
 #[test]
+fn include_filter_check() {
+    let output = depup()
+        .arg("check")
+        .arg("--json")
+        .arg("--include")
+        .arg("org.junit*:*")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        let artifact = result["artifact"].as_str().unwrap();
+        assert!(
+            artifact.starts_with("org.junit"),
+            "--include 'org.junit*:*' should only match org.junit artifacts, got {artifact}"
+        );
+    }
+}
+
+#[test]
+fn exclude_filter_check() {
+    let output = depup()
+        .arg("check")
+        .arg("--json")
+        .arg("--exclude")
+        .arg("org.junit*:*")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        let artifact = result["artifact"].as_str().unwrap();
+        assert!(
+            !artifact.starts_with("org.junit"),
+            "--exclude 'org.junit*:*' should not include org.junit artifacts, got {artifact}"
+        );
+    }
+}
+
+#[test]
+fn include_filter_update_dry_run() {
+    let output = depup()
+        .arg("update")
+        .arg("--json")
+        .arg("--dry-run")
+        .arg("--include")
+        .arg("org.junit*:*")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        let artifact = result["artifact"].as_str().unwrap();
+        assert!(
+            artifact.starts_with("org.junit"),
+            "update --include should filter to matching artifacts, got {artifact}"
+        );
+    }
+}
+
+#[test]
 fn audit_stub_returns_not_implemented_json() {
     let output = depup()
         .arg("audit")

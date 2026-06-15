@@ -5,7 +5,7 @@
 //! `packageManager` field in `package.json`.
 //!
 //! - [`PackageManagerChecker`] trait — each PM implements `list_packages()` and `outdated_packages()`.
-//! - [`checker`] module — dispatches to the detected PM and merges results into [`crate::registry::CheckResult`]s.
+//! - [`checker`] module — dispatches to the detected PM and merges results into [`crate::dependency::VersionResult`]s.
 //! - [`discovery`] module — walks the directory tree finding npm projects.
 
 pub mod checker;

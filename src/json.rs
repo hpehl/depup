@@ -1,11 +1,11 @@
 //! Serializable output types for `--json` mode.
 //!
-//! Converts internal `CheckResult` into a flat, JSON-friendly structure
+//! Converts internal `VersionResult` into a flat, JSON-friendly structure
 //! suitable for machine consumption. Optional fields are omitted when empty/none.
 
 use serde::Serialize;
 
-use crate::registry::{CheckResult, CheckStatus, UpdateResult, UpdateStatus};
+use crate::dependency::{VersionResult, VersionStatus, UpdateResult, UpdateStatus};
 
 /// Flat JSON representation of a single dependency check result.
 #[derive(Debug, Serialize)]
@@ -25,24 +25,24 @@ pub struct JsonResult {
     pub source: String,
 }
 
-impl From<&CheckResult> for JsonResult {
-    fn from(r: &CheckResult) -> Self {
+impl From<&VersionResult> for JsonResult {
+    fn from(r: &VersionResult) -> Self {
         let (status, error) = match &r.status {
-            CheckStatus::UpToDate { .. } => ("up-to-date", None),
-            CheckStatus::Outdated { .. } => ("outdated", None),
-            CheckStatus::Skipped => ("skipped", None),
-            CheckStatus::Error { message } => ("error", Some(message.clone())),
+            VersionStatus::UpToDate { .. } => ("up-to-date", None),
+            VersionStatus::Outdated { .. } => ("outdated", None),
+            VersionStatus::Skipped => ("skipped", None),
+            VersionStatus::Error { message } => ("error", Some(message.clone())),
         };
         Self {
             ecosystem: r.ecosystem().to_string().to_lowercase(),
-            property: r.property_name().to_string(),
+            property: r.property().unwrap_or(r.artifact()).to_string(),
             current: r.current_version.clone(),
             latest: r.latest_version().map(ToString::to_string),
             status: status.to_string(),
             kind: r.kind().to_string().to_lowercase(),
-            managed: r.has_version_property(),
+            managed: r.has_property(),
             error,
-            artifact: r.artifact().map(ToString::to_string),
+            artifact: Some(r.artifact().to_string()),
             source: r.source().to_string(),
         }
     }
@@ -74,31 +74,31 @@ impl From<&UpdateResult> for UpdateJsonResult {
         };
         Self {
             ecosystem: r.ecosystem.to_string().to_lowercase(),
-            property: r.property_name.clone(),
+            property: r.property.as_deref().unwrap_or(&r.artifact).to_string(),
             old_version: r.old_version.clone(),
             new_version: r.new_version.clone(),
             kind: r.kind.to_string().to_lowercase(),
-            managed: r.has_version_property,
+            managed: r.has_property(),
             status: status.to_string(),
             error,
-            artifact: r.artifact.clone(),
+            artifact: Some(r.artifact.clone()),
             source: r.source.clone(),
         }
     }
 }
 
 impl UpdateJsonResult {
-    pub fn would_update(r: &CheckResult) -> Self {
+    pub fn would_update(r: &VersionResult) -> Self {
         Self {
             ecosystem: r.ecosystem().to_string().to_lowercase(),
-            property: r.property_name().to_string(),
+            property: r.property().unwrap_or(r.artifact()).to_string(),
             old_version: r.current_version.clone(),
             new_version: r.latest_version().unwrap_or("").to_string(),
             kind: r.kind().to_string().to_lowercase(),
-            managed: r.has_version_property(),
+            managed: r.has_property(),
             status: "would_update".to_string(),
             error: None,
-            artifact: r.artifact().map(ToString::to_string),
+            artifact: Some(r.artifact().to_string()),
             source: r.source().to_string(),
         }
     }
@@ -107,16 +107,16 @@ impl UpdateJsonResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::{CheckId, CheckerKind, Ecosystem};
+    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
 
     #[test]
     fn json_result_round_trip() {
-        let r = CheckResult::checked(
-            CheckId::new(
+        let r = VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "version.junit".to_string(),
-                Some("org.junit.jupiter:junit-jupiter".to_string()),
+                DependencyKind::Dependency,
+                "org.junit.jupiter:junit-jupiter".to_string(),
+                Some("version.junit".to_string()),
                 "pom.xml".to_string(),
             ),
             "5.10.0".to_string(),
@@ -139,12 +139,12 @@ mod tests {
 
     #[test]
     fn json_result_error_includes_error_field() {
-        let r = CheckResult::error(
-            CheckId::new(
+        let r = VersionResult::error(
+            Dependency::new(
                 Ecosystem::Npm,
-                CheckerKind::NpmDep,
+                DependencyKind::NpmDep,
                 "react".to_string(),
-                Some("react".to_string()),
+                None,
                 String::new(),
             ),
             "18.0.0".to_string(),
@@ -160,12 +160,12 @@ mod tests {
 
     #[test]
     fn update_json_result_updated() {
-        let check = CheckResult::checked(
-            CheckId::new(
+        let check = VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "version.junit".to_string(),
-                Some("org.junit.jupiter:junit-jupiter".to_string()),
+                DependencyKind::Dependency,
+                "org.junit.jupiter:junit-jupiter".to_string(),
+                Some("version.junit".to_string()),
                 "pom.xml".to_string(),
             ),
             "5.10.0".to_string(),
@@ -186,12 +186,12 @@ mod tests {
 
     #[test]
     fn update_json_result_would_update() {
-        let check = CheckResult::checked(
-            CheckId::new(
+        let check = VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Plugin,
-                "version.compiler".to_string(),
-                Some("org.apache.maven.plugins:maven-compiler-plugin".to_string()),
+                DependencyKind::Plugin,
+                "org.apache.maven.plugins:maven-compiler-plugin".to_string(),
+                Some("version.compiler".to_string()),
                 "pom.xml".to_string(),
             ),
             "3.11.0".to_string(),
@@ -207,11 +207,11 @@ mod tests {
 
     #[test]
     fn json_result_skips_none_fields() {
-        let r = CheckResult::checked(
-            CheckId::new(
+        let r = VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "p".to_string(),
+                DependencyKind::Dependency,
+                "g:a".to_string(),
                 None,
                 String::new(),
             ),
@@ -224,6 +224,6 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
 
         assert!(parsed.get("error").is_none());
-        assert!(parsed.get("artifact").is_none());
+        assert_eq!(parsed["artifact"], "g:a");
     }
 }

@@ -17,7 +17,7 @@ use crate::constants::MAX_CONCURRENT_REQUESTS;
 use crate::maven::discovery::{self, ArtifactMapping, VersionProperty};
 use crate::maven::maven_central::MavenChecker;
 use crate::maven::tool::{ToolCheckerRegistry, ToolVersionChecker};
-use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
+use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 
 /// A single unit of work: either a Maven artifact check or a tool version check.
 enum CheckTask {
@@ -43,7 +43,7 @@ impl CheckTask {
         }
     }
 
-    fn error_id(&self, root: &Path) -> (CheckId, String) {
+    fn error_id(&self, root: &Path) -> (Dependency, String) {
         match self {
             Self::Maven { mapping, .. } => {
                 let source = mapping
@@ -53,26 +53,30 @@ impl CheckTask {
                     .display()
                     .to_string();
                 let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
-                let id = CheckId::new(
+                let property = if mapping.has_version_property {
+                    Some(mapping.property.name.clone())
+                } else {
+                    None
+                };
+                let id = Dependency::new(
                     Ecosystem::Maven,
                     match mapping.kind {
-                        crate::maven::pom::ArtifactKind::Dependency => CheckerKind::Dependency,
-                        crate::maven::pom::ArtifactKind::Plugin => CheckerKind::Plugin,
+                        crate::maven::pom::ArtifactKind::Dependency => DependencyKind::Dependency,
+                        crate::maven::pom::ArtifactKind::Plugin => DependencyKind::Plugin,
                     },
-                    mapping.property.name.clone(),
-                    Some(artifact),
+                    artifact,
+                    property,
                     source,
-                )
-                .with_version_property(mapping.has_version_property);
+                );
                 (id, mapping.property.current_value.clone())
             }
             Self::Tool { property, .. } => {
-                let id = CheckId::new(
+                let id = Dependency::new(
                     Ecosystem::Maven,
-                    CheckerKind::ToolVersion,
+                    DependencyKind::ToolVersion,
                     property.name.clone(),
                     None,
-                    "pom.xml".to_string(),
+                    "pom.xml".into(),
                 );
                 (id, property.current_value.clone())
             }
@@ -118,8 +122,8 @@ pub fn discover(root: &Path, stable: bool) -> Result<PreparedChecks> {
 }
 
 /// Execution phase: runs all prepared check tasks concurrently with a semaphore.
-/// Errors are captured as `CheckResult::error` rather than propagated.
-pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> Vec<CheckResult> {
+/// Errors are captured as `VersionResult::error` rather than propagated.
+pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> Vec<VersionResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let mut join_set = JoinSet::new();
     let root = root.to_path_buf();
@@ -146,7 +150,7 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
                         .to_string();
                     checker.check(mapping, &source).await.unwrap_or_else(|e| {
                         let (id, current) = task.error_id(&root);
-                        CheckResult::error(id, current, e.to_string())
+                        VersionResult::error(id, current, e.to_string())
                     })
                 }
                 CheckTask::Tool {
@@ -157,7 +161,7 @@ pub async fn check(root: &Path, prepared: PreparedChecks, bar: &ProgressBar) -> 
                     .await
                     .unwrap_or_else(|e| {
                         let (id, current) = task.error_id(&root);
-                        CheckResult::error(id, current, e.to_string())
+                        VersionResult::error(id, current, e.to_string())
                     }),
             };
             bar.inc(1);

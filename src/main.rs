@@ -13,7 +13,7 @@ mod maven;
 mod npm;
 mod output;
 mod progress;
-mod registry;
+mod dependency;
 mod version;
 
 use anyhow::Result;

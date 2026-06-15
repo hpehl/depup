@@ -10,16 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `update` subcommand for updating outdated dependencies
-- Maven: format-preserving POM updates for both managed properties and inline versions (preserves comments, whitespace, indentation)
-- npm: delegates to native package manager update commands (npm, pnpm, yarn, bun)
-- `--dry-run` flag to preview updates without making changes
-- Same filtering flags as `check`: `--maven`/`--npm`, `--managed`/`--unmanaged`, `--dependencies`/`--plugins`/`--dev-deps`/`--tools`, `--stable`
-- Structured JSON output with `ecosystem`, `kind`, `managed`, `artifact`, `source` fields (consistent with `check --json`)
-- Summary line, elapsed time, and exit code 1 on errors (mirrors `check` output)
+  - Maven: format-preserving POM updates for both managed properties (`<properties>`) and inline versions (`<version>x.y.z</version>`) — preserves comments, whitespace, and indentation
+  - npm: delegates to native package manager update commands (`npm update`, `pnpm update`, `yarn upgrade`, `bun update`)
+  - `--dry-run` flag to preview updates without making changes (JSON status: `would_update`)
+  - Structured JSON output with `ecosystem`, `kind`, `managed`, `artifact`, `source`, `old_version`, `new_version` fields
+  - Summary line, elapsed time, progress bar, and exit code 1 on errors (mirrors `check` output)
+- `--include`/`--exclude` glob filters for both `check` and `update` (e.g., `--include 'org.junit:*'`, `--exclude '*:guava'`, `--include 'react*'`)
 
 ### Changed
 
 - Extract shared discovery+check pipeline into `command::pipeline` (used by both `check` and `update`)
+- Extract shared types into `dependency.rs` (previously spread across `registry.rs` and ecosystem modules)
+- Split `pom_writer.rs` into `pom_writer/` module with `properties.rs` and `inline.rs` sub-modules
 - Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary)
 
 ## [0.1.0] - 2026-06-15

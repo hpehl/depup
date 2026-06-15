@@ -12,7 +12,7 @@ use crate::constants::{self, NPM_REGISTRY_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionChecker;
-use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
+use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 use crate::version;
 
 /// Generates the pattern-to-package mapping table and the flat pattern list.
@@ -56,27 +56,27 @@ impl PmVersionsChecker {
         &self,
         property: &VersionProperty,
         source: &str,
-    ) -> Result<CheckResult> {
+    ) -> Result<VersionResult> {
         let Some(package) = Self::resolve_package(&property.name) else {
-            let id = CheckId::new(
+            let id = Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::ToolVersion,
+                DependencyKind::ToolVersion,
                 property.name.clone(),
                 None,
                 source.to_string(),
             );
-            return Ok(CheckResult::error(
+            return Ok(VersionResult::error(
                 id,
                 property.current_value.clone(),
                 format!("Unknown tool property: {}", property.name),
             ));
         };
 
-        let id = CheckId::new(
+        let id = Dependency::new(
             Ecosystem::Maven,
-            CheckerKind::ToolVersion,
-            property.name.clone(),
-            Some(package.to_string()),
+            DependencyKind::ToolVersion,
+            package.to_string(),
+            None,
             source.to_string(),
         );
         let current = property.current_value.clone();
@@ -108,9 +108,9 @@ impl PmVersionsChecker {
         match latest {
             Some(latest) => {
                 let is_outdated = version::is_newer(&current, &latest);
-                Ok(CheckResult::checked(id, current, latest, is_outdated))
+                Ok(VersionResult::checked(id, current, latest, is_outdated))
             }
-            None => Ok(CheckResult::error(
+            None => Ok(VersionResult::error(
                 id,
                 current,
                 format!("No latest version found for {package}"),
@@ -134,7 +134,7 @@ impl ToolVersionChecker for PmVersionsChecker {
         &'a self,
         property: &'a VersionProperty,
         source: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<VersionResult>> + Send + 'a>> {
         Box::pin(self.fetch_and_check(property, source))
     }
 }

@@ -63,6 +63,11 @@ depup check --tools
 # Filter by version property (Maven only)
 depup check --managed          # only dependencies using a version property
 depup check --unmanaged        # only dependencies with plain inline versions
+
+# Filter by artifact name (glob wildcards)
+depup check --include 'org.junit:*'           # only org.junit artifacts
+depup check --exclude '*:guava'               # exclude guava
+depup check --include 'org.wildfly:*' --exclude '*:core'  # combine filters
 ```
 
 ### Update
@@ -93,6 +98,11 @@ depup update --tools
 # Filter by version property (Maven only)
 depup update --managed          # only update managed version properties
 depup update --unmanaged        # only update inline versions
+
+# Filter by artifact name (glob wildcards)
+depup update --include 'org.junit:*'           # only update org.junit artifacts
+depup update --exclude '*:guava'               # skip guava
+depup update --include 'react*'                # only update react packages (npm)
 
 # JSON output
 depup update --json
@@ -164,6 +174,33 @@ Done in 1s
 ```
 
 The exit code is `0` when all versions are current, `1` when any are outdated.
+
+### Update Output
+
+```
+  [1/1] ████████████████████████████████ pom.xml
+
+  ✓ org.junit.jupiter:junit-jupiter                 5.10.0 → 5.12.2   pom.xml    updated
+  ✓ org.mockito:mockito-core                         5.14.0 → 5.18.0   pom.xml    updated
+
+2 updated  (● Dependency)
+
+Done in 2s
+```
+
+Dry-run preview (`depup update --dry-run`):
+
+```
+Dry run — no changes made:
+  ✓ org.junit.jupiter:junit-jupiter                 5.10.0 → 5.12.2   pom.xml    updated
+  ✓ org.mockito:mockito-core                         5.14.0 → 5.18.0   pom.xml    updated
+
+2 updated  (● Dependency)
+
+Done in 1s
+```
+
+The exit code is `0` when all updates succeed, `1` when any update fails.
 
 ## JSON Mode
 

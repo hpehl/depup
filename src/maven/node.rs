@@ -14,7 +14,7 @@ use crate::constants::{self, NODEJS_DIST_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionChecker;
-use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
+use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 use crate::version;
 
 /// Property name patterns that trigger Node.js version checking.
@@ -53,12 +53,12 @@ impl LtsField {
     }
 }
 
-fn tool_id(property: &VersionProperty, source: &str) -> CheckId {
-    CheckId::new(
+fn tool_id(source: &str) -> Dependency {
+    Dependency::new(
         Ecosystem::Maven,
-        CheckerKind::ToolVersion,
-        property.name.clone(),
-        Some("nodejs.org".to_string()),
+        DependencyKind::ToolVersion,
+        "nodejs.org".to_string(),
+        None,
         source.to_string(),
     )
 }
@@ -75,8 +75,8 @@ impl NodeChecker {
         &self,
         property: &VersionProperty,
         source: &str,
-    ) -> Result<CheckResult> {
-        let id = tool_id(property, source);
+    ) -> Result<VersionResult> {
+        let id = tool_id(source);
         let current = property.current_value.clone();
 
         let resp = self
@@ -111,7 +111,7 @@ impl NodeChecker {
             .collect();
 
         if versions.is_empty() {
-            return Ok(CheckResult::error(
+            return Ok(VersionResult::error(
                 id,
                 current,
                 "No Node.js versions found".to_string(),
@@ -119,7 +119,7 @@ impl NodeChecker {
         }
 
         let Some(latest) = version::find_latest(&versions) else {
-            return Ok(CheckResult::error(
+            return Ok(VersionResult::error(
                 id,
                 current,
                 "Could not determine latest Node.js version".to_string(),
@@ -128,7 +128,7 @@ impl NodeChecker {
 
         let current_normalized = current.strip_prefix('v').unwrap_or(&current);
         let is_outdated = version::is_newer(current_normalized, &latest);
-        Ok(CheckResult::checked(id, current, latest, is_outdated))
+        Ok(VersionResult::checked(id, current, latest, is_outdated))
     }
 }
 
@@ -145,7 +145,7 @@ impl ToolVersionChecker for NodeChecker {
         &'a self,
         property: &'a VersionProperty,
         source: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<VersionResult>> + Send + 'a>> {
         Box::pin(self.fetch_and_check(property, source))
     }
 }

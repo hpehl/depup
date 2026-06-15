@@ -1,11 +1,13 @@
 //! Post-check result filtering based on CLI flags.
 //!
-//! Filters are composable: ecosystem, kind, outdated, stable, and managed
-//! flags can be combined freely. A result must pass all active filters.
+//! Filters are composable: ecosystem, kind, outdated, stable, managed,
+//! include/exclude flags can be combined freely. A result must pass all
+//! active filters. Include/exclude use glob-style wildcards (`*`) matched
+//! against artifact names (Maven `groupId:artifactId`, npm package name).
 
 use clap::ArgMatches;
 
-use crate::registry::{CheckResult, CheckerKind, Ecosystem};
+use crate::dependency::{VersionResult, DependencyKind, Ecosystem};
 
 /// Safely reads a boolean flag, returning `false` if the flag is not defined.
 fn try_get_flag(matches: &ArgMatches, name: &str) -> bool {
@@ -27,14 +29,50 @@ pub enum KindFilter {
 }
 
 impl KindFilter {
-    fn matches(self, kind: CheckerKind) -> bool {
+    fn matches(self, kind: DependencyKind) -> bool {
         match self {
-            Self::Dependencies => matches!(kind, CheckerKind::Dependency | CheckerKind::NpmDep),
-            Self::Plugins => kind == CheckerKind::Plugin,
-            Self::DevDeps => kind == CheckerKind::NpmDevDep,
-            Self::ToolVersions => kind == CheckerKind::ToolVersion,
+            Self::Dependencies => matches!(kind, DependencyKind::Dependency | DependencyKind::NpmDep),
+            Self::Plugins => kind == DependencyKind::Plugin,
+            Self::DevDeps => kind == DependencyKind::NpmDevDep,
+            Self::ToolVersions => kind == DependencyKind::ToolVersion,
         }
     }
+}
+
+/// Returns true if `text` matches a glob `pattern` containing `*` wildcards.
+///
+/// Each `*` matches zero or more characters. All other characters are compared
+/// literally (case-sensitive). Examples: `"org.junit:*"` matches any artifact
+/// starting with `"org.junit:"`, `"*:core"` matches any artifact ending with
+/// `":core"`, `"*"` matches everything.
+fn glob_matches(pattern: &str, text: &str) -> bool {
+    let segments: Vec<&str> = pattern.split('*').collect();
+    if segments.len() == 1 {
+        return pattern == text;
+    }
+
+    let mut pos = 0;
+    for (i, segment) in segments.iter().enumerate() {
+        if segment.is_empty() {
+            continue;
+        }
+        if i == 0 {
+            if !text.starts_with(segment) {
+                return false;
+            }
+            pos = segment.len();
+        } else if i == segments.len() - 1 {
+            if !text[pos..].ends_with(segment) {
+                return false;
+            }
+        } else {
+            match text[pos..].find(segment) {
+                Some(offset) => pos += offset + segment.len(),
+                None => return false,
+            }
+        }
+    }
+    true
 }
 
 /// Composite filter built from CLI arguments.
@@ -48,6 +86,8 @@ pub struct Filter {
     pub managed: Option<bool>,
     pub ecosystem: Option<Ecosystem>,
     pub kind: Option<KindFilter>,
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
 }
 
 impl Filter {
@@ -84,17 +124,33 @@ impl Filter {
             None
         };
 
+        let include: Vec<String> = matches
+            .try_get_many::<String>("include")
+            .ok()
+            .flatten()
+            .map(|vals| vals.cloned().collect())
+            .unwrap_or_default();
+
+        let exclude: Vec<String> = matches
+            .try_get_many::<String>("exclude")
+            .ok()
+            .flatten()
+            .map(|vals| vals.cloned().collect())
+            .unwrap_or_default();
+
         Self {
             outdated: try_get_flag(matches, "outdated"),
             stable: try_get_flag(matches, "stable"),
             managed,
             ecosystem,
             kind,
+            include,
+            exclude,
         }
     }
 
     /// Returns true if the result passes all active filter criteria.
-    pub fn matches(&self, result: &CheckResult) -> bool {
+    pub fn matches(&self, result: &VersionResult) -> bool {
         if self.outdated && !result.is_outdated() {
             return false;
         }
@@ -103,7 +159,7 @@ impl Filter {
         }
         if let Some(managed) = self.managed
             && result.ecosystem() == Ecosystem::Maven
-            && result.has_version_property() != managed
+            && result.has_property() != managed
         {
             return false;
         }
@@ -117,6 +173,14 @@ impl Filter {
         {
             return false;
         }
+        if !self.include.is_empty()
+            && !self.include.iter().any(|p| glob_matches(p, result.artifact()))
+        {
+            return false;
+        }
+        if self.exclude.iter().any(|p| glob_matches(p, result.artifact())) {
+            return false;
+        }
         true
     }
 }
@@ -124,31 +188,35 @@ impl Filter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::CheckId;
+    use crate::dependency::Dependency;
 
-    fn maven_dep(has_prop: bool) -> CheckResult {
-        CheckResult::checked(
-            CheckId::new(
+    fn maven_dep(has_prop: bool) -> VersionResult {
+        let property = if has_prop {
+            Some("version.junit".into())
+        } else {
+            None
+        };
+        VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "version.junit".into(),
-                None,
+                DependencyKind::Dependency,
+                "org.junit:junit".into(),
+                property,
                 String::new(),
-            )
-            .with_version_property(has_prop),
+            ),
             "5.10.0".into(),
             "5.12.0".into(),
             true,
         )
     }
 
-    fn maven_plugin() -> CheckResult {
-        CheckResult::checked(
-            CheckId::new(
+    fn maven_plugin() -> VersionResult {
+        VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Plugin,
-                "version.compiler".into(),
-                None,
+                DependencyKind::Plugin,
+                "org.apache.maven.plugins:maven-compiler-plugin".into(),
+                Some("version.compiler".into()),
                 String::new(),
             ),
             "3.11.0".into(),
@@ -157,13 +225,13 @@ mod tests {
         )
     }
 
-    fn npm_dep() -> CheckResult {
-        CheckResult::checked(
-            CheckId::new(
+    fn npm_dep() -> VersionResult {
+        VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Npm,
-                CheckerKind::NpmDep,
+                DependencyKind::NpmDep,
                 "react".into(),
-                Some("react".into()),
+                None,
                 String::new(),
             ),
             "18.0.0".into(),
@@ -172,13 +240,13 @@ mod tests {
         )
     }
 
-    fn npm_dev_dep() -> CheckResult {
-        CheckResult::checked(
-            CheckId::new(
+    fn npm_dev_dep() -> VersionResult {
+        VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Npm,
-                CheckerKind::NpmDevDep,
+                DependencyKind::NpmDevDep,
                 "vitest".into(),
-                Some("vitest".into()),
+                None,
                 String::new(),
             ),
             "1.0.0".into(),
@@ -187,12 +255,12 @@ mod tests {
         )
     }
 
-    fn tool_version_result() -> CheckResult {
-        CheckResult::checked(
-            CheckId::new(
+    fn tool_version_result() -> VersionResult {
+        VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::ToolVersion,
-                "version.node".into(),
+                DependencyKind::ToolVersion,
+                "nodejs.org".into(),
                 None,
                 String::new(),
             ),
@@ -209,6 +277,8 @@ mod tests {
             managed: None,
             ecosystem: None,
             kind: None,
+            include: Vec::new(),
+            exclude: Vec::new(),
         }
     }
 
@@ -231,10 +301,10 @@ mod tests {
         };
         assert!(f.matches(&maven_dep(true)));
 
-        let up_to_date = CheckResult::checked(
-            CheckId::new(
+        let up_to_date = VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
+                DependencyKind::Dependency,
                 "p".into(),
                 None,
                 String::new(),
@@ -252,10 +322,10 @@ mod tests {
             stable: true,
             ..no_filter()
         };
-        let skipped = CheckResult::skipped(
-            CheckId::new(
+        let skipped = VersionResult::skipped(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
+                DependencyKind::Dependency,
                 "p".into(),
                 None,
                 String::new(),
@@ -359,10 +429,114 @@ mod tests {
             managed: Some(true),
             outdated: true,
             stable: false,
+            ..no_filter()
         };
         assert!(f.matches(&maven_dep(true)));
         assert!(!f.matches(&maven_dep(false)));
         assert!(!f.matches(&maven_plugin()));
+        assert!(!f.matches(&npm_dep()));
+    }
+
+    // ------------------------------------------------------------------
+    // Glob matching
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn glob_exact_match() {
+        assert!(glob_matches("org.junit:junit", "org.junit:junit"));
+        assert!(!glob_matches("org.junit:junit", "org.junit:junit-bom"));
+    }
+
+    #[test]
+    fn glob_trailing_wildcard() {
+        assert!(glob_matches("org.junit:*", "org.junit:junit"));
+        assert!(glob_matches("org.junit:*", "org.junit:junit-bom"));
+        assert!(!glob_matches("org.junit:*", "org.mockito:mockito-core"));
+    }
+
+    #[test]
+    fn glob_leading_wildcard() {
+        assert!(glob_matches("*:core", "org.example:core"));
+        assert!(!glob_matches("*:core", "org.example:core-api"));
+    }
+
+    #[test]
+    fn glob_both_wildcards() {
+        assert!(glob_matches("*:junit*", "org.junit:junit"));
+        assert!(glob_matches("*:junit*", "org.junit:junit-bom"));
+        assert!(!glob_matches("*:junit*", "org.junit:mockito"));
+    }
+
+    #[test]
+    fn glob_match_all() {
+        assert!(glob_matches("*", "anything"));
+        assert!(glob_matches("*:*", "org.junit:junit"));
+    }
+
+    #[test]
+    fn glob_middle_wildcard() {
+        assert!(glob_matches("org.*:core", "org.example:core"));
+        assert!(glob_matches("org.*:core", "org.wildfly:core"));
+        assert!(!glob_matches("org.*:core", "com.example:core"));
+    }
+
+    #[test]
+    fn glob_npm_packages() {
+        assert!(glob_matches("react*", "react"));
+        assert!(glob_matches("react*", "react-dom"));
+        assert!(!glob_matches("react*", "preact"));
+        assert!(glob_matches("@scope/*", "@scope/utils"));
+    }
+
+    // ------------------------------------------------------------------
+    // Include / exclude filters
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn include_filter() {
+        let f = Filter {
+            include: vec!["org.junit:*".into()],
+            ..no_filter()
+        };
+        assert!(f.matches(&maven_dep(true)));
+        assert!(!f.matches(&maven_plugin()));
+        assert!(!f.matches(&npm_dep()));
+    }
+
+    #[test]
+    fn include_multiple_patterns() {
+        let f = Filter {
+            include: vec!["org.junit:*".into(), "react".into()],
+            ..no_filter()
+        };
+        assert!(f.matches(&maven_dep(true)));
+        assert!(f.matches(&npm_dep()));
+        assert!(!f.matches(&maven_plugin()));
+    }
+
+    #[test]
+    fn exclude_filter() {
+        let f = Filter {
+            exclude: vec!["org.junit:*".into()],
+            ..no_filter()
+        };
+        assert!(!f.matches(&maven_dep(true)));
+        assert!(f.matches(&maven_plugin()));
+        assert!(f.matches(&npm_dep()));
+    }
+
+    #[test]
+    fn include_then_exclude() {
+        let f = Filter {
+            include: vec!["org.*:*".into()],
+            exclude: vec!["*:junit".into()],
+            ..no_filter()
+        };
+        // org.junit:junit matches include but also matches exclude
+        assert!(!f.matches(&maven_dep(true)));
+        // org.apache.maven.plugins:maven-compiler-plugin matches include, not excluded
+        assert!(f.matches(&maven_plugin()));
+        // npm dep doesn't match include at all
         assert!(!f.matches(&npm_dep()));
     }
 }

@@ -11,7 +11,7 @@ use tokio::task::JoinSet;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
 use crate::npm::discovery::NpmProject;
 use crate::progress;
-use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
+use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 
 /// Discovers dependencies and runs checks across all ecosystems.
 ///
@@ -23,7 +23,7 @@ pub async fn run_checks(
     do_npm: bool,
     stable: bool,
     json: bool,
-) -> Result<(Vec<CheckResult>, Vec<NpmProject>)> {
+) -> Result<(Vec<VersionResult>, Vec<NpmProject>)> {
     let maven_prepared = if do_maven {
         Some(crate::maven::checker::discover(root, stable)?)
     } else {
@@ -49,7 +49,7 @@ pub async fn run_checks(
         progress::bar(total as u64)
     };
 
-    let mut join_set: JoinSet<Vec<CheckResult>> = JoinSet::new();
+    let mut join_set: JoinSet<Vec<VersionResult>> = JoinSet::new();
 
     if let Some(prepared) = maven_prepared {
         let root = root.to_path_buf();
@@ -59,16 +59,16 @@ pub async fn run_checks(
 
     spawn_npm_checks(&mut join_set, &npm_projects, root, &bar);
 
-    let results: Vec<CheckResult> = join_set.join_all().await.into_iter().flatten().collect();
+    let results: Vec<VersionResult> = join_set.join_all().await.into_iter().flatten().collect();
     bar.finish_and_clear();
 
     Ok((results, npm_projects))
 }
 
 /// Spawns npm project checks concurrently with semaphore-based rate limiting.
-/// On failure, produces an error `CheckResult` rather than propagating the error.
+/// On failure, produces an error `VersionResult` rather than propagating the error.
 fn spawn_npm_checks(
-    join_set: &mut JoinSet<Vec<CheckResult>>,
+    join_set: &mut JoinSet<Vec<VersionResult>>,
     projects: &[NpmProject],
     root: &Path,
     bar: &ProgressBar,
@@ -97,14 +97,14 @@ fn spawn_npm_checks(
                         .join("package.json")
                         .display()
                         .to_string();
-                    let id = CheckId::new(
+                    let id = Dependency::new(
                         Ecosystem::Npm,
-                        CheckerKind::NpmDep,
+                        DependencyKind::NpmDep,
                         project_name,
                         None,
                         source,
                     );
-                    vec![CheckResult::error(id, String::new(), e.to_string())]
+                    vec![VersionResult::error(id, String::new(), e.to_string())]
                 });
             bar.inc(1);
             results

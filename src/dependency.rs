@@ -1,8 +1,8 @@
 //! Core types shared across all ecosystems.
 //!
-//! - [`CheckId`] groups the identity of a checked dependency (ecosystem, kind, name, source).
-//! - [`CheckStatus`] is an enum of mutually exclusive outcomes (up-to-date, outdated, skipped, error).
-//! - [`CheckResult`] combines a `CheckId`, the current version, and a `CheckStatus`.
+//! - [`Dependency`] identifies a dependency (ecosystem, kind, artifact, optional property, source).
+//! - [`VersionStatus`] is an enum of mutually exclusive outcomes (up-to-date, outdated, skipped, error).
+//! - [`VersionResult`] combines a `Dependency`, the current version, and a `VersionStatus`.
 //!
 //! These types form the common currency passed between discovery, checking, filtering,
 //! and output stages.
@@ -24,9 +24,9 @@ impl std::fmt::Display for Ecosystem {
     }
 }
 
-/// Classifies a check result for display grouping and styling.
+/// Classifies a dependency for display grouping and styling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum CheckerKind {
+pub enum DependencyKind {
     Dependency,
     Plugin,
     ToolVersion,
@@ -34,7 +34,7 @@ pub enum CheckerKind {
     NpmDevDep,
 }
 
-impl std::fmt::Display for CheckerKind {
+impl std::fmt::Display for DependencyKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Dependency => write!(f, "Dependency"),
@@ -46,78 +46,47 @@ impl std::fmt::Display for CheckerKind {
     }
 }
 
-impl CheckerKind {
-    /// Returns the terminal color style for this kind.
-    pub fn color(self) -> console::Style {
-        match self {
-            Self::Dependency => console::Style::new().cyan(),
-            Self::Plugin => console::Style::new().magenta(),
-            Self::ToolVersion => console::Style::new().green(),
-            Self::NpmDep | Self::NpmDevDep => console::Style::new().blue(),
-        }
-    }
 
-    /// Returns the Unicode symbol used in the summary legend.
-    pub fn symbol(self) -> &'static str {
-        match self {
-            Self::Dependency => "\u{25cf}",
-            Self::Plugin => "\u{25a0}",
-            Self::ToolVersion => "\u{25b2}",
-            Self::NpmDep | Self::NpmDevDep => "\u{25c6}",
-        }
-    }
-
-    /// Returns the section header label used when grouping results by kind.
-    pub fn group_label(self) -> &'static str {
-        match self {
-            Self::Dependency => "Dependencies",
-            Self::Plugin => "Plugins",
-            Self::ToolVersion => "Tool Versions",
-            Self::NpmDep => "Dependencies",
-            Self::NpmDevDep => "Dev Dependencies",
-        }
-    }
-}
-
-/// Identity of a checked dependency: what was checked, where it came from.
+/// Identity of a dependency: what it is and where it came from.
 #[derive(Debug, Clone)]
-pub struct CheckId {
+pub struct Dependency {
     pub ecosystem: Ecosystem,
-    pub kind: CheckerKind,
-    pub property_name: String,
-    pub artifact: Option<String>,
+    pub kind: DependencyKind,
+    /// Display name / coordinates: Maven `"groupId:artifactId"`, npm package name, or tool label.
+    pub artifact: String,
+    /// Maven version property name (e.g. `"version.junit"`). `None` for inline Maven versions,
+    /// npm packages, and tool versions.
+    pub property: Option<String>,
+    /// Relative path to the file this dependency was found in.
     pub source: String,
-    pub has_version_property: bool,
 }
 
-impl CheckId {
+impl Dependency {
     pub fn new(
         ecosystem: Ecosystem,
-        kind: CheckerKind,
-        property_name: String,
-        artifact: Option<String>,
+        kind: DependencyKind,
+        artifact: String,
+        property: Option<String>,
         source: String,
     ) -> Self {
         Self {
             ecosystem,
             kind,
-            property_name,
             artifact,
+            property,
             source,
-            has_version_property: true,
         }
     }
 
-    /// Sets whether this dependency has a managed version property (Maven only).
-    pub fn with_version_property(mut self, has_version_property: bool) -> Self {
-        self.has_version_property = has_version_property;
-        self
+    /// Whether this dependency's version is backed by a Maven property.
+    pub fn has_property(&self) -> bool {
+        self.property.is_some()
     }
 }
 
 /// The outcome of checking a dependency version.
 #[derive(Debug, Clone)]
-pub enum CheckStatus {
+pub enum VersionStatus {
     UpToDate { latest: String },
     Outdated { latest: String },
     Skipped,
@@ -126,18 +95,18 @@ pub enum CheckStatus {
 
 /// Result of checking a single dependency against its registry.
 #[derive(Debug, Clone)]
-pub struct CheckResult {
-    pub id: CheckId,
+pub struct VersionResult {
+    pub id: Dependency,
     pub current_version: String,
-    pub status: CheckStatus,
+    pub status: VersionStatus,
 }
 
-impl CheckResult {
-    pub fn checked(id: CheckId, current: String, latest: String, is_outdated: bool) -> Self {
+impl VersionResult {
+    pub fn checked(id: Dependency, current: String, latest: String, is_outdated: bool) -> Self {
         let status = if is_outdated {
-            CheckStatus::Outdated { latest }
+            VersionStatus::Outdated { latest }
         } else {
-            CheckStatus::UpToDate { latest }
+            VersionStatus::UpToDate { latest }
         };
         Self {
             id,
@@ -146,19 +115,19 @@ impl CheckResult {
         }
     }
 
-    pub fn skipped(id: CheckId, current: String) -> Self {
+    pub fn skipped(id: Dependency, current: String) -> Self {
         Self {
             id,
             current_version: current,
-            status: CheckStatus::Skipped,
+            status: VersionStatus::Skipped,
         }
     }
 
-    pub fn error(id: CheckId, current: String, message: String) -> Self {
+    pub fn error(id: Dependency, current: String, message: String) -> Self {
         Self {
             id,
             current_version: current,
-            status: CheckStatus::Error { message },
+            status: VersionStatus::Error { message },
         }
     }
 
@@ -166,44 +135,47 @@ impl CheckResult {
         self.id.ecosystem
     }
 
-    pub fn kind(&self) -> CheckerKind {
+    pub fn kind(&self) -> DependencyKind {
         self.id.kind
     }
 
-    pub fn property_name(&self) -> &str {
-        &self.id.property_name
+    /// Maven coordinates, npm package name, or tool label.
+    pub fn artifact(&self) -> &str {
+        &self.id.artifact
     }
 
-    pub fn artifact(&self) -> Option<&str> {
-        self.id.artifact.as_deref()
+    /// Maven property name if backed by a `<properties>` entry, `None` otherwise.
+    pub fn property(&self) -> Option<&str> {
+        self.id.property.as_deref()
     }
 
     pub fn source(&self) -> &str {
         &self.id.source
     }
 
-    pub fn has_version_property(&self) -> bool {
-        self.id.has_version_property
+    /// Whether this dependency's version is backed by a Maven property.
+    pub fn has_property(&self) -> bool {
+        self.id.has_property()
     }
 
     pub fn is_outdated(&self) -> bool {
-        matches!(self.status, CheckStatus::Outdated { .. })
+        matches!(self.status, VersionStatus::Outdated { .. })
     }
 
     pub fn is_skipped(&self) -> bool {
-        matches!(self.status, CheckStatus::Skipped)
+        matches!(self.status, VersionStatus::Skipped)
     }
 
     pub fn error_message(&self) -> Option<&str> {
         match &self.status {
-            CheckStatus::Error { message } => Some(message),
+            VersionStatus::Error { message } => Some(message),
             _ => None,
         }
     }
 
     pub fn latest_version(&self) -> Option<&str> {
         match &self.status {
-            CheckStatus::UpToDate { latest } | CheckStatus::Outdated { latest } => Some(latest),
+            VersionStatus::UpToDate { latest } | VersionStatus::Outdated { latest } => Some(latest),
             _ => None,
         }
     }
@@ -220,44 +192,48 @@ pub enum UpdateStatus {
 #[derive(Debug, Clone)]
 pub struct UpdateResult {
     pub ecosystem: Ecosystem,
-    pub kind: CheckerKind,
-    pub property_name: String,
-    pub artifact: Option<String>,
+    pub kind: DependencyKind,
+    /// Maven coordinates, npm package name, or tool label.
+    pub artifact: String,
+    /// Maven property name if backed by a `<properties>` entry, `None` otherwise.
+    pub property: Option<String>,
     pub source: String,
-    pub has_version_property: bool,
     pub old_version: String,
     pub new_version: String,
     pub status: UpdateStatus,
 }
 
 impl UpdateResult {
-    pub fn updated(check: &CheckResult, new_version: String) -> Self {
+    pub fn updated(check: &VersionResult, new_version: String) -> Self {
         Self {
             ecosystem: check.ecosystem(),
             kind: check.kind(),
-            property_name: check.property_name().to_string(),
-            artifact: check.artifact().map(ToString::to_string),
+            artifact: check.artifact().to_string(),
+            property: check.property().map(ToString::to_string),
             source: check.source().to_string(),
-            has_version_property: check.has_version_property(),
             old_version: check.current_version.clone(),
             new_version,
             status: UpdateStatus::Updated,
         }
     }
 
-    pub fn error(check: &CheckResult, message: String) -> Self {
+    pub fn error(check: &VersionResult, message: String) -> Self {
         let new_version = check.latest_version().unwrap_or("").to_string();
         Self {
             ecosystem: check.ecosystem(),
             kind: check.kind(),
-            property_name: check.property_name().to_string(),
-            artifact: check.artifact().map(ToString::to_string),
+            artifact: check.artifact().to_string(),
+            property: check.property().map(ToString::to_string),
             source: check.source().to_string(),
-            has_version_property: check.has_version_property(),
             old_version: check.current_version.clone(),
             new_version,
             status: UpdateStatus::Error { message },
         }
+    }
+
+    /// Whether this dependency's version is backed by a Maven property.
+    pub fn has_property(&self) -> bool {
+        self.property.is_some()
     }
 
     pub fn is_error(&self) -> bool {
@@ -277,12 +253,12 @@ impl UpdateResult {
 mod tests {
     use super::*;
 
-    fn dep_id() -> CheckId {
-        CheckId::new(
+    fn dep_id() -> Dependency {
+        Dependency::new(
             Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "version.junit".to_string(),
-            Some("org.junit:junit".to_string()),
+            DependencyKind::Dependency,
+            "org.junit:junit".to_string(),
+            Some("version.junit".to_string()),
             String::new(),
         )
     }
@@ -295,7 +271,7 @@ mod tests {
 
     #[test]
     fn checked_result_fields() {
-        let r = CheckResult::checked(dep_id(), "5.10.0".to_string(), "5.12.0".to_string(), true);
+        let r = VersionResult::checked(dep_id(), "5.10.0".to_string(), "5.12.0".to_string(), true);
         assert!(r.is_outdated());
         assert!(!r.is_skipped());
         assert!(r.error_message().is_none());
@@ -304,14 +280,14 @@ mod tests {
 
     #[test]
     fn skipped_result_fields() {
-        let id = CheckId::new(
+        let id = Dependency::new(
             Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "version.alpha".to_string(),
-            None,
+            DependencyKind::Dependency,
+            "org.alpha:alpha".to_string(),
+            Some("version.alpha".to_string()),
             String::new(),
         );
-        let r = CheckResult::skipped(id, "1.0.0-alpha".to_string());
+        let r = VersionResult::skipped(id, "1.0.0-alpha".to_string());
         assert!(r.is_skipped());
         assert!(!r.is_outdated());
         assert!(r.latest_version().is_none());
@@ -319,14 +295,14 @@ mod tests {
 
     #[test]
     fn error_result_fields() {
-        let id = CheckId::new(
+        let id = Dependency::new(
             Ecosystem::Maven,
-            CheckerKind::Plugin,
-            "version.plugin".to_string(),
-            None,
+            DependencyKind::Plugin,
+            "org.plugin:plugin".to_string(),
+            Some("version.plugin".to_string()),
             String::new(),
         );
-        let r = CheckResult::error(id, "1.0".to_string(), "timeout".to_string());
+        let r = VersionResult::error(id, "1.0".to_string(), "timeout".to_string());
         assert!(r.error_message().is_some());
         assert!(!r.is_outdated());
         assert!(!r.is_skipped());
@@ -334,11 +310,11 @@ mod tests {
 
     #[test]
     fn status_matches_state() {
-        let up_to_date = CheckResult::checked(
-            CheckId::new(
+        let up_to_date = VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "p".into(),
+                DependencyKind::Dependency,
+                "g:a".into(),
                 None,
                 String::new(),
             ),
@@ -346,13 +322,13 @@ mod tests {
             "1.0".into(),
             false,
         );
-        assert!(matches!(up_to_date.status, CheckStatus::UpToDate { .. }));
+        assert!(matches!(up_to_date.status, VersionStatus::UpToDate { .. }));
 
-        let outdated = CheckResult::checked(
-            CheckId::new(
+        let outdated = VersionResult::checked(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "p".into(),
+                DependencyKind::Dependency,
+                "g:a".into(),
                 None,
                 String::new(),
             ),
@@ -360,58 +336,65 @@ mod tests {
             "2.0".into(),
             true,
         );
-        assert!(matches!(outdated.status, CheckStatus::Outdated { .. }));
+        assert!(matches!(outdated.status, VersionStatus::Outdated { .. }));
 
-        let skipped = CheckResult::skipped(
-            CheckId::new(
+        let skipped = VersionResult::skipped(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "p".into(),
+                DependencyKind::Dependency,
+                "g:a".into(),
                 None,
                 String::new(),
             ),
             "1.0".into(),
         );
-        assert!(matches!(skipped.status, CheckStatus::Skipped));
+        assert!(matches!(skipped.status, VersionStatus::Skipped));
 
-        let error = CheckResult::error(
-            CheckId::new(
+        let error = VersionResult::error(
+            Dependency::new(
                 Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "p".into(),
+                DependencyKind::Dependency,
+                "g:a".into(),
                 None,
                 String::new(),
             ),
             "1.0".into(),
             "fail".into(),
         );
-        assert!(matches!(error.status, CheckStatus::Error { .. }));
+        assert!(matches!(error.status, VersionStatus::Error { .. }));
     }
 
     #[test]
-    fn checker_kind_display() {
-        assert_eq!(CheckerKind::Dependency.to_string(), "Dependency");
-        assert_eq!(CheckerKind::Plugin.to_string(), "Plugin");
-        assert_eq!(CheckerKind::ToolVersion.to_string(), "Tool Version");
-        assert_eq!(CheckerKind::NpmDep.to_string(), "Dependency");
-        assert_eq!(CheckerKind::NpmDevDep.to_string(), "Dev Dependency");
+    fn dependency_kind_display() {
+        assert_eq!(DependencyKind::Dependency.to_string(), "Dependency");
+        assert_eq!(DependencyKind::Plugin.to_string(), "Plugin");
+        assert_eq!(DependencyKind::ToolVersion.to_string(), "Tool Version");
+        assert_eq!(DependencyKind::NpmDep.to_string(), "Dependency");
+        assert_eq!(DependencyKind::NpmDevDep.to_string(), "Dev Dependency");
     }
 
     #[test]
-    fn check_id_defaults_version_property_true() {
+    fn dependency_with_property() {
         let id = dep_id();
-        assert!(id.has_version_property);
+        assert!(id.has_property());
+        assert_eq!(id.property, Some("version.junit".to_string()));
     }
 
     #[test]
-    fn check_id_with_version_property_false() {
-        let id = dep_id().with_version_property(false);
-        assert!(!id.has_version_property);
+    fn dependency_without_property() {
+        let id = Dependency::new(
+            Ecosystem::Maven,
+            DependencyKind::Dependency,
+            "com.google.guava:guava".into(),
+            None,
+            String::new(),
+        );
+        assert!(!id.has_property());
     }
 
     #[test]
     fn update_result_from_check_result() {
-        let check = CheckResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
+        let check = VersionResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
         let update = UpdateResult::updated(&check, "5.12.0".into());
         assert_eq!(update.ecosystem, Ecosystem::Maven);
         assert_eq!(update.old_version, "5.10.0");
@@ -421,7 +404,7 @@ mod tests {
 
     #[test]
     fn update_result_error() {
-        let check = CheckResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
+        let check = VersionResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
         let update = UpdateResult::error(&check, "write failed".into());
         assert!(update.is_error());
         assert_eq!(update.error_message(), Some("write failed"));

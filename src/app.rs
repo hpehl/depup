@@ -70,9 +70,25 @@ pub fn build_app() -> Command {
         )
 }
 
+/// Adds include/exclude arguments for artifact name filtering.
+fn include_exclude_args(cmd: Command) -> Command {
+    cmd.arg(
+        Arg::new("include")
+            .long("include")
+            .action(ArgAction::Append)
+            .help("Only include artifacts matching a glob pattern (e.g., 'org.junit:*', 'react*')"),
+    )
+    .arg(
+        Arg::new("exclude")
+            .long("exclude")
+            .action(ArgAction::Append)
+            .help("Exclude artifacts matching a glob pattern (e.g., '*:guava', '@scope/*')"),
+    )
+}
+
 /// Adds check-specific arguments: path, filtering, and ecosystem selection flags.
 fn check_args(cmd: Command) -> Command {
-    cmd.arg(
+    include_exclude_args(cmd).arg(
         Arg::new("path")
             .default_value(".")
             .help("Path to the project root (auto-detects ecosystems)"),
@@ -147,7 +163,7 @@ fn check_args(cmd: Command) -> Command {
 }
 
 fn update_args(cmd: Command) -> Command {
-    cmd.arg(
+    include_exclude_args(cmd).arg(
         Arg::new("path")
             .default_value(".")
             .help("Path to the project root (auto-detects ecosystems)"),

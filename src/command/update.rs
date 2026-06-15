@@ -21,7 +21,7 @@ use crate::filter::Filter;
 use crate::json::UpdateJsonResult;
 use crate::output;
 use crate::progress;
-use crate::registry::{CheckResult, Ecosystem, UpdateResult};
+use crate::dependency::{VersionResult, Ecosystem, UpdateResult};
 
 pub async fn update(matches: &ArgMatches) -> Result<()> {
     let path = app::path_argument(matches);
@@ -41,7 +41,7 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
         crate::command::pipeline::run_checks(&root, do_maven, do_npm, filter.stable, json).await?;
 
     // Filter to outdated results matching the user's filters
-    let outdated: Vec<CheckResult> = check_results
+    let outdated: Vec<VersionResult> = check_results
         .into_iter()
         .filter(|r| r.is_outdated() && filter.matches(r))
         .collect();
@@ -78,26 +78,43 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
     // Phase 2: Apply updates
     let mut all_results: Vec<UpdateResult> = Vec::new();
 
-    // Maven updates
-    let maven_outdated: Vec<CheckResult> = outdated
+    let maven_outdated: Vec<VersionResult> = outdated
         .iter()
         .filter(|r| r.ecosystem() == Ecosystem::Maven)
         .cloned()
         .collect();
-    if !maven_outdated.is_empty() {
-        let maven_results = crate::maven::updater::apply_updates(&root, &maven_outdated)?;
-        all_results.extend(maven_results);
-    }
-
-    // npm updates -- only projects that have outdated deps
-    let npm_outdated: Vec<&CheckResult> = outdated
+    let npm_outdated: Vec<&VersionResult> = outdated
         .iter()
         .filter(|r| r.ecosystem() == Ecosystem::Npm)
         .collect();
+
+    // Single progress bar for all updates (Maven POM count + npm project count)
+    let maven_pom_count = maven_outdated
+        .iter()
+        .map(|r| r.source())
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let npm_project_count = count_npm_projects_with_outdated(&npm_projects, &root, &npm_outdated);
+    let total = maven_pom_count + npm_project_count;
+    let bar = if json || total == 0 {
+        ProgressBar::hidden()
+    } else {
+        progress::bar(total as u64)
+    };
+
+    // Maven updates
+    if !maven_outdated.is_empty() {
+        let maven_results = crate::maven::updater::apply_updates(&root, &maven_outdated, &bar)?;
+        all_results.extend(maven_results);
+    }
+
+    // npm updates
     if !npm_outdated.is_empty() {
-        let npm_results = run_npm_updates(&npm_projects, &root, &npm_outdated, json).await;
+        let npm_results = run_npm_updates(&npm_projects, &root, &npm_outdated, &bar).await;
         all_results.extend(npm_results);
     }
+
+    bar.finish_and_clear();
 
     if json {
         let json_results: Vec<UpdateJsonResult> =
@@ -116,46 +133,55 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
+/// Matches outdated results to their npm projects by source path.
+fn match_npm_projects<'a>(
+    projects: &'a [crate::npm::discovery::NpmProject],
+    root: &std::path::Path,
+    outdated: &[&VersionResult],
+) -> Vec<(&'a crate::npm::discovery::NpmProject, Vec<VersionResult>)> {
+    projects
+        .iter()
+        .filter_map(|p| {
+            let project_source = p
+                .path
+                .strip_prefix(root)
+                .unwrap_or(&p.path)
+                .join("package.json")
+                .display()
+                .to_string();
+            let project_results: Vec<VersionResult> = outdated
+                .iter()
+                .filter(|r| r.source() == project_source)
+                .map(|r| (*r).clone())
+                .collect();
+            if project_results.is_empty() {
+                None
+            } else {
+                Some((p, project_results))
+            }
+        })
+        .collect()
+}
+
+fn count_npm_projects_with_outdated(
+    projects: &[crate::npm::discovery::NpmProject],
+    root: &std::path::Path,
+    outdated: &[&VersionResult],
+) -> usize {
+    match_npm_projects(projects, root, outdated).len()
+}
+
 async fn run_npm_updates(
     projects: &[crate::npm::discovery::NpmProject],
     root: &std::path::Path,
-    outdated: &[&CheckResult],
-    json: bool,
+    outdated: &[&VersionResult],
+    bar: &ProgressBar,
 ) -> Vec<UpdateResult> {
-    // Match outdated results to their npm projects by source path
-    let projects_with_outdated: Vec<(&crate::npm::discovery::NpmProject, Vec<CheckResult>)> =
-        projects
-            .iter()
-            .filter_map(|p| {
-                let project_source = p
-                    .path
-                    .strip_prefix(root)
-                    .unwrap_or(&p.path)
-                    .join("package.json")
-                    .display()
-                    .to_string();
-                let project_results: Vec<CheckResult> = outdated
-                    .iter()
-                    .filter(|r| r.source() == project_source)
-                    .map(|r| (*r).clone())
-                    .collect();
-                if project_results.is_empty() {
-                    None
-                } else {
-                    Some((p, project_results))
-                }
-            })
-            .collect();
+    let projects_with_outdated = match_npm_projects(projects, root, outdated);
 
     if projects_with_outdated.is_empty() {
         return Vec::new();
     }
-
-    let bar = if json {
-        ProgressBar::hidden()
-    } else {
-        progress::bar(projects_with_outdated.len() as u64)
-    };
 
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let mut join_set = JoinSet::new();
@@ -175,7 +201,5 @@ async fn run_npm_updates(
         });
     }
 
-    let results: Vec<UpdateResult> = join_set.join_all().await.into_iter().flatten().collect();
-    bar.finish_and_clear();
-    results
+    join_set.join_all().await.into_iter().flatten().collect()
 }

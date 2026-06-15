@@ -14,7 +14,7 @@ use crate::constants::{self, MAVEN_CENTRAL_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::ArtifactMapping;
 use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
-use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
+use crate::dependency::{Dependency, VersionResult, DependencyKind, Ecosystem};
 use crate::version::{self, Version};
 
 /// Checks Maven artifacts against Maven Central and custom repositories.
@@ -56,31 +56,35 @@ impl MavenChecker {
     }
 }
 
-fn checker_kind(kind: ArtifactKind) -> CheckerKind {
+fn dependency_kind(kind: ArtifactKind) -> DependencyKind {
     match kind {
-        ArtifactKind::Dependency => CheckerKind::Dependency,
-        ArtifactKind::Plugin => CheckerKind::Plugin,
+        ArtifactKind::Dependency => DependencyKind::Dependency,
+        ArtifactKind::Plugin => DependencyKind::Plugin,
     }
 }
 
-/// Builds a `CheckId` from an `ArtifactMapping`.
-fn check_id_from_mapping(mapping: &ArtifactMapping, source: &str) -> CheckId {
+/// Builds a `Dependency` from an `ArtifactMapping`.
+fn dependency_from_mapping(mapping: &ArtifactMapping, source: &str) -> Dependency {
     let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
-    CheckId::new(
+    let property = if mapping.has_version_property {
+        Some(mapping.property.name.clone())
+    } else {
+        None
+    };
+    Dependency::new(
         Ecosystem::Maven,
-        checker_kind(mapping.kind),
-        mapping.property.name.clone(),
-        Some(artifact),
+        dependency_kind(mapping.kind),
+        artifact,
+        property,
         source.to_string(),
     )
-    .with_version_property(mapping.has_version_property)
 }
 
 impl MavenChecker {
     /// Checks a single Maven artifact for newer versions.
     /// Tries Maven Central first, then custom repos in parallel on miss.
-    pub async fn check(&self, mapping: &ArtifactMapping, source: &str) -> Result<CheckResult> {
-        let id = check_id_from_mapping(mapping, source);
+    pub async fn check(&self, mapping: &ArtifactMapping, source: &str) -> Result<VersionResult> {
+        let id = dependency_from_mapping(mapping, source);
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
         let current = mapping.property.current_value.clone();
 
@@ -88,7 +92,7 @@ impl MavenChecker {
             && let Some(parsed) = Version::parse(&current)
             && parsed.is_pre_release()
         {
-            return Ok(CheckResult::skipped(id, current));
+            return Ok(VersionResult::skipped(id, current));
         }
 
         let central_result = self
@@ -101,8 +105,8 @@ impl MavenChecker {
                 let custom_urls = self.repo_urls_for(mapping.kind);
                 if custom_urls.is_empty() {
                     return match central_result {
-                        Err(e) => Ok(CheckResult::error(id, current, e.to_string())),
-                        Ok(_) => Ok(CheckResult::error(
+                        Err(e) => Ok(VersionResult::error(id, current, e.to_string())),
+                        Ok(_) => Ok(VersionResult::error(
                             id,
                             current,
                             format!("No versions found for {artifact}"),
@@ -129,7 +133,7 @@ impl MavenChecker {
                     .collect();
 
                 if merged.is_empty() {
-                    return Ok(CheckResult::error(
+                    return Ok(VersionResult::error(
                         id,
                         current,
                         format!("No versions found for {artifact}"),
@@ -144,7 +148,7 @@ impl MavenChecker {
 
         let filtered = filter_versions(&all_versions, self.releases_only);
         if filtered.is_empty() {
-            return Ok(CheckResult::error(
+            return Ok(VersionResult::error(
                 id,
                 current,
                 format!("No release versions found for {artifact}"),
@@ -152,7 +156,7 @@ impl MavenChecker {
         }
 
         let Some(latest) = version::find_latest(&filtered) else {
-            return Ok(CheckResult::error(
+            return Ok(VersionResult::error(
                 id,
                 current,
                 format!("Could not determine latest version for {artifact}"),
@@ -160,7 +164,7 @@ impl MavenChecker {
         };
 
         let is_outdated = version::is_newer(&current, &latest);
-        Ok(CheckResult::checked(id, current, latest, is_outdated))
+        Ok(VersionResult::checked(id, current, latest, is_outdated))
     }
 }
 
