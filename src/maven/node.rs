@@ -14,7 +14,7 @@ use crate::constants::{self, NODEJS_DIST_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionChecker;
-use crate::registry::{CheckResult, CheckerKind, Ecosystem};
+use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
 use crate::version;
 
 /// Property name patterns that trigger Node.js version checking.
@@ -53,6 +53,16 @@ impl LtsField {
     }
 }
 
+fn tool_id(property: &VersionProperty, source: &str) -> CheckId {
+    CheckId::new(
+        Ecosystem::Maven,
+        CheckerKind::ToolVersion,
+        property.name.clone(),
+        Some("nodejs.org".to_string()),
+        source.to_string(),
+    )
+}
+
 impl NodeChecker {
     pub fn new(stable: bool) -> Self {
         Self {
@@ -66,6 +76,9 @@ impl NodeChecker {
         property: &VersionProperty,
         source: &str,
     ) -> Result<CheckResult> {
+        let id = tool_id(property, source);
+        let current = property.current_value.clone();
+
         let resp = self
             .client
             .get(NODEJS_DIST_URL)
@@ -97,47 +110,25 @@ impl NodeChecker {
             })
             .collect();
 
-        let artifact = Some("nodejs.org".to_string());
-        let prop_name = property.name.clone();
-        let current = property.current_value.clone();
-        let source = source.to_string();
-
         if versions.is_empty() {
             return Ok(CheckResult::error(
-                Ecosystem::Maven,
-                CheckerKind::ToolVersion,
-                prop_name,
+                id,
                 current,
-                artifact,
                 "No Node.js versions found".to_string(),
-                source,
             ));
         }
 
         let Some(latest) = version::find_latest(&versions) else {
             return Ok(CheckResult::error(
-                Ecosystem::Maven,
-                CheckerKind::ToolVersion,
-                prop_name,
+                id,
                 current,
-                artifact,
                 "Could not determine latest Node.js version".to_string(),
-                source,
             ));
         };
 
         let current_normalized = current.strip_prefix('v').unwrap_or(&current);
         let is_outdated = version::is_newer(current_normalized, &latest);
-        Ok(CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::ToolVersion,
-            prop_name,
-            current,
-            latest,
-            is_outdated,
-            artifact,
-            source,
-        ))
+        Ok(CheckResult::checked(id, current, latest, is_outdated))
     }
 }
 

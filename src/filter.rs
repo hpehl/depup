@@ -82,25 +82,25 @@ impl Filter {
 
     /// Returns true if the result passes all active filter criteria.
     pub fn matches(&self, result: &CheckResult) -> bool {
-        if self.outdated && !result.outdated {
+        if self.outdated && !result.is_outdated() {
             return false;
         }
-        if self.stable && result.skipped {
+        if self.stable && result.is_skipped() {
             return false;
         }
         if let Some(managed) = self.managed
-            && result.ecosystem == Ecosystem::Maven
-            && result.has_version_property != managed
+            && result.ecosystem() == Ecosystem::Maven
+            && result.has_version_property() != managed
         {
             return false;
         }
         if let Some(ecosystem) = self.ecosystem
-            && result.ecosystem != ecosystem
+            && result.ecosystem() != ecosystem
         {
             return false;
         }
         if let Some(kind) = self.kind
-            && !kind.matches(result.kind)
+            && !kind.matches(result.kind())
         {
             return false;
         }
@@ -111,70 +111,81 @@ impl Filter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::registry::CheckId;
 
     fn maven_dep(has_prop: bool) -> CheckResult {
         CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "version.junit".into(),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "version.junit".into(),
+                None,
+                String::new(),
+            )
+            .with_version_property(has_prop),
             "5.10.0".into(),
             "5.12.0".into(),
             true,
-            None,
-            String::new(),
         )
-        .with_version_property(has_prop)
     }
 
     fn maven_plugin() -> CheckResult {
         CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Plugin,
-            "version.compiler".into(),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Plugin,
+                "version.compiler".into(),
+                None,
+                String::new(),
+            ),
             "3.11.0".into(),
             "3.13.0".into(),
             true,
-            None,
-            String::new(),
         )
     }
 
     fn npm_dep() -> CheckResult {
         CheckResult::checked(
-            Ecosystem::Npm,
-            CheckerKind::NpmDep,
-            "react".into(),
+            CheckId::new(
+                Ecosystem::Npm,
+                CheckerKind::NpmDep,
+                "react".into(),
+                Some("react".into()),
+                String::new(),
+            ),
             "18.0.0".into(),
             "19.0.0".into(),
             true,
-            Some("react".into()),
-            String::new(),
         )
     }
 
     fn npm_dev_dep() -> CheckResult {
         CheckResult::checked(
-            Ecosystem::Npm,
-            CheckerKind::NpmDevDep,
-            "vitest".into(),
+            CheckId::new(
+                Ecosystem::Npm,
+                CheckerKind::NpmDevDep,
+                "vitest".into(),
+                Some("vitest".into()),
+                String::new(),
+            ),
             "1.0.0".into(),
             "2.0.0".into(),
             true,
-            Some("vitest".into()),
-            String::new(),
         )
     }
 
     fn tool_version_result() -> CheckResult {
         CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::ToolVersion,
-            "version.node".into(),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::ToolVersion,
+                "version.node".into(),
+                None,
+                String::new(),
+            ),
             "20.0.0".into(),
             "22.0.0".into(),
             true,
-            None,
-            String::new(),
         )
     }
 
@@ -208,14 +219,16 @@ mod tests {
         assert!(f.matches(&maven_dep(true)));
 
         let up_to_date = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".into(),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "p".into(),
+                None,
+                String::new(),
+            ),
             "1.0".into(),
             "1.0".into(),
             false,
-            None,
-            String::new(),
         );
         assert!(!f.matches(&up_to_date));
     }
@@ -227,12 +240,14 @@ mod tests {
             ..no_filter()
         };
         let skipped = CheckResult::skipped(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".into(),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "p".into(),
+                None,
+                String::new(),
+            ),
             "1.0-alpha".into(),
-            None,
-            String::new(),
         );
         assert!(!f.matches(&skipped));
         assert!(f.matches(&maven_dep(true)));
@@ -246,7 +261,6 @@ mod tests {
         };
         assert!(f.matches(&maven_dep(true)));
         assert!(!f.matches(&maven_dep(false)));
-        // npm results pass through regardless
         assert!(f.matches(&npm_dep()));
     }
 

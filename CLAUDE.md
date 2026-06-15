@@ -39,8 +39,6 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 - **`main.rs`** — Entry point. Wires `CompleteEnv` for dynamic shell completions, dispatches subcommands (`check`, `update`, `audit`, `completions`), handles top-level error reporting with JSON error envelope support.
 
-- **`args.rs`** — Helper functions to extract typed arguments from clap `ArgMatches`.
-
 - **`constants.rs`** — Static values: Maven Central URL, Node.js dist URL, npm registry URL, concurrency limits, HTTP timeout, shared HTTP client factory.
 
 ### Command Layer (`src/command/`)
@@ -63,7 +61,7 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 - **`discovery.rs`** — Walks the module tree starting from root `pom.xml`, follows `<modules>` declarations recursively. For each artifact with a `${version.*}` version reference, maps it back to the property value in the root POM's `<properties>`. Also collects `<repositories>` and `<pluginRepositories>` from all POMs, deduplicates by URL.
 
-- **`registry.rs`** — Unified Maven repository checker using `maven-metadata.xml`. Tries Maven Central first; if not found, queries custom repositories in parallel. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default.
+- **`maven_central.rs`** — Unified Maven repository checker using `maven-metadata.xml`. Tries Maven Central first; if not found, queries custom repositories in parallel. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default.
 
 - **`checker.rs`** — Orchestrates Maven checks. Wraps discovery, builds `CheckTask` variants (Maven artifact, Node.js version, package manager version), and runs them concurrently with progress reporting.
 
@@ -73,7 +71,9 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 ### npm Ecosystem (`src/npm/`)
 
-- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait, shared `read_dev_dependency_names()` utility, `run_checks()` generic dispatcher, and `check_project()` entry point. Each PM implements `list_packages()` and `outdated_packages()` via the trait; `check_project()` dispatches through `run_checks()`.
+- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerChecker` trait, shared `read_dev_dependency_names()` utility. Each PM implements `list_packages()` and `outdated_packages()` via the trait.
+
+- **`checker.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `CheckResult` values.
 
 - **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
 
@@ -87,7 +87,7 @@ The pipeline flows: **Discovery → Check → Comparison → Output**, with ecos
 
 ### Shared Layer
 
-- **`registry.rs`** — `Ecosystem` enum (Maven, Npm), `CheckerKind` enum (Dependency, Plugin, Node, NpmPkg, NpmDep, NpmDevDep), `CheckResult` struct, and `Outcome` enum. Each kind has a display color, symbol, and group label. `CheckResult` constructors (`checked`, `skipped`, `error`) take all fields including `source` — no post-construction mutation.
+- **`registry.rs`** — Core types: `Ecosystem` enum (Maven, Npm), `CheckerKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `CheckId` struct (groups identity fields: ecosystem, kind, property name, artifact, source, has_version_property), `CheckStatus` enum (UpToDate, Outdated, Skipped, Error), and `CheckResult` struct combining `CheckId`, current version, and `CheckStatus`. Factory methods: `checked()`, `skipped()`, `error()`. Accessor methods for all fields.
 
 - **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver.
 
@@ -110,7 +110,7 @@ These patterns are shared with the `mgt` and `wado` CLI tools:
 - **`JoinSet`** for parallel async operations (not `futures::join_all`)
 - **Command module organization** — each subcommand in `src/command/`
 - **Shell completions** via `clap_complete` with `unstable-dynamic` feature
-- **Trait-based dispatch** — `PackageManagerChecker` trait with `run_checks()` generic helper
+- **Trait-based dispatch** — `PackageManagerChecker` trait for PM-specific operations, `ToolVersionChecker` trait for Maven tool-version properties
 
 ## Known Quirks
 

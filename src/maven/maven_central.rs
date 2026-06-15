@@ -14,7 +14,7 @@ use crate::constants::{self, MAVEN_CENTRAL_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::ArtifactMapping;
 use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
-use crate::registry::{CheckResult, CheckerKind, Ecosystem};
+use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
 use crate::version::{self, Version};
 
 /// Checks Maven artifacts against Maven Central and custom repositories.
@@ -63,41 +63,32 @@ fn checker_kind(kind: ArtifactKind) -> CheckerKind {
     }
 }
 
+/// Builds a `CheckId` from an `ArtifactMapping`.
+fn check_id_from_mapping(mapping: &ArtifactMapping, source: &str) -> CheckId {
+    let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
+    CheckId::new(
+        Ecosystem::Maven,
+        checker_kind(mapping.kind),
+        mapping.property.name.clone(),
+        Some(artifact),
+        source.to_string(),
+    )
+    .with_version_property(mapping.has_version_property)
+}
+
 impl MavenChecker {
     /// Checks a single Maven artifact for newer versions.
     /// Tries Maven Central first, then custom repos in parallel on miss.
     pub async fn check(&self, mapping: &ArtifactMapping, source: &str) -> Result<CheckResult> {
+        let id = check_id_from_mapping(mapping, source);
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
-        let kind = checker_kind(mapping.kind);
-        let prop_name = mapping.property.name.clone();
         let current = mapping.property.current_value.clone();
-        let artifact_opt = Some(artifact.clone());
-        let source = source.to_string();
-
-        let maven_error = |msg: String| -> Result<CheckResult> {
-            Ok(CheckResult::error(
-                Ecosystem::Maven,
-                kind,
-                prop_name.clone(),
-                current.clone(),
-                artifact_opt.clone(),
-                msg,
-                source.clone(),
-            ))
-        };
 
         if self.releases_only
             && let Some(parsed) = Version::parse(&current)
             && parsed.is_pre_release()
         {
-            return Ok(CheckResult::skipped(
-                Ecosystem::Maven,
-                kind,
-                prop_name,
-                current,
-                artifact_opt,
-                source,
-            ));
+            return Ok(CheckResult::skipped(id, current));
         }
 
         let central_result = self
@@ -110,8 +101,12 @@ impl MavenChecker {
                 let custom_urls = self.repo_urls_for(mapping.kind);
                 if custom_urls.is_empty() {
                     return match central_result {
-                        Err(e) => maven_error(e.to_string()),
-                        Ok(_) => maven_error(format!("No versions found for {artifact}")),
+                        Err(e) => Ok(CheckResult::error(id, current, e.to_string())),
+                        Ok(_) => Ok(CheckResult::error(
+                            id,
+                            current,
+                            format!("No versions found for {artifact}"),
+                        )),
                     };
                 }
 
@@ -134,7 +129,11 @@ impl MavenChecker {
                     .collect();
 
                 if merged.is_empty() {
-                    return maven_error(format!("No versions found for {artifact}"));
+                    return Ok(CheckResult::error(
+                        id,
+                        current,
+                        format!("No versions found for {artifact}"),
+                    ));
                 }
 
                 merged.sort();
@@ -145,24 +144,23 @@ impl MavenChecker {
 
         let filtered = filter_versions(&all_versions, self.releases_only);
         if filtered.is_empty() {
-            return maven_error(format!("No release versions found for {artifact}"));
+            return Ok(CheckResult::error(
+                id,
+                current,
+                format!("No release versions found for {artifact}"),
+            ));
         }
 
         let Some(latest) = version::find_latest(&filtered) else {
-            return maven_error(format!("Could not determine latest version for {artifact}"));
+            return Ok(CheckResult::error(
+                id,
+                current,
+                format!("Could not determine latest version for {artifact}"),
+            ));
         };
 
         let is_outdated = version::is_newer(&current, &latest);
-        Ok(CheckResult::checked(
-            Ecosystem::Maven,
-            kind,
-            prop_name,
-            current,
-            latest,
-            is_outdated,
-            artifact_opt,
-            source,
-        ))
+        Ok(CheckResult::checked(id, current, latest, is_outdated))
     }
 }
 

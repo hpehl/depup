@@ -2,8 +2,11 @@
 //!
 //! Discovers npm/pnpm/yarn/bun projects in a directory tree and checks for
 //! outdated packages. Auto-detects the package manager by lock file or
-//! `packageManager` field in `package.json`. Each package manager implements
-//! the [`PackageManagerChecker`] trait.
+//! `packageManager` field in `package.json`.
+//!
+//! - [`PackageManagerChecker`] trait — each PM implements `list_packages()` and `outdated_packages()`.
+//! - [`checker`] module — dispatches to the detected PM and merges results into [`crate::registry::CheckResult`]s.
+//! - [`discovery`] module — walks the directory tree finding npm projects.
 
 pub mod checker;
 pub mod discovery;

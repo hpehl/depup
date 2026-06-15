@@ -1,4 +1,8 @@
-//! Core types shared across all ecosystems: `Ecosystem`, `CheckerKind`, `CheckResult`, and `Outcome`.
+//! Core types shared across all ecosystems.
+//!
+//! - [`CheckId`] groups the identity of a checked dependency (ecosystem, kind, name, source).
+//! - [`CheckStatus`] is an enum of mutually exclusive outcomes (up-to-date, outdated, skipped, error).
+//! - [`CheckResult`] combines a `CheckId`, the current version, and a `CheckStatus`.
 //!
 //! These types form the common currency passed between discovery, checking, filtering,
 //! and output stages.
@@ -75,126 +79,132 @@ impl CheckerKind {
     }
 }
 
-/// Result of checking a single dependency against its registry.
-///
-/// Constructed via the `checked()`, `skipped()`, or `error()` factory methods
-/// to ensure all fields are set consistently. No post-construction mutation
-/// except `with_version_property()`.
+/// Identity of a checked dependency: what was checked, where it came from.
 #[derive(Debug, Clone)]
-pub struct CheckResult {
+pub struct CheckId {
     pub ecosystem: Ecosystem,
+    pub kind: CheckerKind,
     pub property_name: String,
-    pub current_version: String,
-    pub latest_version: Option<String>,
-    pub outdated: bool,
-    pub skipped: bool,
-    pub error: Option<String>,
     pub artifact: Option<String>,
     pub source: String,
-    pub kind: CheckerKind,
     pub has_version_property: bool,
 }
 
-/// Derived state of a `CheckResult`, used by the output layer to choose formatting.
-pub enum Outcome<'a> {
-    UpToDate,
-    Outdated { latest: &'a str },
-    Skipped,
-    Error { message: &'a str },
-}
-
-impl CheckResult {
-    #[allow(clippy::too_many_arguments)]
-    pub fn checked(
+impl CheckId {
+    pub fn new(
         ecosystem: Ecosystem,
         kind: CheckerKind,
         property_name: String,
-        current_version: String,
-        latest_version: String,
-        is_outdated: bool,
         artifact: Option<String>,
         source: String,
     ) -> Self {
         Self {
             ecosystem,
+            kind,
             property_name,
-            current_version,
-            latest_version: Some(latest_version),
-            outdated: is_outdated,
-            skipped: false,
-            error: None,
             artifact,
             source,
-            kind,
             has_version_property: true,
         }
     }
 
-    pub fn skipped(
-        ecosystem: Ecosystem,
-        kind: CheckerKind,
-        property_name: String,
-        current_version: String,
-        artifact: Option<String>,
-        source: String,
-    ) -> Self {
-        Self {
-            ecosystem,
-            property_name,
-            current_version,
-            latest_version: None,
-            outdated: false,
-            skipped: true,
-            error: None,
-            artifact,
-            source,
-            kind,
-            has_version_property: true,
-        }
-    }
-
-    pub fn error(
-        ecosystem: Ecosystem,
-        kind: CheckerKind,
-        property_name: String,
-        current_version: String,
-        artifact: Option<String>,
-        error: String,
-        source: String,
-    ) -> Self {
-        Self {
-            ecosystem,
-            property_name,
-            current_version,
-            latest_version: None,
-            outdated: false,
-            skipped: false,
-            error: Some(error),
-            artifact,
-            source,
-            kind,
-            has_version_property: true,
-        }
-    }
-
-    /// Builder-style setter for whether this dependency has a managed version property (Maven only).
+    /// Sets whether this dependency has a managed version property (Maven only).
     pub fn with_version_property(mut self, has_version_property: bool) -> Self {
         self.has_version_property = has_version_property;
         self
     }
+}
 
-    /// Derives the display outcome from the result's state flags.
-    pub fn outcome(&self) -> Outcome<'_> {
-        if let Some(err) = &self.error {
-            Outcome::Error { message: err }
-        } else if self.skipped {
-            Outcome::Skipped
-        } else if self.outdated {
-            Outcome::Outdated {
-                latest: self.latest_version.as_deref().unwrap_or("?"),
-            }
+/// The outcome of checking a dependency version.
+#[derive(Debug, Clone)]
+pub enum CheckStatus {
+    UpToDate { latest: String },
+    Outdated { latest: String },
+    Skipped,
+    Error { message: String },
+}
+
+/// Result of checking a single dependency against its registry.
+#[derive(Debug, Clone)]
+pub struct CheckResult {
+    pub id: CheckId,
+    pub current_version: String,
+    pub status: CheckStatus,
+}
+
+impl CheckResult {
+    pub fn checked(id: CheckId, current: String, latest: String, is_outdated: bool) -> Self {
+        let status = if is_outdated {
+            CheckStatus::Outdated { latest }
         } else {
-            Outcome::UpToDate
+            CheckStatus::UpToDate { latest }
+        };
+        Self {
+            id,
+            current_version: current,
+            status,
+        }
+    }
+
+    pub fn skipped(id: CheckId, current: String) -> Self {
+        Self {
+            id,
+            current_version: current,
+            status: CheckStatus::Skipped,
+        }
+    }
+
+    pub fn error(id: CheckId, current: String, message: String) -> Self {
+        Self {
+            id,
+            current_version: current,
+            status: CheckStatus::Error { message },
+        }
+    }
+
+    pub fn ecosystem(&self) -> Ecosystem {
+        self.id.ecosystem
+    }
+
+    pub fn kind(&self) -> CheckerKind {
+        self.id.kind
+    }
+
+    pub fn property_name(&self) -> &str {
+        &self.id.property_name
+    }
+
+    pub fn artifact(&self) -> Option<&str> {
+        self.id.artifact.as_deref()
+    }
+
+    pub fn source(&self) -> &str {
+        &self.id.source
+    }
+
+    pub fn has_version_property(&self) -> bool {
+        self.id.has_version_property
+    }
+
+    pub fn is_outdated(&self) -> bool {
+        matches!(self.status, CheckStatus::Outdated { .. })
+    }
+
+    pub fn is_skipped(&self) -> bool {
+        matches!(self.status, CheckStatus::Skipped)
+    }
+
+    pub fn error_message(&self) -> Option<&str> {
+        match &self.status {
+            CheckStatus::Error { message } => Some(message),
+            _ => None,
+        }
+    }
+
+    pub fn latest_version(&self) -> Option<&str> {
+        match &self.status {
+            CheckStatus::UpToDate { latest } | CheckStatus::Outdated { latest } => Some(latest),
+            _ => None,
         }
     }
 }
@@ -202,6 +212,16 @@ impl CheckResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn dep_id() -> CheckId {
+        CheckId::new(
+            Ecosystem::Maven,
+            CheckerKind::Dependency,
+            "version.junit".to_string(),
+            Some("org.junit:junit".to_string()),
+            String::new(),
+        )
+    }
 
     #[test]
     fn ecosystem_display() {
@@ -212,98 +232,77 @@ mod tests {
     #[test]
     fn checked_result_fields() {
         let r = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "version.junit".to_string(),
+            dep_id(),
             "5.10.0".to_string(),
             "5.12.0".to_string(),
             true,
-            Some("org.junit:junit".to_string()),
-            String::new(),
         );
-        assert!(r.outdated);
-        assert!(!r.skipped);
-        assert!(r.error.is_none());
-        assert_eq!(r.latest_version.as_deref(), Some("5.12.0"));
+        assert!(r.is_outdated());
+        assert!(!r.is_skipped());
+        assert!(r.error_message().is_none());
+        assert_eq!(r.latest_version(), Some("5.12.0"));
     }
 
     #[test]
     fn skipped_result_fields() {
-        let r = CheckResult::skipped(
+        let id = CheckId::new(
             Ecosystem::Maven,
             CheckerKind::Dependency,
             "version.alpha".to_string(),
-            "1.0.0-alpha".to_string(),
             None,
             String::new(),
         );
-        assert!(r.skipped);
-        assert!(!r.outdated);
-        assert!(r.latest_version.is_none());
+        let r = CheckResult::skipped(id, "1.0.0-alpha".to_string());
+        assert!(r.is_skipped());
+        assert!(!r.is_outdated());
+        assert!(r.latest_version().is_none());
     }
 
     #[test]
     fn error_result_fields() {
-        let r = CheckResult::error(
+        let id = CheckId::new(
             Ecosystem::Maven,
             CheckerKind::Plugin,
             "version.plugin".to_string(),
-            "1.0".to_string(),
             None,
-            "timeout".to_string(),
             String::new(),
         );
-        assert!(r.error.is_some());
-        assert!(!r.outdated);
-        assert!(!r.skipped);
+        let r = CheckResult::error(id, "1.0".to_string(), "timeout".to_string());
+        assert!(r.error_message().is_some());
+        assert!(!r.is_outdated());
+        assert!(!r.is_skipped());
     }
 
     #[test]
-    fn outcome_matches_state() {
+    fn status_matches_state() {
         let up_to_date = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".into(),
+            CheckId::new(Ecosystem::Maven, CheckerKind::Dependency, "p".into(), None, String::new()),
             "1.0".into(),
             "1.0".into(),
             false,
-            None,
-            String::new(),
         );
-        assert!(matches!(up_to_date.outcome(), Outcome::UpToDate));
+        assert!(matches!(up_to_date.status, CheckStatus::UpToDate { .. }));
 
         let outdated = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".into(),
+            CheckId::new(Ecosystem::Maven, CheckerKind::Dependency, "p".into(), None, String::new()),
             "1.0".into(),
             "2.0".into(),
             true,
-            None,
-            String::new(),
         );
-        assert!(matches!(outdated.outcome(), Outcome::Outdated { .. }));
+        assert!(matches!(outdated.status, CheckStatus::Outdated { .. }));
 
         let skipped = CheckResult::skipped(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".into(),
+            CheckId::new(Ecosystem::Maven, CheckerKind::Dependency, "p".into(), None, String::new()),
             "1.0".into(),
-            None,
-            String::new(),
         );
-        assert!(matches!(skipped.outcome(), Outcome::Skipped));
+        assert!(matches!(skipped.status, CheckStatus::Skipped));
 
         let error = CheckResult::error(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "p".into(),
+            CheckId::new(Ecosystem::Maven, CheckerKind::Dependency, "p".into(), None, String::new()),
             "1.0".into(),
-            None,
             "fail".into(),
-            String::new(),
         );
-        assert!(matches!(error.outcome(), Outcome::Error { .. }));
+        assert!(matches!(error.status, CheckStatus::Error { .. }));
     }
 
     #[test]
@@ -313,5 +312,17 @@ mod tests {
         assert_eq!(CheckerKind::ToolVersion.to_string(), "Tool Version");
         assert_eq!(CheckerKind::NpmDep.to_string(), "Dependency");
         assert_eq!(CheckerKind::NpmDevDep.to_string(), "Dev Dependency");
+    }
+
+    #[test]
+    fn check_id_defaults_version_property_true() {
+        let id = dep_id();
+        assert!(id.has_version_property);
+    }
+
+    #[test]
+    fn check_id_with_version_property_false() {
+        let id = dep_id().with_version_property(false);
+        assert!(!id.has_version_property);
     }
 }

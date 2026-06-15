@@ -14,7 +14,7 @@ cargo install --path .
 
 ```bash
 # Check current directory (auto-detects ecosystems)
-depup
+depup check
 
 # Check a specific project
 depup check /path/to/project
@@ -25,8 +25,8 @@ depup check --json
 # Only show outdated versions
 depup check --outdated
 
-# Include pre-release versions (Maven only)
-depup check --include-pre-releases
+# Exclude pre-release versions (alpha, beta, RC, milestone)
+depup check --stable
 
 # Generate shell completions (auto-detects shell)
 depup completions
@@ -37,8 +37,6 @@ depup completions --install
 # Generate completions for a specific shell
 depup completions fish
 ```
-
-The `check` subcommand is the default — `depup /path` is equivalent to `depup check /path`.
 
 If both Maven and npm ecosystem projects are found in the target path, both are checked and results are combined.
 
@@ -92,7 +90,7 @@ Use `--json` for machine-readable output. Progress bars are suppressed, and erro
 {"error": {"code": "POM_NOT_FOUND", "message": "No pom.xml found in /nonexistent"}}
 ```
 
-Error codes: `POM_NOT_FOUND`, `POM_PARSE_FAILED`, `REGISTRY_LOOKUP_FAILED`, `NO_VERSIONS_FOUND`, `HTTP_REQUEST_FAILED`, `CLAP_PARSE_ERROR`, `INTERNAL`.
+Error codes: `POM_NOT_FOUND`, `POM_PARSE_FAILED`, `HTTP_REQUEST_FAILED`, `CLAP_PARSE_ERROR`, `INTERNAL`.
 
 ## How It Works
 
@@ -115,7 +113,7 @@ Error codes: `POM_NOT_FOUND`, `POM_PARSE_FAILED`, `REGISTRY_LOOKUP_FAILED`, `NO_
 
 ## Version Filtering
 
-By default, `depup` excludes pre-release versions and SNAPSHOTs (Maven). Use `--include-pre-releases` to also show pre-release versions matching these patterns:
+By default, `depup` includes pre-release versions but always excludes SNAPSHOTs (Maven). Use `--stable` (alias `--releases-only`) to also exclude pre-release versions matching these patterns:
 
 - `*-alpha*`, `*-beta*`
 - `*-RC*`, `*-CR*`

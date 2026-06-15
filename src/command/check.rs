@@ -21,7 +21,7 @@ use crate::filter::Filter;
 use crate::npm::discovery::NpmProject;
 use crate::output;
 use crate::progress;
-use crate::registry::{CheckResult, CheckerKind, Ecosystem};
+use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
 
 /// Main entry point for the `check` subcommand.
 pub async fn check(matches: &ArgMatches) -> Result<()> {
@@ -87,7 +87,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         progress::done(instant);
     }
 
-    if filtered.iter().any(|r| r.outdated) {
+    if filtered.iter().any(|r| r.is_outdated()) {
         std::process::exit(1);
     }
 
@@ -125,15 +125,14 @@ fn spawn_npm_checks(
                         .join("package.json")
                         .display()
                         .to_string();
-                    vec![CheckResult::error(
+                    let id = CheckId::new(
                         Ecosystem::Npm,
                         CheckerKind::NpmDep,
                         project_name,
-                        String::new(),
                         None,
-                        e.to_string(),
                         source,
-                    )]
+                    );
+                    vec![CheckResult::error(id, String::new(), e.to_string())]
                 });
             bar.inc(1);
             results

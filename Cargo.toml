@@ -2,7 +2,7 @@
 name = "depup"
 version = "0.1.0"
 edition = "2024"
-description = "Check dependency versions across Maven and pnpm ecosystems"
+description = "Check dependency versions across Maven and npm ecosystems"
 
 [dependencies]
 anyhow = "1"

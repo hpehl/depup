@@ -12,7 +12,7 @@ use crate::constants::{self, NPM_REGISTRY_URL};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionChecker;
-use crate::registry::{CheckResult, CheckerKind, Ecosystem};
+use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
 use crate::version;
 
 /// Generates the pattern-to-package mapping table and the flat pattern list.
@@ -58,16 +58,28 @@ impl PmVersionsChecker {
         source: &str,
     ) -> Result<CheckResult> {
         let Some(package) = Self::resolve_package(&property.name) else {
-            return Ok(CheckResult::error(
+            let id = CheckId::new(
                 Ecosystem::Maven,
                 CheckerKind::ToolVersion,
                 property.name.clone(),
-                property.current_value.clone(),
                 None,
-                format!("Unknown tool property: {}", property.name),
                 source.to_string(),
+            );
+            return Ok(CheckResult::error(
+                id,
+                property.current_value.clone(),
+                format!("Unknown tool property: {}", property.name),
             ));
         };
+
+        let id = CheckId::new(
+            Ecosystem::Maven,
+            CheckerKind::ToolVersion,
+            property.name.clone(),
+            Some(package.to_string()),
+            source.to_string(),
+        );
+        let current = property.current_value.clone();
 
         let url = format!("{NPM_REGISTRY_URL}/{package}");
 
@@ -93,33 +105,15 @@ impl PmVersionsChecker {
             .as_str()
             .map(ToString::to_string);
 
-        let prop_name = property.name.clone();
-        let current = property.current_value.clone();
-        let artifact = Some(package.to_string());
-        let source = source.to_string();
-
         match latest {
             Some(latest) => {
                 let is_outdated = version::is_newer(&current, &latest);
-                Ok(CheckResult::checked(
-                    Ecosystem::Maven,
-                    CheckerKind::ToolVersion,
-                    prop_name,
-                    current,
-                    latest,
-                    is_outdated,
-                    artifact,
-                    source,
-                ))
+                Ok(CheckResult::checked(id, current, latest, is_outdated))
             }
             None => Ok(CheckResult::error(
-                Ecosystem::Maven,
-                CheckerKind::ToolVersion,
-                prop_name,
+                id,
                 current,
-                artifact,
                 format!("No latest version found for {package}"),
-                source,
             )),
         }
     }

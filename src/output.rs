@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use console::style;
 
 use crate::json::JsonResult;
-use crate::registry::{CheckResult, CheckerKind, Ecosystem, Outcome};
+use crate::registry::{CheckResult, CheckStatus, CheckerKind, Ecosystem};
 
 const ARTIFACT_WIDTH: usize = 40;
 const VERSION_WIDTH: usize = 30;
@@ -46,7 +46,7 @@ pub fn print_results(results: &[CheckResult]) {
 
     let ecosystems: Vec<Ecosystem> = results
         .iter()
-        .map(|r| r.ecosystem)
+        .map(|r| r.ecosystem())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
@@ -55,12 +55,12 @@ pub fn print_results(results: &[CheckResult]) {
     for ecosystem in &ecosystems {
         let mut group: Vec<&CheckResult> = results
             .iter()
-            .filter(|r| r.ecosystem == *ecosystem)
+            .filter(|r| r.ecosystem() == *ecosystem)
             .collect();
         group.sort_by(|a, b| {
-            a.kind.cmp(&b.kind).then_with(|| {
-                let a_name = a.artifact.as_deref().unwrap_or(&a.property_name);
-                let b_name = b.artifact.as_deref().unwrap_or(&b.property_name);
+            a.kind().cmp(&b.kind()).then_with(|| {
+                let a_name = a.artifact().unwrap_or(a.property_name());
+                let b_name = b.artifact().unwrap_or(b.property_name());
                 a_name.cmp(b_name)
             })
         });
@@ -71,7 +71,7 @@ pub fn print_results(results: &[CheckResult]) {
 
         let kinds: Vec<CheckerKind> = group
             .iter()
-            .map(|r| r.kind)
+            .map(|r| r.kind())
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
@@ -81,7 +81,7 @@ pub fn print_results(results: &[CheckResult]) {
             if multiple_kinds {
                 println!("  {}", style(kind.group_label()).dim().bold());
             }
-            for result in group.iter().filter(|r| r.kind == *kind) {
+            for result in group.iter().filter(|r| r.kind() == *kind) {
                 print_result_line(result);
             }
         }
@@ -91,17 +91,17 @@ pub fn print_results(results: &[CheckResult]) {
 }
 
 fn print_result_line(result: &CheckResult) {
-    let artifact_name = result.artifact.as_deref().unwrap_or(&result.property_name);
+    let artifact_name = result.artifact().unwrap_or(result.property_name());
     let artifact = truncate_middle_pad(artifact_name, ARTIFACT_WIDTH);
-    let styled_artifact = result.kind.color().apply_to(artifact);
+    let styled_artifact = result.kind().color().apply_to(artifact);
 
     let version_label = format_version(result);
     let version = truncate_middle_pad(&version_label, VERSION_WIDTH);
 
-    let source = truncate_middle_pad(&result.source, SOURCE_WIDTH);
+    let source = truncate_middle_pad(result.source(), SOURCE_WIDTH);
 
-    match result.outcome() {
-        Outcome::UpToDate => {
+    match &result.status {
+        CheckStatus::UpToDate { .. } => {
             println!(
                 "  {} {}  {}  {}  {}",
                 style("\u{2713}").green().bold(),
@@ -111,7 +111,7 @@ fn print_result_line(result: &CheckResult) {
                 style("up-to-date").green()
             );
         }
-        Outcome::Outdated { latest } => {
+        CheckStatus::Outdated { latest } => {
             println!(
                 "  {} {}  {}  {}  {}",
                 style("\u{2192}").yellow().bold(),
@@ -121,7 +121,7 @@ fn print_result_line(result: &CheckResult) {
                 style(format!("\u{2192} {latest}")).yellow()
             );
         }
-        Outcome::Skipped => {
+        CheckStatus::Skipped => {
             println!(
                 "  {} {}  {}  {}  {}",
                 style("-").dim().bold(),
@@ -131,7 +131,7 @@ fn print_result_line(result: &CheckResult) {
                 style("skipped").dim()
             );
         }
-        Outcome::Error { message } => {
+        CheckStatus::Error { message } => {
             println!(
                 "  {} {}  {}  {}  {}",
                 style("\u{2717}").red().bold(),
@@ -150,9 +150,9 @@ fn format_version(result: &CheckResult) -> String {
     if result.current_version.is_empty() {
         return String::new();
     }
-    let artifact_name = result.artifact.as_deref().unwrap_or(&result.property_name);
-    if result.property_name != artifact_name && !result.property_name.contains(':') {
-        format!("{} ({})", result.current_version, result.property_name)
+    let artifact_name = result.artifact().unwrap_or(result.property_name());
+    if result.property_name() != artifact_name && !result.property_name().contains(':') {
+        format!("{} ({})", result.current_version, result.property_name())
     } else {
         result.current_version.clone()
     }
@@ -176,9 +176,9 @@ fn truncate_middle_pad(s: &str, width: usize) -> String {
 /// Prints a one-line summary with counts and a legend of kind symbols.
 fn print_summary(results: &[CheckResult]) {
     let total = results.len();
-    let outdated = results.iter().filter(|r| r.outdated).count();
-    let skipped = results.iter().filter(|r| r.skipped).count();
-    let errors = results.iter().filter(|r| r.error.is_some()).count();
+    let outdated = results.iter().filter(|r| r.is_outdated()).count();
+    let skipped = results.iter().filter(|r| r.is_skipped()).count();
+    let errors = results.iter().filter(|r| r.error_message().is_some()).count();
     let current = total - outdated - skipped - errors;
 
     print!("{total} checked: ");
@@ -193,7 +193,7 @@ fn print_summary(results: &[CheckResult]) {
         print!(", {}", style(format!("{errors} errors")).red());
     }
 
-    let mut kinds: Vec<CheckerKind> = results.iter().map(|r| r.kind).collect();
+    let mut kinds: Vec<CheckerKind> = results.iter().map(|r| r.kind()).collect();
     kinds.sort();
     kinds.dedup();
     let legend: Vec<String> = kinds
@@ -206,35 +206,40 @@ fn print_summary(results: &[CheckResult]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::registry::CheckId;
 
     #[test]
     fn print_table_groups_by_ecosystem() {
         let results = vec![
             CheckResult::checked(
-                Ecosystem::Maven,
-                CheckerKind::Dependency,
-                "version.junit".to_string(),
+                CheckId::new(
+                    Ecosystem::Maven,
+                    CheckerKind::Dependency,
+                    "version.junit".to_string(),
+                    Some("org.junit.jupiter:junit-jupiter".to_string()),
+                    "pom.xml".to_string(),
+                ),
                 "5.10.0".to_string(),
                 "5.12.0".to_string(),
                 true,
-                Some("org.junit.jupiter:junit-jupiter".to_string()),
-                "pom.xml".to_string(),
             ),
             CheckResult::checked(
-                Ecosystem::Npm,
-                CheckerKind::NpmDep,
-                "react".to_string(),
+                CheckId::new(
+                    Ecosystem::Npm,
+                    CheckerKind::NpmDep,
+                    "react".to_string(),
+                    Some("react".to_string()),
+                    "package.json".to_string(),
+                ),
                 "18.0.0".to_string(),
                 "19.0.0".to_string(),
                 true,
-                Some("react".to_string()),
-                "package.json".to_string(),
             ),
         ];
 
         let ecosystems: Vec<Ecosystem> = results
             .iter()
-            .map(|r| r.ecosystem)
+            .map(|r| r.ecosystem())
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
@@ -244,14 +249,16 @@ mod tests {
     #[test]
     fn format_version_with_property() {
         let r = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "version.junit".to_string(),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "version.junit".to_string(),
+                Some("org.junit.jupiter:junit-jupiter".to_string()),
+                String::new(),
+            ),
             "5.10.0".to_string(),
             "5.12.0".to_string(),
             true,
-            Some("org.junit.jupiter:junit-jupiter".to_string()),
-            String::new(),
         );
         assert_eq!(format_version(&r), "5.10.0 (version.junit)");
     }
@@ -259,14 +266,16 @@ mod tests {
     #[test]
     fn format_version_plain() {
         let r = CheckResult::checked(
-            Ecosystem::Maven,
-            CheckerKind::Dependency,
-            "com.google.guava:guava".to_string(),
+            CheckId::new(
+                Ecosystem::Maven,
+                CheckerKind::Dependency,
+                "com.google.guava:guava".to_string(),
+                Some("com.google.guava:guava".to_string()),
+                String::new(),
+            ),
             "33.0.0-jre".to_string(),
             "33.4.0-jre".to_string(),
             true,
-            Some("com.google.guava:guava".to_string()),
-            String::new(),
         );
         assert_eq!(format_version(&r), "33.0.0-jre");
     }
@@ -274,14 +283,16 @@ mod tests {
     #[test]
     fn format_version_npm() {
         let r = CheckResult::checked(
-            Ecosystem::Npm,
-            CheckerKind::NpmDep,
-            "react".to_string(),
+            CheckId::new(
+                Ecosystem::Npm,
+                CheckerKind::NpmDep,
+                "react".to_string(),
+                Some("react".to_string()),
+                String::new(),
+            ),
             "18.2.0".to_string(),
             "19.0.0".to_string(),
             true,
-            Some("react".to_string()),
-            String::new(),
         );
         assert_eq!(format_version(&r), "18.2.0");
     }
@@ -289,13 +300,15 @@ mod tests {
     #[test]
     fn format_version_empty() {
         let r = CheckResult::error(
-            Ecosystem::Npm,
-            CheckerKind::NpmDep,
-            "my-app".to_string(),
+            CheckId::new(
+                Ecosystem::Npm,
+                CheckerKind::NpmDep,
+                "my-app".to_string(),
+                None,
+                String::new(),
+            ),
             String::new(),
-            None,
             "pnpm not found".to_string(),
-            String::new(),
         );
         assert_eq!(format_version(&r), "");
     }

@@ -10,7 +10,7 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use super::{PackageManager, PackageManagerChecker, pm_bun, pm_npm, pm_pnpm, pm_yarn};
-use crate::registry::{CheckResult, CheckerKind, Ecosystem};
+use crate::registry::{CheckId, CheckResult, CheckerKind, Ecosystem};
 use crate::version;
 
 /// Runs `list_packages` and `outdated_packages` concurrently for any checker.
@@ -47,33 +47,22 @@ pub async fn check_project(project: &NpmProject, root: &Path) -> Result<Vec<Chec
             } else {
                 CheckerKind::NpmDep
             };
-            if let Some(entry) = outdated.get(&name) {
+            let id = CheckId::new(
+                Ecosystem::Npm,
+                kind,
+                name.clone(),
+                Some(name),
+                source.clone(),
+            );
+            if let Some(entry) = outdated.get(&id.property_name) {
                 let is_outdated = version::is_newer(&entry.current, &entry.latest);
-                CheckResult::checked(
-                    Ecosystem::Npm,
-                    kind,
-                    name.clone(),
-                    entry.current.clone(),
-                    entry.latest.clone(),
-                    is_outdated,
-                    Some(name),
-                    source.clone(),
-                )
+                CheckResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)
             } else {
-                CheckResult::checked(
-                    Ecosystem::Npm,
-                    kind,
-                    name.clone(),
-                    current.clone(),
-                    current,
-                    false,
-                    Some(name),
-                    source.clone(),
-                )
+                CheckResult::checked(id, current.clone(), current, false)
             }
         })
         .collect();
 
-    results.sort_by(|a, b| a.property_name.cmp(&b.property_name));
+    results.sort_by(|a, b| a.property_name().cmp(b.property_name()));
     Ok(results)
 }
