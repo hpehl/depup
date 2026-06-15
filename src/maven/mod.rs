@@ -13,3 +13,4 @@ pub mod pm_versions;
 pub mod pom;
 pub mod pom_writer;
 pub mod tool;
+pub mod updater;
