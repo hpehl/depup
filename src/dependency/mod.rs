@@ -37,9 +37,9 @@ impl std::fmt::Display for Ecosystem {
 pub enum DependencyKind {
     Dependency,
     Plugin,
-    ToolVersion,
     NpmDep,
     NpmDevDep,
+    ToolVersion,
 }
 
 impl std::fmt::Display for DependencyKind {
