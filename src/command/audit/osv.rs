@@ -13,8 +13,8 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::constants::{MAX_CONCURRENT_REQUESTS, http_client};
-use crate::dependency::{
-    AuditResult, DependencyInfo, DependencyKind, Ecosystem, Severity, VersionResult, Vulnerability,
+use crate::model::{
+    AuditResult, CommandResult, DependencyKind, Ecosystem, Severity, VersionResult, Vulnerability,
 };
 
 const OSV_API_URL: &str = "https://api.osv.dev";
@@ -112,7 +112,7 @@ pub async fn audit(results: &[VersionResult], bar: &ProgressBar) -> Result<Vec<A
     let auditable: Vec<&VersionResult> = results
         .iter()
         .filter(|r| {
-            r.kind() != DependencyKind::ToolVersion
+            r.kind() != DependencyKind::Tool
                 && !r.is_skipped()
                 && r.error_message().is_none()
                 && !r.current_version.is_empty()
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn dep_key_format() {
-        use crate::dependency::{Dependency, DependencyKind};
+        use crate::model::{Dependency, DependencyKind};
         let r = VersionResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     fn dep_key_npm_format() {
-        use crate::dependency::{Dependency, DependencyKind};
+        use crate::model::{Dependency, DependencyKind};
         let r = VersionResult::checked(
             Dependency::new(
                 Ecosystem::Npm,

@@ -39,7 +39,7 @@ pub enum DependencyKind {
     Plugin,
     NpmDep,
     NpmDevDep,
-    ToolVersion,
+    Tool,
 }
 
 impl std::fmt::Display for DependencyKind {
@@ -47,7 +47,7 @@ impl std::fmt::Display for DependencyKind {
         match self {
             Self::Dependency => write!(f, "Dependency"),
             Self::Plugin => write!(f, "Plugin"),
-            Self::ToolVersion => write!(f, "Tool Version"),
+            Self::Tool => write!(f, "Tool"),
             Self::NpmDep => write!(f, "Dependency"),
             Self::NpmDevDep => write!(f, "Dev Dependency"),
         }
@@ -58,13 +58,12 @@ impl std::fmt::Display for DependencyKind {
 ///
 /// Used by the output layer to group, sort, and format results generically
 /// across subcommands.
-pub trait DependencyInfo {
+pub trait CommandResult {
     fn ecosystem(&self) -> Ecosystem;
     fn kind(&self) -> DependencyKind;
     fn artifact(&self) -> &str;
     fn property(&self) -> Option<&str>;
     fn source(&self) -> &str;
-
     fn has_property(&self) -> bool {
         self.property().is_some()
     }
@@ -116,7 +115,7 @@ mod tests {
     fn dependency_kind_display() {
         assert_eq!(DependencyKind::Dependency.to_string(), "Dependency");
         assert_eq!(DependencyKind::Plugin.to_string(), "Plugin");
-        assert_eq!(DependencyKind::ToolVersion.to_string(), "Tool Version");
+        assert_eq!(DependencyKind::Tool.to_string(), "Tool");
         assert_eq!(DependencyKind::NpmDep.to_string(), "Dependency");
         assert_eq!(DependencyKind::NpmDevDep.to_string(), "Dev Dependency");
     }

@@ -6,7 +6,7 @@
 mod app;
 mod command;
 mod constants;
-mod dependency;
+mod model;
 mod error;
 mod filter;
 mod json;

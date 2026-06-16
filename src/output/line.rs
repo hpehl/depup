@@ -1,6 +1,6 @@
 use console::style;
 
-use crate::dependency::{AuditResult, DependencyInfo, UpdateResult, VersionResult, VersionStatus};
+use crate::model::{AuditResult, CommandResult, UpdateResult, VersionResult, VersionStatus};
 
 use super::format::{
     format_columns, format_version_with_property, severity_style, truncate_middle_pad,
@@ -8,7 +8,7 @@ use super::format::{
 
 /// Subcommand-specific line rendering. Each result type provides its own
 /// version label and status output while sharing the common column layout.
-pub(crate) trait OutputLine: DependencyInfo {
+pub(crate) trait OutputLine: CommandResult {
     fn version_label(&self) -> String;
     fn print_line(&self);
 }
@@ -74,7 +74,7 @@ impl OutputLine for UpdateResult {
     fn print_line(&self) {
         let (styled_artifact, version, source) = format_columns(self);
         match &self.status {
-            crate::dependency::UpdateStatus::Updated => {
+            crate::model::UpdateStatus::Updated => {
                 println!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2713}").green().bold(),
@@ -84,7 +84,7 @@ impl OutputLine for UpdateResult {
                     style("updated").green()
                 );
             }
-            crate::dependency::UpdateStatus::Error { message } => {
+            crate::model::UpdateStatus::Error { message } => {
                 println!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2717}").red().bold(),
@@ -156,7 +156,7 @@ impl OutputLine for AuditResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
+    use crate::model::{Dependency, DependencyKind, Ecosystem};
 
     #[test]
     fn version_label_check_with_property() {

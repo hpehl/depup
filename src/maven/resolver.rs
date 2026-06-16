@@ -14,7 +14,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::maven::discovery::{self, ArtifactMapping, VersionProperty};
 use crate::maven::maven_central::MavenVersionResolver;
 use crate::maven::tool::{ToolResolverRegistry, ToolVersionResolver};
@@ -73,7 +73,7 @@ impl ResolveTask {
             Self::Tool { property, .. } => {
                 let id = Dependency::new(
                     Ecosystem::Maven,
-                    DependencyKind::ToolVersion,
+                    DependencyKind::Tool,
                     property.name.clone(),
                     None,
                     "pom.xml".into(),
@@ -232,7 +232,7 @@ mod tests {
         let task = ResolveTask::Tool { property, resolver };
         let root = PathBuf::from("/tmp");
         let (id, current) = task.error_id(&root);
-        assert_eq!(id.kind, DependencyKind::ToolVersion);
+        assert_eq!(id.kind, DependencyKind::Tool);
         assert_eq!(id.artifact, "version.node");
         assert_eq!(current, "20.0.0");
     }

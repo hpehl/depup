@@ -1,7 +1,7 @@
 use console::style;
 
-use crate::dependency::{
-    AuditResult, DependencyInfo, DependencyKind, Severity, UpdateResult, VersionResult,
+use crate::model::{
+    AuditResult, CommandResult, DependencyKind, Severity, UpdateResult, VersionResult,
 };
 
 use super::format::print_kind_legend;
@@ -92,7 +92,7 @@ pub fn audit_summary(results: &[AuditResult]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::{Dependency, Ecosystem, Vulnerability};
+    use crate::model::{Dependency, Ecosystem, Vulnerability};
 
     fn make_check_result(artifact: &str, kind: DependencyKind, outdated: bool) -> VersionResult {
         VersionResult::checked(

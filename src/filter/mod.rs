@@ -9,7 +9,7 @@ mod glob;
 
 use clap::ArgMatches;
 
-use crate::dependency::{DependencyInfo, DependencyKind, Ecosystem, Severity, VersionResult};
+use crate::model::{CommandResult, DependencyKind, Ecosystem, Severity, VersionResult};
 
 /// Safely reads a boolean flag, returning `false` if the flag is not defined.
 fn try_get_flag(matches: &ArgMatches, name: &str) -> bool {
@@ -27,7 +27,7 @@ pub enum KindFilter {
     Dependencies,
     Plugins,
     DevDeps,
-    ToolVersions,
+    Tools,
 }
 
 impl KindFilter {
@@ -38,7 +38,7 @@ impl KindFilter {
             }
             Self::Plugins => kind == DependencyKind::Plugin,
             Self::DevDeps => kind == DependencyKind::NpmDevDep,
-            Self::ToolVersions => kind == DependencyKind::ToolVersion,
+            Self::Tools => kind == DependencyKind::Tool,
         }
     }
 }
@@ -88,7 +88,7 @@ impl Filter {
         } else if try_get_flag(matches, "dev-deps") {
             Some(KindFilter::DevDeps)
         } else if try_get_flag(matches, "tools") {
-            Some(KindFilter::ToolVersions)
+            Some(KindFilter::Tools)
         } else {
             None
         };
@@ -179,7 +179,7 @@ impl Filter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::Dependency;
+    use crate::model::Dependency;
 
     fn maven_dep(has_prop: bool) -> VersionResult {
         let property = if has_prop {
@@ -250,7 +250,7 @@ mod tests {
         VersionResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
-                DependencyKind::ToolVersion,
+                DependencyKind::Tool,
                 "nodejs.org".into(),
                 None,
                 String::new(),
@@ -392,7 +392,7 @@ mod tests {
     #[test]
     fn kind_filter_tool_versions() {
         let f = Filter {
-            kind: Some(KindFilter::ToolVersions),
+            kind: Some(KindFilter::Tools),
             ..Filter::default()
         };
         assert!(f.matches(&tool_version_result()));

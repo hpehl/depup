@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use indicatif::ProgressBar;
 
-use crate::dependency::{DependencyInfo, UpdateResult, VersionResult};
+use crate::model::{CommandResult, UpdateResult, VersionResult};
 use crate::maven::pom_writer::{self, InlineVersionUpdate};
 
 /// Applies updates to POM files for all outdated Maven check results.
@@ -153,7 +153,7 @@ pub fn apply_updates(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
+    use crate::model::{Dependency, DependencyKind, Ecosystem};
     use indicatif::ProgressBar;
     use tempfile::TempDir;
 

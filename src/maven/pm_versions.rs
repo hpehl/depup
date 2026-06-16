@@ -9,7 +9,7 @@ use std::pin::Pin;
 use anyhow::Result;
 
 use crate::constants::{self, NPM_REGISTRY_URL};
-use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionResolver;
@@ -60,7 +60,7 @@ impl PmVersionsResolver {
         let Some(package) = Self::resolve_package(&property.name) else {
             let id = Dependency::new(
                 Ecosystem::Maven,
-                DependencyKind::ToolVersion,
+                DependencyKind::Tool,
                 property.name.clone(),
                 None,
                 source.to_string(),
@@ -74,7 +74,7 @@ impl PmVersionsResolver {
 
         let id = Dependency::new(
             Ecosystem::Maven,
-            DependencyKind::ToolVersion,
+            DependencyKind::Tool,
             package.to_string(),
             None,
             source.to_string(),

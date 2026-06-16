@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use console::style;
 
-use crate::dependency::{DependencyKind, Ecosystem, Severity};
+use crate::model::{DependencyKind, Ecosystem, Severity};
 
 use super::line::OutputLine;
 
@@ -48,7 +48,7 @@ pub(super) fn kind_color(kind: DependencyKind) -> console::Style {
     match kind {
         DependencyKind::Dependency => console::Style::new().cyan(),
         DependencyKind::Plugin => console::Style::new().magenta(),
-        DependencyKind::ToolVersion => console::Style::new().green(),
+        DependencyKind::Tool => console::Style::new().green(),
         DependencyKind::NpmDep | DependencyKind::NpmDevDep => console::Style::new().blue(),
     }
 }
@@ -57,7 +57,7 @@ pub(super) fn kind_symbol(kind: DependencyKind) -> &'static str {
     match kind {
         DependencyKind::Dependency => "\u{25cf}",
         DependencyKind::Plugin => "\u{25a0}",
-        DependencyKind::ToolVersion => "\u{25b2}",
+        DependencyKind::Tool => "\u{25b2}",
         DependencyKind::NpmDep | DependencyKind::NpmDevDep => "\u{25c6}",
     }
 }
@@ -66,7 +66,7 @@ pub(super) fn kind_group_label(kind: DependencyKind) -> &'static str {
     match kind {
         DependencyKind::Dependency => "Dependencies",
         DependencyKind::Plugin => "Plugins",
-        DependencyKind::ToolVersion => "Tool Versions",
+        DependencyKind::Tool => "Tool Versions",
         DependencyKind::NpmDep => "Dependencies",
         DependencyKind::NpmDevDep => "Dev Dependencies",
     }

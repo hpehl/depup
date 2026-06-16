@@ -1,5 +1,5 @@
 use super::check::VersionResult;
-use super::{Dependency, DependencyInfo, DependencyKind, Ecosystem};
+use super::{Dependency, CommandResult, DependencyKind, Ecosystem};
 
 /// The outcome of updating a dependency version.
 #[derive(Debug, Clone)]
@@ -17,7 +17,7 @@ pub struct UpdateResult {
     pub status: UpdateStatus,
 }
 
-impl DependencyInfo for UpdateResult {
+impl CommandResult for UpdateResult {
     fn ecosystem(&self) -> Ecosystem {
         self.dep.ecosystem
     }

@@ -7,7 +7,7 @@ use std::path::Path;
 use super::discovery::NpmProject;
 use super::pm_version_check;
 use super::{PackageManager, PackageManagerResolver, pm_bun, pm_npm, pm_pnpm, pm_yarn};
-use crate::dependency::{DependencyInfo, DependencyKind, UpdateResult, VersionResult};
+use crate::model::{CommandResult, DependencyKind, UpdateResult, VersionResult};
 
 /// Runs the native update command for a single npm project and maps the
 /// outcome back to one `UpdateResult` per outdated dependency.
@@ -18,7 +18,7 @@ pub async fn update_project(
 ) -> Vec<UpdateResult> {
     let (tool_versions, package_deps): (Vec<_>, Vec<_>) = outdated
         .iter()
-        .partition(|r| r.kind() == DependencyKind::ToolVersion);
+        .partition(|r| r.kind() == DependencyKind::Tool);
 
     let mut results = Vec::new();
 

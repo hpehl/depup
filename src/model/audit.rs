@@ -1,5 +1,5 @@
 use super::check::VersionResult;
-use super::{Dependency, DependencyInfo, DependencyKind, Ecosystem};
+use super::{Dependency, CommandResult, DependencyKind, Ecosystem};
 
 /// CVSS-based severity level for vulnerabilities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -70,7 +70,7 @@ pub struct AuditResult {
     pub vulnerabilities: Vec<Vulnerability>,
 }
 
-impl DependencyInfo for AuditResult {
+impl CommandResult for AuditResult {
     fn ecosystem(&self) -> Ecosystem {
         self.dep.ecosystem
     }
@@ -113,8 +113,8 @@ impl AuditResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::check::VersionResult;
-    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
+    use crate::model::check::VersionResult;
+    use crate::model::{Dependency, DependencyKind, Ecosystem};
 
     fn make_dep() -> Dependency {
         Dependency::new(

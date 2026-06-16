@@ -5,8 +5,8 @@
 
 use serde::Serialize;
 
-use crate::dependency::{
-    AuditResult, DependencyInfo, UpdateResult, UpdateStatus, VersionResult, VersionStatus,
+use crate::model::{
+    AuditResult, CommandResult, UpdateResult, UpdateStatus, VersionResult, VersionStatus,
     Vulnerability,
 };
 
@@ -169,7 +169,7 @@ impl UpdateJsonResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
+    use crate::model::{Dependency, DependencyKind, Ecosystem};
 
     #[test]
     fn json_result_round_trip() {

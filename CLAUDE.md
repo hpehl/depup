@@ -108,8 +108,8 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
   - **`mod.rs`** — `Filter` struct (derives `Default`), `KindFilter` enum, `Filter::from_matches()` constructor, `Filter::matches()` predicate.
   - **`glob.rs`** — `glob_matches()` function for `*`-wildcard pattern matching against artifact names.
 
-- **`dependency/`** — Core types shared across all pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `DependencyInfo` trait for uniform access across result types. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry.
-  - **`mod.rs`** — `Ecosystem`, `DependencyKind`, `Dependency`, `DependencyInfo` trait.
+- **`dependency/`** — Core types shared across all pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `CommandResult` trait for uniform access across result types. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry.
+  - **`mod.rs`** — `Ecosystem`, `DependencyKind`, `Dependency`, `CommandResult` trait.
   - **`check.rs`** — `VersionStatus`/`VersionResult` for the check pipeline.
   - **`update.rs`** — `UpdateStatus`/`UpdateResult` for the update pipeline.
   - **`audit.rs`** — `Severity`/`Vulnerability`/`AuditResult` for the audit pipeline.

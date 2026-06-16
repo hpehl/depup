@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::dependency::VersionResult;
+use crate::model::VersionResult;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::node::NodeResolver;
 use crate::maven::pm_versions::PmVersionsResolver;

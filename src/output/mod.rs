@@ -46,7 +46,7 @@ pub fn print_json(items: &impl Serialize) {
 
 #[cfg(test)]
 mod tests {
-    use crate::dependency::{Dependency, DependencyInfo, DependencyKind, Ecosystem, VersionResult};
+    use crate::model::{Dependency, CommandResult, DependencyKind, Ecosystem, VersionResult};
 
     #[test]
     fn print_table_groups_by_ecosystem() {

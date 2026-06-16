@@ -5,7 +5,7 @@
 //! `packageManager` field in `package.json`.
 //!
 //! - [`PackageManagerResolver`] trait — each PM implements `list_packages()` and `outdated_packages()`.
-//! - [`resolver`] module — dispatches to the detected PM and resolves versions into [`crate::dependency::VersionResult`]s.
+//! - [`resolver`] module — dispatches to the detected PM and resolves versions into [`crate::model::VersionResult`]s.
 //! - [`discovery`] module — walks the directory tree finding npm projects.
 
 pub mod discovery;

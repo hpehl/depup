@@ -11,7 +11,7 @@ use anyhow::Result;
 use serde::Deserialize;
 
 use crate::constants::{self, NODEJS_DIST_URL};
-use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionResolver;
@@ -56,7 +56,7 @@ impl LtsField {
 fn tool_id(source: &str) -> Dependency {
     Dependency::new(
         Ecosystem::Maven,
-        DependencyKind::ToolVersion,
+        DependencyKind::Tool,
         "nodejs.org".to_string(),
         None,
         source.to_string(),
@@ -188,7 +188,7 @@ mod tests {
     fn tool_id_returns_correct_dependency() {
         let dep = tool_id("pom.xml");
         assert_eq!(dep.ecosystem, Ecosystem::Maven);
-        assert_eq!(dep.kind, DependencyKind::ToolVersion);
+        assert_eq!(dep.kind, DependencyKind::Tool);
         assert_eq!(dep.artifact, "nodejs.org");
         assert!(dep.property.is_none());
         assert_eq!(dep.source, "pom.xml");

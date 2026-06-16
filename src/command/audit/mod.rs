@@ -12,7 +12,7 @@ use indicatif::ProgressBar;
 use tokio::time::Instant;
 
 use crate::app;
-use crate::dependency::{AuditResult, DependencyInfo, DependencyKind, VersionResult};
+use crate::model::{AuditResult, CommandResult, DependencyKind, VersionResult};
 use crate::filter::Filter;
 use crate::json::AuditJsonResult;
 use crate::output;
@@ -37,7 +37,7 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
     // Filter to deps matching the user's filters (excluding tool versions)
     let auditable: Vec<VersionResult> = check_results
         .into_iter()
-        .filter(|r| r.kind() != DependencyKind::ToolVersion && filter.matches(r))
+        .filter(|r| r.kind() != DependencyKind::Tool && filter.matches(r))
         .collect();
 
     if auditable.is_empty() {
@@ -108,7 +108,7 @@ fn apply_severity_filter(results: Vec<AuditResult>, filter: &Filter) -> Vec<Audi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::{Dependency, Ecosystem, Severity, Vulnerability};
+    use crate::model::{Dependency, Ecosystem, Severity, Vulnerability};
 
     fn make_audit_result(vulns: Vec<Vulnerability>) -> AuditResult {
         AuditResult {

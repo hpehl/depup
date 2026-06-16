@@ -11,7 +11,7 @@ use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 
 use crate::constants::{self, MAVEN_CENTRAL_URL};
-use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::error::DepupError;
 use crate::maven::discovery::ArtifactMapping;
 use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};

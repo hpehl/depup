@@ -10,7 +10,7 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use crate::constants::{self, NPM_REGISTRY_URL};
-use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
 use crate::error::DepupError;
 use crate::version;
 
@@ -25,7 +25,7 @@ pub async fn check_pm_version(project: &NpmProject, source: &str) -> Option<Vers
 async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> VersionResult {
     let id = Dependency::new(
         Ecosystem::Npm,
-        DependencyKind::ToolVersion,
+        DependencyKind::Tool,
         pm_name.to_string(),
         None,
         source.to_string(),

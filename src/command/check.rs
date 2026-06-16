@@ -10,7 +10,7 @@ use clap::ArgMatches;
 use tokio::time::Instant;
 
 use crate::app;
-use crate::dependency::VersionResult;
+use crate::model::VersionResult;
 use crate::filter::Filter;
 use crate::json::JsonResult;
 use crate::output;

@@ -17,7 +17,7 @@ use tokio::time::Instant;
 
 use crate::app;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::dependency::{DependencyInfo, Ecosystem, UpdateResult, VersionResult};
+use crate::model::{CommandResult, Ecosystem, UpdateResult, VersionResult};
 use crate::filter::Filter;
 use crate::json::UpdateJsonResult;
 use crate::output;
@@ -203,7 +203,7 @@ async fn run_npm_updates(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
+    use crate::model::{Dependency, DependencyKind, Ecosystem};
     use crate::npm::PackageManager;
     use crate::npm::discovery::NpmProject;
     use std::path::PathBuf;
