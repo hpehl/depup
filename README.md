@@ -148,7 +148,7 @@ depup audit --include 'org.wildfly:*'
 depup audit --exclude '*:guava'
 ```
 
-The audit subcommand queries [OSV.dev](https://osv.dev/) for known vulnerabilities in all discovered dependencies. It works for both Maven and npm ecosystems using the same unified API. Tool versions (Node.js, package manager versions) are skipped.
+The audit subcommand queries [OSV.dev](https://osv.dev/) for known vulnerabilities in all discovered dependencies. It works for both Maven and npm ecosystems using the same unified API. Tool versions (Node.js, package manager versions) are excluded — they aren't registry packages with OSV vulnerability advisories, so the `--tools` filter is not available for audit.
 
 The exit code is `0` when no vulnerabilities are found, `1` when any are detected.
 

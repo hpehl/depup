@@ -34,7 +34,8 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
         crate::command::pipeline::resolve_versions(&root, do_maven, do_npm, filter.stable, json)
             .await?;
 
-    // Filter to deps matching the user's filters (excluding tool versions)
+    // Tool versions (Node.js, package managers) are excluded: they aren't registry
+    // packages with OSV vulnerability advisories, so auditing them would be meaningless.
     let auditable: Vec<CheckResult> = check_results
         .into_iter()
         .filter(|r| r.kind() != DependencyKind::Tool && filter.matches(r))

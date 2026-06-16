@@ -43,7 +43,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### Command Layer (`src/command/`)
 
-- **`pipeline.rs`** — Shared discovery and version resolution pipeline used by `check`, `update`, and `audit`. Contains `detect_ecosystems()` (shared ecosystem detection from filters + project files) and `resolve_versions()` (discovers Maven via `pom.xml` and npm via lockfiles, resolves all versions concurrently with `JoinSet`, returns `(Vec<VersionResult>, Vec<NpmProject>)`).
+- **`pipeline.rs`** — Shared discovery and version resolution pipeline used by `check`, `update`, and `audit`. Contains `detect_ecosystems()` (shared ecosystem detection from filters + project files) and `resolve_versions()` (discovers Maven via `pom.xml` and npm via lockfiles, resolves all versions concurrently with `JoinSet`, returns `(Vec<CheckResult>, Vec<NpmProject>)`).
 
 - **`check.rs`** — Orchestrates the check subcommand. Calls `pipeline::resolve_versions()`, applies `Filter`, outputs results as table or JSON. Exits with code 1 when outdated dependencies are found.
 
@@ -54,7 +54,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
   - Output mirrors check: grouped by ecosystem/kind, summary line, timing, exit code 1 on errors.
 
 - **`audit/`** — Audit subcommand module:
-  - **`mod.rs`** — Orchestrates the audit subcommand. Calls `pipeline::resolve_versions()` to discover dependencies with versions, filters out tool versions, queries OSV.dev via `osv::audit()`, applies severity filter, outputs results as table or JSON. Same output style as check/update: progress bar, grouped table, summary line, timing. Exit code 1 when vulnerabilities are found.
+  - **`mod.rs`** — Orchestrates the audit subcommand. Calls `pipeline::resolve_versions()` to discover dependencies with versions, filters out tool versions (they aren't registry packages with OSV vulnerability advisories), queries OSV.dev via `osv::audit()`, applies severity filter, outputs results as table or JSON. Same output style as check/update: progress bar, grouped table, summary line, timing. Exit code 1 when vulnerabilities are found.
   - **`osv.rs`** — OSV.dev API client for vulnerability auditing. Queries the batch endpoint (`POST /v1/querybatch`) with dependency coordinates and versions, fetches full vulnerability details from individual endpoints (`GET /v1/vulns/{id}`). Maps `Ecosystem::Maven` to OSV's `"Maven"` and `Ecosystem::Npm` to `"npm"`. Deduplicates queries and vuln IDs. Extracts severity from CVSS scores or ecosystem/database-specific labels. Skips tool versions.
 
 - **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
@@ -86,7 +86,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerResolver` trait with `list_packages()`, `outdated_packages()`, and `update_packages()` methods, shared `read_dev_dependency_names()` utility.
 
-- **`resolver.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `VersionResult` values.
+- **`resolver.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `CheckResult` values.
 
 - **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips directories in `SKIP_DIRS` (e.g., `node_modules`, `.pnpm-store`, `.yarn`, `.bun`) and workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
 
@@ -108,9 +108,9 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
   - **`mod.rs`** — `Filter` struct (derives `Default`), `KindFilter` enum, `Filter::from_matches()` constructor, `Filter::matches()` predicate.
   - **`glob.rs`** — `glob_matches()` function for `*`-wildcard pattern matching against artifact names.
 
-- **`dependency/`** — Core types shared across all pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `CommandResult` trait for uniform access across result types. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry.
+- **`model/`** — Core types shared across all pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `CommandResult` trait for uniform access across result types. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry.
   - **`mod.rs`** — `Ecosystem`, `DependencyKind`, `Dependency`, `CommandResult` trait.
-  - **`check.rs`** — `VersionStatus`/`VersionResult` for the check pipeline.
+  - **`check.rs`** — `CheckStatus`/`CheckResult` for the check pipeline.
   - **`update.rs`** — `UpdateStatus`/`UpdateResult` for the update pipeline.
   - **`audit.rs`** — `Severity`/`Vulnerability`/`AuditResult` for the audit pipeline.
 
@@ -123,7 +123,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 - **`output/`** — Terminal and JSON output formatting. Groups results by ecosystem and kind with section headers.
   - **`mod.rs`** — `print_table()` (generic grouped table with summary callback), `print_json()` (pretty-print any `Serialize` value).
   - **`format.rs`** — Column formatting, `truncate_middle_pad()`, `DependencyKind` presentation helpers (`kind_color`, `kind_symbol`, `kind_group_label`) — separated from the data model for clean SoC.
-  - **`line.rs`** — `OutputLine` trait with implementations for `VersionResult`, `UpdateResult`, and `AuditResult`. Each provides its own version label and styled status column.
+  - **`line.rs`** — `OutputLine` trait with implementations for `CheckResult`, `UpdateResult`, and `AuditResult`. Each provides its own version value and styled status column.
   - **`summary.rs`** — `check_summary()`, `update_summary()`, `audit_summary()` — per-subcommand statistics with kind legend.
 
 - **`progress.rs`** — Progress bars using `indicatif`. Block-style bar with `MultiProgress` for concurrent checks. Hidden in JSON mode.

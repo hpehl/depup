@@ -15,18 +15,26 @@ pub(super) fn format_columns(
 ) -> (console::StyledObject<String>, String, String) {
     let artifact = truncate_middle_pad(item.artifact(), ARTIFACT_WIDTH);
     let styled_artifact = kind_color(item.kind()).apply_to(artifact);
-    let version = truncate_middle_pad(&item.version_label(), VERSION_WIDTH);
+    let version = format_version_column(&item.version_value(), item.property(), VERSION_WIDTH);
     let source = truncate_middle_pad(item.source(), SOURCE_WIDTH);
     (styled_artifact, version, source)
 }
 
-pub(super) fn format_version_with_property(version: &str, property: Option<&str>) -> String {
-    if version.is_empty() {
-        return String::new();
-    }
+/// Formats the version column with the version right-aligned when a property is present.
+fn format_version_column(version: &str, property: Option<&str>, width: usize) -> String {
     match property {
-        Some(prop) => format!("{version} ({prop})"),
-        None => version.to_string(),
+        Some(prop) => {
+            let ver_part = format!("({version})");
+            let ver_len = ver_part.chars().count();
+            if ver_len >= width {
+                truncate_middle_pad(&ver_part, width)
+            } else {
+                let prop_width = width - ver_len - 1;
+                let prop_col = truncate_middle_pad(prop, prop_width);
+                format!("{prop_col} {ver_part}")
+            }
+        }
+        None => truncate_middle_pad(version, width),
     }
 }
 
@@ -153,25 +161,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn format_version_with_prop() {
-        assert_eq!(
-            format_version_with_property("5.10.0", Some("version.junit")),
-            "5.10.0 (version.junit)"
-        );
+    fn version_column_with_property_right_aligns() {
+        let result = format_version_column("5.10.0", Some("version.junit"), 30);
+        assert_eq!(result.chars().count(), 30);
+        assert!(result.ends_with("(5.10.0)"));
+        assert!(result.starts_with("version.junit"));
     }
 
     #[test]
-    fn format_version_plain() {
-        assert_eq!(
-            format_version_with_property("33.0.0-jre", None),
-            "33.0.0-jre"
-        );
+    fn version_column_without_property_left_aligns() {
+        let result = format_version_column("33.0.0-jre", None, 30);
+        assert_eq!(result, format!("{:<30}", "33.0.0-jre"));
     }
 
     #[test]
-    fn format_version_empty() {
-        assert_eq!(format_version_with_property("", None), "");
-        assert_eq!(format_version_with_property("", Some("prop")), "");
+    fn version_column_truncates_long_property() {
+        let result = format_version_column("1.0.0", Some("version.very.long.property.name"), 30);
+        assert_eq!(result.chars().count(), 30);
+        assert!(result.ends_with("(1.0.0)"));
+        assert!(result.contains('\u{2026}'));
     }
 
     #[test]
