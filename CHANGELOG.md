@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Skip `.pnpm-store/` and other non-project directories during npm discovery to avoid duplicate entries
+
+### Changed
+
+- Extract `SKIP_DIRS` constant for directories skipped during npm project discovery (now includes `node_modules`, `.pnpm-store`, `.yarn`, `.bun`, `.git`, `target`, `dist`, `build`)
+
+### Added
+
+- Track `packageManager` version from `package.json` (e.g., `"pnpm@9.15.0"`) as a `ToolVersion` dependency across all subcommands
+  - `check`: reports current vs latest version from the npm registry
+  - `update`: rewrites the `packageManager` field in `package.json` to the latest version
+  - `audit`: includes the package manager in OSV.dev vulnerability scans
+  - Strips Corepack `+hash` suffixes (e.g., `pnpm@9.15.0+sha512.abc...`)
+  - Works with existing filters: `--tools`, `--npm`, `--include`/`--exclude`, `--outdated`
+
 ## [0.2.0] - 2026-06-16
 
 ### Added

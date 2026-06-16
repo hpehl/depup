@@ -3,10 +3,24 @@
 //! Walks a directory tree finding npm ecosystem projects. Detects the package
 //! manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`,
 //! `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`.
-//! Skips `node_modules/`, `.git/`, `target/`, and workspace members.
+//! Skips directories listed in [`SKIP_DIRS`] and workspace members.
 
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Directories to skip during project discovery. These are package manager
+/// internals, caches, build outputs, and VCS metadata — never real projects.
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    ".pnpm-store",
+    ".yarn",
+    ".bun",
+    ".git",
+    "target",
+    "dist",
+    "build",
+];
 
 use super::PackageManager;
 
@@ -126,7 +140,7 @@ fn is_workspace_root(dir: &Path, pm: PackageManager) -> bool {
 }
 
 /// Recursively collects directories containing `package.json`.
-/// Skips `node_modules/`, `.git/`, and `target/`.
+/// Skips directories listed in [`SKIP_DIRS`].
 fn collect_package_dirs(dir: &Path, result: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -140,7 +154,7 @@ fn collect_package_dirs(dir: &Path, result: &mut Vec<PathBuf>) {
             continue;
         }
         let name = entry.file_name();
-        if name == "node_modules" || name == ".git" || name == "target" {
+        if SKIP_DIRS.iter().any(|d| name == OsStr::new(d)) {
             continue;
         }
         collect_package_dirs(&path, result);
@@ -411,6 +425,23 @@ mod tests {
 
         let projects = discover(root);
         assert_eq!(projects.len(), 2);
+    }
+
+    #[test]
+    fn skips_pnpm_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        setup_project(root, "my-app", "pnpm-lock.yaml");
+        setup_project(
+            &root.join(".pnpm-store").join("v3").join("some-pkg"),
+            "some-pkg",
+            "pnpm-lock.yaml",
+        );
+
+        let projects = discover(root);
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "my-app");
     }
 
     #[test]
