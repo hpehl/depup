@@ -22,8 +22,8 @@ cargo test -- --nocapture                 # show println output during tests
 cargo run -- check /path                  # auto-detect ecosystems and check all
 cargo run -- check --json /path           # check with JSON output
 cargo run -- check --outdated /path       # only show outdated dependencies
-cargo run -- update /path                 # update dependencies (stub)
-cargo run -- audit /path                  # audit dependencies (stub)
+cargo run -- update /path                 # update outdated dependencies
+cargo run -- audit /path                  # audit for known vulnerabilities
 cargo run -- completions                  # generate shell completions
 cargo clippy                              # lint
 cargo fmt                                 # format
@@ -102,17 +102,27 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### Shared Layer
 
-- **`filter.rs`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-deps`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, `--include`/`--exclude` glob patterns, and `--severity` (audit only). Wildcards use `*` only (no regex).
+- **`filter/`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-deps`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, `--include`/`--exclude` glob patterns, and `--severity` (audit only). Wildcards use `*` only (no regex).
+  - **`mod.rs`** — `Filter` struct (derives `Default`), `KindFilter` enum, `Filter::from_matches()` constructor, `Filter::matches()` predicate.
+  - **`glob.rs`** — `glob_matches()` function for `*`-wildcard pattern matching against artifact names.
 
-- **`dependency.rs`** — Core types shared across all pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `VersionStatus`/`VersionResult` for the check pipeline, `UpdateStatus`/`UpdateResult` for the update pipeline, `Severity`/`Vulnerability`/`AuditResult` for the audit pipeline. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry.
+- **`dependency/`** — Core types shared across all pipelines. `Ecosystem` enum (Maven, Npm), `DependencyKind` enum (Dependency, Plugin, ToolVersion, NpmDep, NpmDevDep), `Dependency` (artifact + optional property + source), `DependencyInfo` trait for uniform access across result types. `Dependency.artifact` always holds the display name (Maven coordinates, npm package name, tool label). `Dependency.property` is `Some` only for Maven managed deps backed by a `<properties>` entry.
+  - **`mod.rs`** — `Ecosystem`, `DependencyKind`, `Dependency`, `DependencyInfo` trait.
+  - **`check.rs`** — `VersionStatus`/`VersionResult` for the check pipeline.
+  - **`update.rs`** — `UpdateStatus`/`UpdateResult` for the update pipeline.
+  - **`audit.rs`** — `Severity`/`Vulnerability`/`AuditResult` for the audit pipeline.
 
 - **`version.rs`** — Version parsing and comparison. Handles Maven-specific formats like `3.0.0.Final` and `2.1.0-SP1` that don't follow strict semver.
 
 - **`error.rs`** — Structured error types with `thiserror`. `DepupError` carries a stable `DepupErrorCode` for machine consumption. `JsonErrorEnvelope` provides structured JSON error output when `--json` is active.
 
-- **`json.rs`** — Serializable output types (`JsonResult`) for JSON mode. Converts `VersionResult` to a flat JSON-friendly struct.
+- **`json.rs`** — Serializable output types (`JsonResult`, `UpdateJsonResult`, `AuditJsonResult`) for JSON mode. Converts result types to flat JSON-friendly structs.
 
-- **`output.rs`** — Summary table (colored via `console` crate) and JSON formatters. Groups results by ecosystem and kind with section headers. Also contains `DependencyKind` presentation helpers (`kind_color`, `kind_symbol`, `kind_group_label`) — separated from the data model for clean SoC.
+- **`output/`** — Terminal and JSON output formatting. Groups results by ecosystem and kind with section headers.
+  - **`mod.rs`** — `print_table()` (generic grouped table with summary callback), `print_json()` (pretty-print any `Serialize` value).
+  - **`format.rs`** — Column formatting, `truncate_middle_pad()`, `DependencyKind` presentation helpers (`kind_color`, `kind_symbol`, `kind_group_label`) — separated from the data model for clean SoC.
+  - **`line.rs`** — `OutputLine` trait with implementations for `VersionResult`, `UpdateResult`, and `AuditResult`. Each provides its own version label and styled status column.
+  - **`summary.rs`** — `check_summary()`, `update_summary()`, `audit_summary()` — per-subcommand statistics with kind legend.
 
 - **`progress.rs`** — Progress bars using `indicatif`. Block-style bar with `MultiProgress` for concurrent checks. Hidden in JSON mode.
 

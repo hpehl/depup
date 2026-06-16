@@ -28,27 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Split `output.rs` into `output/` module (`mod.rs`, `line.rs`, `summary.rs`, `format.rs`)
-- Split `dependency.rs` into `dependency/` module (`mod.rs`, `check.rs`, `update.rs`, `audit.rs`)
-- Split `filter.rs` into `filter/` module (`mod.rs`, `glob.rs`)
-- Split `pom_writer.rs` into `pom_writer/` module (`properties.rs`, `inline.rs`)
-- Extract shared discovery+check pipeline into `command::pipeline` (used by `check`, `update`, and `audit`)
-- Extract shared CLI argument builders to eliminate duplication across subcommands
-- Restructure `command/audit.rs` into `command/audit/` module directory
 - Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary)
-- Document error handling strategy (`DepupError` vs `anyhow::Result`) in `error.rs`
-- Improve test coverage from 75% to 80%+ with 56 new tests across npm, audit, maven, and output modules
-- Rename `id` field to `dep` on `VersionResult`, `UpdateResult`, and `AuditResult` for clarity
-- Derive `Default` for `Filter` and remove duplicate test helpers
 - Audit `--severity` filter now drops dependencies whose vulnerabilities were all below the threshold instead of showing them as clean
-
-### Fixed
-
-- Audit severity filter inflated "audited" count by including dependencies whose vulnerabilities were all filtered out
-
-### Removed
-
-- Remove `not_implemented()` stub helper (all subcommands are now implemented)
 
 ## [0.1.0] - 2026-06-15
 
