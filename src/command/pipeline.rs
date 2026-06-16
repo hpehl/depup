@@ -79,24 +79,11 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    fn no_filter() -> Filter {
-        Filter {
-            outdated: false,
-            stable: false,
-            managed: None,
-            ecosystem: None,
-            kind: None,
-            include: Vec::new(),
-            exclude: Vec::new(),
-            severity: None,
-        }
-    }
-
     #[test]
     fn detect_both_when_pom_exists_and_no_filter() {
         let tmp = TempDir::new().unwrap();
         std::fs::write(tmp.path().join("pom.xml"), "<project/>").unwrap();
-        let (maven, npm) = detect_ecosystems(&no_filter(), tmp.path());
+        let (maven, npm) = detect_ecosystems(&Filter::default(), tmp.path());
         assert!(maven);
         assert!(npm);
     }
@@ -104,7 +91,7 @@ mod tests {
     #[test]
     fn detect_npm_only_when_no_pom() {
         let tmp = TempDir::new().unwrap();
-        let (maven, npm) = detect_ecosystems(&no_filter(), tmp.path());
+        let (maven, npm) = detect_ecosystems(&Filter::default(), tmp.path());
         assert!(!maven);
         assert!(npm);
     }
@@ -115,7 +102,7 @@ mod tests {
         std::fs::write(tmp.path().join("pom.xml"), "<project/>").unwrap();
         let filter = Filter {
             ecosystem: Some(Ecosystem::Maven),
-            ..no_filter()
+            ..Filter::default()
         };
         let (maven, npm) = detect_ecosystems(&filter, tmp.path());
         assert!(maven);
@@ -128,7 +115,7 @@ mod tests {
         std::fs::write(tmp.path().join("pom.xml"), "<project/>").unwrap();
         let filter = Filter {
             ecosystem: Some(Ecosystem::Npm),
-            ..no_filter()
+            ..Filter::default()
         };
         let (maven, npm) = detect_ecosystems(&filter, tmp.path());
         assert!(!maven);
@@ -140,7 +127,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let filter = Filter {
             ecosystem: Some(Ecosystem::Npm),
-            ..no_filter()
+            ..Filter::default()
         };
         let (maven, npm) = detect_ecosystems(&filter, tmp.path());
         assert!(!maven);

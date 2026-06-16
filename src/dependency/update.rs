@@ -11,7 +11,7 @@ pub enum UpdateStatus {
 /// Result of updating a single dependency.
 #[derive(Debug, Clone)]
 pub struct UpdateResult {
-    pub id: Dependency,
+    pub dep: Dependency,
     pub old_version: String,
     pub new_version: String,
     pub status: UpdateStatus,
@@ -19,26 +19,26 @@ pub struct UpdateResult {
 
 impl DependencyInfo for UpdateResult {
     fn ecosystem(&self) -> Ecosystem {
-        self.id.ecosystem
+        self.dep.ecosystem
     }
     fn kind(&self) -> DependencyKind {
-        self.id.kind
+        self.dep.kind
     }
     fn artifact(&self) -> &str {
-        &self.id.artifact
+        &self.dep.artifact
     }
     fn property(&self) -> Option<&str> {
-        self.id.property.as_deref()
+        self.dep.property.as_deref()
     }
     fn source(&self) -> &str {
-        &self.id.source
+        &self.dep.source
     }
 }
 
 impl UpdateResult {
     pub fn updated(check: &VersionResult, new_version: String) -> Self {
         Self {
-            id: check.id.clone(),
+            dep: check.dep.clone(),
             old_version: check.current_version.clone(),
             new_version,
             status: UpdateStatus::Updated,
@@ -48,7 +48,7 @@ impl UpdateResult {
     pub fn error(check: &VersionResult, message: String) -> Self {
         let new_version = check.latest_version().unwrap_or("").to_string();
         Self {
-            id: check.id.clone(),
+            dep: check.dep.clone(),
             old_version: check.current_version.clone(),
             new_version,
             status: UpdateStatus::Error { message },
@@ -86,7 +86,7 @@ mod tests {
     fn update_result_from_check_result() {
         let check = VersionResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
         let update = UpdateResult::updated(&check, "5.12.0".into());
-        assert_eq!(update.id.ecosystem, Ecosystem::Maven);
+        assert_eq!(update.dep.ecosystem, Ecosystem::Maven);
         assert_eq!(update.old_version, "5.10.0");
         assert_eq!(update.new_version, "5.12.0");
         assert!(!update.is_error());

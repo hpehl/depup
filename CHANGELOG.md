@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary)
 - Document error handling strategy (`DepupError` vs `anyhow::Result`) in `error.rs`
 - Improve test coverage from 75% to 80%+ with 56 new tests across npm, audit, maven, and output modules
+- Rename `id` field to `dep` on `VersionResult`, `UpdateResult`, and `AuditResult` for clarity
+- Derive `Default` for `Filter` and remove duplicate test helpers
+- Audit `--severity` filter now drops dependencies whose vulnerabilities were all below the threshold instead of showing them as clean
+
+### Fixed
+
+- Audit severity filter inflated "audited" count by including dependencies whose vulnerabilities were all filtered out
 
 ### Removed
 

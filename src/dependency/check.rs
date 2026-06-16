@@ -12,26 +12,26 @@ pub enum VersionStatus {
 /// Result of checking a single dependency against its registry.
 #[derive(Debug, Clone)]
 pub struct VersionResult {
-    pub id: Dependency,
+    pub dep: Dependency,
     pub current_version: String,
     pub status: VersionStatus,
 }
 
 impl DependencyInfo for VersionResult {
     fn ecosystem(&self) -> Ecosystem {
-        self.id.ecosystem
+        self.dep.ecosystem
     }
     fn kind(&self) -> DependencyKind {
-        self.id.kind
+        self.dep.kind
     }
     fn artifact(&self) -> &str {
-        &self.id.artifact
+        &self.dep.artifact
     }
     fn property(&self) -> Option<&str> {
-        self.id.property.as_deref()
+        self.dep.property.as_deref()
     }
     fn source(&self) -> &str {
-        &self.id.source
+        &self.dep.source
     }
 }
 
@@ -43,7 +43,7 @@ impl VersionResult {
             VersionStatus::UpToDate { latest }
         };
         Self {
-            id,
+            dep: id,
             current_version: current,
             status,
         }
@@ -51,7 +51,7 @@ impl VersionResult {
 
     pub fn skipped(id: Dependency, current: String) -> Self {
         Self {
-            id,
+            dep: id,
             current_version: current,
             status: VersionStatus::Skipped,
         }
@@ -59,7 +59,7 @@ impl VersionResult {
 
     pub fn error(id: Dependency, current: String, message: String) -> Self {
         Self {
-            id,
+            dep: id,
             current_version: current,
             status: VersionStatus::Error { message },
         }

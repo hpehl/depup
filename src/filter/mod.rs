@@ -47,7 +47,7 @@ impl KindFilter {
 ///
 /// All active criteria must match for a result to pass.
 /// `None` values mean "no filter" for that dimension.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Filter {
     pub outdated: bool,
     pub stable: bool,
@@ -261,22 +261,9 @@ mod tests {
         )
     }
 
-    fn no_filter() -> Filter {
-        Filter {
-            outdated: false,
-            stable: false,
-            managed: None,
-            ecosystem: None,
-            kind: None,
-            include: Vec::new(),
-            exclude: Vec::new(),
-            severity: None,
-        }
-    }
-
     #[test]
     fn no_filters_passes_everything() {
-        let f = no_filter();
+        let f = Filter::default();
         assert!(f.matches(&maven_dep(true)));
         assert!(f.matches(&maven_dep(false)));
         assert!(f.matches(&maven_plugin()));
@@ -289,7 +276,7 @@ mod tests {
     fn outdated_filter() {
         let f = Filter {
             outdated: true,
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&maven_dep(true)));
 
@@ -312,7 +299,7 @@ mod tests {
     fn stable_filter_excludes_skipped() {
         let f = Filter {
             stable: true,
-            ..no_filter()
+            ..Filter::default()
         };
         let skipped = VersionResult::skipped(
             Dependency::new(
@@ -332,7 +319,7 @@ mod tests {
     fn managed_filter() {
         let f = Filter {
             managed: Some(true),
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&maven_dep(true)));
         assert!(!f.matches(&maven_dep(false)));
@@ -343,7 +330,7 @@ mod tests {
     fn unmanaged_filter() {
         let f = Filter {
             managed: Some(false),
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(!f.matches(&maven_dep(true)));
         assert!(f.matches(&maven_dep(false)));
@@ -354,14 +341,14 @@ mod tests {
     fn ecosystem_filter() {
         let maven_only = Filter {
             ecosystem: Some(Ecosystem::Maven),
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(maven_only.matches(&maven_dep(true)));
         assert!(!maven_only.matches(&npm_dep()));
 
         let npm_only = Filter {
             ecosystem: Some(Ecosystem::Npm),
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(!npm_only.matches(&maven_dep(true)));
         assert!(npm_only.matches(&npm_dep()));
@@ -371,7 +358,7 @@ mod tests {
     fn kind_filter_dependencies() {
         let f = Filter {
             kind: Some(KindFilter::Dependencies),
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&maven_dep(true)));
         assert!(f.matches(&npm_dep()));
@@ -384,7 +371,7 @@ mod tests {
     fn kind_filter_plugins() {
         let f = Filter {
             kind: Some(KindFilter::Plugins),
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&maven_plugin()));
         assert!(!f.matches(&maven_dep(true)));
@@ -395,7 +382,7 @@ mod tests {
     fn kind_filter_dev_deps() {
         let f = Filter {
             kind: Some(KindFilter::DevDeps),
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&npm_dev_dep()));
         assert!(!f.matches(&npm_dep()));
@@ -406,7 +393,7 @@ mod tests {
     fn kind_filter_tool_versions() {
         let f = Filter {
             kind: Some(KindFilter::ToolVersions),
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&tool_version_result()));
         assert!(!f.matches(&maven_dep(true)));
@@ -421,7 +408,7 @@ mod tests {
             managed: Some(true),
             outdated: true,
             stable: false,
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&maven_dep(true)));
         assert!(!f.matches(&maven_dep(false)));
@@ -437,7 +424,7 @@ mod tests {
     fn include_filter() {
         let f = Filter {
             include: vec!["org.junit:*".into()],
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&maven_dep(true)));
         assert!(!f.matches(&maven_plugin()));
@@ -448,7 +435,7 @@ mod tests {
     fn include_multiple_patterns() {
         let f = Filter {
             include: vec!["org.junit:*".into(), "react".into()],
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(f.matches(&maven_dep(true)));
         assert!(f.matches(&npm_dep()));
@@ -459,7 +446,7 @@ mod tests {
     fn exclude_filter() {
         let f = Filter {
             exclude: vec!["org.junit:*".into()],
-            ..no_filter()
+            ..Filter::default()
         };
         assert!(!f.matches(&maven_dep(true)));
         assert!(f.matches(&maven_plugin()));
@@ -471,7 +458,7 @@ mod tests {
         let f = Filter {
             include: vec!["org.*:*".into()],
             exclude: vec!["*:junit".into()],
-            ..no_filter()
+            ..Filter::default()
         };
         // org.junit:junit matches include but also matches exclude
         assert!(!f.matches(&maven_dep(true)));

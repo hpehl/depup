@@ -65,33 +65,33 @@ pub struct Vulnerability {
 /// Result of auditing a single dependency against OSV.
 #[derive(Debug, Clone)]
 pub struct AuditResult {
-    pub id: Dependency,
+    pub dep: Dependency,
     pub version: String,
     pub vulnerabilities: Vec<Vulnerability>,
 }
 
 impl DependencyInfo for AuditResult {
     fn ecosystem(&self) -> Ecosystem {
-        self.id.ecosystem
+        self.dep.ecosystem
     }
     fn kind(&self) -> DependencyKind {
-        self.id.kind
+        self.dep.kind
     }
     fn artifact(&self) -> &str {
-        &self.id.artifact
+        &self.dep.artifact
     }
     fn property(&self) -> Option<&str> {
-        self.id.property.as_deref()
+        self.dep.property.as_deref()
     }
     fn source(&self) -> &str {
-        &self.id.source
+        &self.dep.source
     }
 }
 
 impl AuditResult {
     pub fn from_version_result(r: &VersionResult, vulnerabilities: Vec<Vulnerability>) -> Self {
         Self {
-            id: r.id.clone(),
+            dep: r.dep.clone(),
             version: r.current_version.clone(),
             vulnerabilities,
         }
@@ -107,5 +107,88 @@ impl AuditResult {
 
     pub fn is_vulnerable(&self) -> bool {
         !self.vulnerabilities.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
+    use crate::dependency::check::VersionResult;
+
+    fn make_dep() -> Dependency {
+        Dependency::new(
+            Ecosystem::Maven,
+            DependencyKind::Dependency,
+            "org.example:lib".into(),
+            Some("version.lib".into()),
+            "pom.xml".into(),
+        )
+    }
+
+    fn make_vuln(id: &str, severity: Severity) -> Vulnerability {
+        Vulnerability {
+            id: id.into(),
+            aliases: Vec::new(),
+            summary: String::new(),
+            severity,
+            url: None,
+        }
+    }
+
+    #[test]
+    fn is_vulnerable_with_vulns() {
+        let result = AuditResult {
+            dep: make_dep(),
+            version: "1.0.0".into(),
+            vulnerabilities: vec![make_vuln("CVE-1", Severity::High)],
+        };
+        assert!(result.is_vulnerable());
+    }
+
+    #[test]
+    fn is_vulnerable_without_vulns() {
+        let result = AuditResult {
+            dep: make_dep(),
+            version: "1.0.0".into(),
+            vulnerabilities: Vec::new(),
+        };
+        assert!(!result.is_vulnerable());
+    }
+
+    #[test]
+    fn max_severity_returns_highest() {
+        let result = AuditResult {
+            dep: make_dep(),
+            version: "1.0.0".into(),
+            vulnerabilities: vec![
+                make_vuln("V1", Severity::Low),
+                make_vuln("V2", Severity::Critical),
+                make_vuln("V3", Severity::Medium),
+            ],
+        };
+        assert_eq!(result.max_severity(), Severity::Critical);
+    }
+
+    #[test]
+    fn max_severity_empty_returns_unknown() {
+        let result = AuditResult {
+            dep: make_dep(),
+            version: "1.0.0".into(),
+            vulnerabilities: Vec::new(),
+        };
+        assert_eq!(result.max_severity(), Severity::Unknown);
+    }
+
+    #[test]
+    fn from_version_result_copies_fields() {
+        let check = VersionResult::checked(make_dep(), "1.0.0".into(), "2.0.0".into(), true);
+        let vulns = vec![make_vuln("CVE-1", Severity::High)];
+        let audit = AuditResult::from_version_result(&check, vulns);
+        assert_eq!(audit.version, "1.0.0");
+        assert_eq!(audit.artifact(), "org.example:lib");
+        assert_eq!(audit.property(), Some("version.lib"));
+        assert_eq!(audit.source(), "pom.xml");
+        assert_eq!(audit.vulnerabilities.len(), 1);
     }
 }

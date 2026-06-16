@@ -125,7 +125,7 @@ mod tests {
 
     fn make_audit_result(vulns: Vec<Vulnerability>) -> AuditResult {
         AuditResult {
-            id: Dependency::new(
+            dep: Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
                 "org.example:lib".into(),

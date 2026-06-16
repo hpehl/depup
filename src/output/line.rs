@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn version_label_audit_with_property() {
         let r = AuditResult {
-            id: Dependency::new(
+            dep: Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
                 "g:a".into(),
