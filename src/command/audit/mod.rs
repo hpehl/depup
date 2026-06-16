@@ -93,3 +93,106 @@ fn apply_severity_filter(results: Vec<AuditResult>, filter: &Filter) -> Vec<Audi
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dependency::{Dependency, Ecosystem, Severity, Vulnerability};
+
+    fn no_filter() -> Filter {
+        Filter {
+            outdated: false,
+            stable: false,
+            managed: None,
+            ecosystem: None,
+            kind: None,
+            include: Vec::new(),
+            exclude: Vec::new(),
+            severity: None,
+        }
+    }
+
+    fn make_audit_result(vulns: Vec<Vulnerability>) -> AuditResult {
+        AuditResult {
+            id: Dependency::new(
+                Ecosystem::Maven,
+                DependencyKind::Dependency,
+                "org.example:lib".into(),
+                None,
+                String::new(),
+            ),
+            version: "1.0.0".into(),
+            vulnerabilities: vulns,
+        }
+    }
+
+    fn make_vuln(id: &str, severity: Severity) -> Vulnerability {
+        Vulnerability {
+            id: id.into(),
+            aliases: Vec::new(),
+            summary: String::new(),
+            severity,
+            url: None,
+        }
+    }
+
+    #[test]
+    fn no_severity_filter_returns_all_unchanged() {
+        let results = vec![
+            make_audit_result(vec![
+                make_vuln("V1", Severity::Low),
+                make_vuln("V2", Severity::Critical),
+            ]),
+            make_audit_result(vec![make_vuln("V3", Severity::Medium)]),
+        ];
+        let filter = no_filter();
+        let filtered = apply_severity_filter(results, &filter);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].vulnerabilities.len(), 2);
+        assert_eq!(filtered[1].vulnerabilities.len(), 1);
+    }
+
+    #[test]
+    fn severity_filter_high_removes_low_and_medium() {
+        let results = vec![make_audit_result(vec![
+            make_vuln("V-LOW", Severity::Low),
+            make_vuln("V-MED", Severity::Medium),
+            make_vuln("V-HIGH", Severity::High),
+            make_vuln("V-CRIT", Severity::Critical),
+        ])];
+        let filter = Filter {
+            severity: Some(Severity::High),
+            ..no_filter()
+        };
+        let filtered = apply_severity_filter(results, &filter);
+        assert_eq!(filtered.len(), 1);
+        let vuln_ids: Vec<&str> = filtered[0]
+            .vulnerabilities
+            .iter()
+            .map(|v| v.id.as_str())
+            .collect();
+        assert_eq!(vuln_ids, vec!["V-HIGH", "V-CRIT"]);
+    }
+
+    #[test]
+    fn empty_results_returns_empty() {
+        let filter = Filter {
+            severity: Some(Severity::High),
+            ..no_filter()
+        };
+        let filtered = apply_severity_filter(Vec::new(), &filter);
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn result_with_no_vulnerabilities_passes_through() {
+        let results = vec![make_audit_result(Vec::new())];
+        let filter = Filter {
+            severity: Some(Severity::Critical),
+            ..no_filter()
+        };
+        let filtered = apply_severity_filter(results, &filter);
+        assert_eq!(filtered.len(), 1);
+        assert!(filtered[0].vulnerabilities.is_empty());
+    }
+}

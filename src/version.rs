@@ -138,7 +138,10 @@ pub fn find_latest(versions: &[String]) -> Option<String> {
 }
 
 /// Returns true if `latest` is a newer version than `current`.
-/// Falls back to string inequality if either version cannot be parsed.
+///
+/// Falls back to string inequality when either version cannot be parsed.
+/// This is intentionally conservative: unparseable versions are treated as
+/// "different means outdated", which is the safer default for alerting users.
 pub fn is_newer(current: &str, latest: &str) -> bool {
     match (Version::parse(current), Version::parse(latest)) {
         (Some(c), Some(l)) => l > c,

@@ -18,6 +18,8 @@ use crate::dependency::{
 };
 
 const OSV_API_URL: &str = "https://api.osv.dev";
+/// OSV.dev recommends batching queries. The API accepts up to 1000 per request;
+/// 500 balances request size against response latency.
 const BATCH_CHUNK_SIZE: usize = 500;
 
 // ---------------------------------------------------------------------------
@@ -447,5 +449,79 @@ mod tests {
             true,
         );
         assert_eq!(dep_key(&r), "Maven:org.junit:junit:5.10.0");
+    }
+
+    #[test]
+    fn dep_key_npm_format() {
+        use crate::dependency::{Dependency, DependencyKind};
+        let r = VersionResult::checked(
+            Dependency::new(
+                Ecosystem::Npm,
+                DependencyKind::NpmDep,
+                "lodash".into(),
+                None,
+                String::new(),
+            ),
+            "1.0.0".into(),
+            "2.0.0".into(),
+            true,
+        );
+        assert_eq!(dep_key(&r), "npm:lodash:1.0.0");
+    }
+
+    #[test]
+    fn extract_severity_from_cvss_vector_string() {
+        let osv = OsvVulnerability {
+            id: "GHSA-vec-test".into(),
+            summary: String::new(),
+            aliases: Vec::new(),
+            severity: vec![OsvSeverity {
+                score: Some("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/9.8".into()),
+            }],
+            references: Vec::new(),
+            affected: Vec::new(),
+        };
+        assert_eq!(extract_severity(&osv), Severity::Critical);
+    }
+
+    #[test]
+    fn convert_vulnerability_with_database_specific_severity() {
+        let osv = OsvVulnerability {
+            id: "OSV-DB-001".into(),
+            summary: "DB-specific vuln".into(),
+            aliases: Vec::new(),
+            severity: Vec::new(),
+            references: Vec::new(),
+            affected: vec![OsvAffected {
+                ecosystem_specific: None,
+                database_specific: Some(OsvDatabaseSpecific {
+                    severity: Some("MEDIUM".into()),
+                }),
+            }],
+        };
+
+        let vuln = convert_vulnerability(osv);
+        assert_eq!(vuln.severity, Severity::Medium);
+    }
+
+    #[test]
+    fn convert_vulnerability_with_web_reference() {
+        let osv = OsvVulnerability {
+            id: "OSV-WEB-001".into(),
+            summary: "Web ref vuln".into(),
+            aliases: Vec::new(),
+            severity: vec![OsvSeverity {
+                score: Some("7.5".into()),
+            }],
+            references: vec![OsvReference {
+                ref_type: "WEB".into(),
+                url: "https://example.com/web-advisory".into(),
+            }],
+            affected: Vec::new(),
+        };
+
+        let vuln = convert_vulnerability(osv);
+        assert_eq!(vuln.severity, Severity::High);
+        assert_eq!(vuln.url, Some("https://example.com/web-advisory".into()));
     }
 }

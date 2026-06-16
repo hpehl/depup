@@ -3,6 +3,16 @@
 //! Every `DepupError` carries a stable `DepupErrorCode` that serializes to
 //! `SCREAMING_SNAKE_CASE` for the JSON error envelope, making errors parseable
 //! by CI scripts and other tools.
+//!
+//! ## Error handling strategy
+//!
+//! - **`DepupError`** — Use for errors that reach the CLI surface and need a
+//!   stable, machine-readable code (POM not found, HTTP failure, parse error).
+//!   These are wrapped in `JsonErrorEnvelope` when `--json` is active.
+//!
+//! - **`anyhow::Result`** — Use for internal plumbing where a stable error code
+//!   is not needed. The top-level handler in `main.rs` downcasts to `DepupError`
+//!   when possible, falling back to `Internal` for plain `anyhow` errors.
 
 use serde::Serialize;
 

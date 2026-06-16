@@ -115,3 +115,48 @@ impl PackageManagerResolver for Pnpm {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_list_output_array() {
+        let json = r#"[{"dependencies":{"react":{"version":"18.2.0"}},"devDependencies":{"vitest":{"version":"1.0.0"}}}]"#;
+        let entries: Vec<ListOutput> = serde_json::from_str(json).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].dependencies.len(), 1);
+        assert_eq!(entries[0].dependencies["react"].version, "18.2.0");
+        assert_eq!(entries[0].dev_dependencies.len(), 1);
+        assert_eq!(entries[0].dev_dependencies["vitest"].version, "1.0.0");
+    }
+
+    #[test]
+    fn parse_list_output_empty_array() {
+        let json = r#"[]"#;
+        let entries: Vec<ListOutput> = serde_json::from_str(json).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn parse_list_output_no_dev_deps() {
+        let json = r#"[{"dependencies":{"express":{"version":"4.18.2"}}}]"#;
+        let entries: Vec<ListOutput> = serde_json::from_str(json).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].dependencies["express"].version, "4.18.2");
+        assert!(entries[0].dev_dependencies.is_empty());
+    }
+
+    #[test]
+    fn parse_list_output_multiple_entries() {
+        let json = r#"[
+            {"dependencies":{"react":{"version":"18.2.0"}},"devDependencies":{}},
+            {"dependencies":{"express":{"version":"4.18.2"}},"devDependencies":{"jest":{"version":"29.0.0"}}}
+        ]"#;
+        let entries: Vec<ListOutput> = serde_json::from_str(json).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].dependencies["react"].version, "18.2.0");
+        assert_eq!(entries[1].dependencies["express"].version, "4.18.2");
+        assert_eq!(entries[1].dev_dependencies["jest"].version, "29.0.0");
+    }
+}

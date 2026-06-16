@@ -81,3 +81,56 @@ pub(super) fn read_dev_dependency_names(dir: &Path) -> HashSet<String> {
         .map(|obj| obj.keys().cloned().collect())
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn read_dev_dependency_names_with_dev_deps() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("package.json"),
+            r#"{
+                "dependencies": {"react": "^18.0.0"},
+                "devDependencies": {"vitest": "^1.0.0", "eslint": "^8.0.0"}
+            }"#,
+        )
+        .unwrap();
+
+        let names = read_dev_dependency_names(tmp.path());
+        assert_eq!(names.len(), 2);
+        assert!(names.contains("vitest"));
+        assert!(names.contains("eslint"));
+    }
+
+    #[test]
+    fn read_dev_dependency_names_without_dev_deps() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("package.json"),
+            r#"{"dependencies": {"react": "^18.0.0"}}"#,
+        )
+        .unwrap();
+
+        let names = read_dev_dependency_names(tmp.path());
+        assert!(names.is_empty());
+    }
+
+    #[test]
+    fn read_dev_dependency_names_malformed_json() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("package.json"), "not valid json {{{").unwrap();
+
+        let names = read_dev_dependency_names(tmp.path());
+        assert!(names.is_empty());
+    }
+
+    #[test]
+    fn read_dev_dependency_names_nonexistent_dir() {
+        let names = read_dev_dependency_names(Path::new("/nonexistent/path/that/does/not/exist"));
+        assert!(names.is_empty());
+    }
+}

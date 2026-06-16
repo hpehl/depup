@@ -199,4 +199,20 @@ mod tests {
         };
         assert_eq!(resolver.label(&prop), "pnpm");
     }
+
+    #[test]
+    fn label_returns_unknown_for_unrecognized_property() {
+        let resolver = PmVersionsResolver::new();
+        let prop = VersionProperty {
+            name: "version.unknown-tool".to_string(),
+            current_value: "1.0.0".to_string(),
+        };
+        assert_eq!(resolver.label(&prop), "unknown");
+    }
+
+    #[test]
+    fn resolve_package_returns_none_for_node() {
+        // version.node is handled by NodeResolver, not PmVersionsResolver
+        assert_eq!(PmVersionsResolver::resolve_package("version.node"), None);
+    }
 }

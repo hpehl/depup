@@ -181,3 +181,59 @@ pub async fn resolve(
 
     join_set.join_all().await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn fixture_path() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/multi-module")
+    }
+
+    #[test]
+    fn discover_multi_module_fixture_has_tasks() {
+        let root = fixture_path();
+        let prepared = discover(&root, false).unwrap();
+        // The fixture has 2 properties (version.junit, version.compiler.plugin)
+        // mapped to 2 artifacts => at least 2 tasks
+        assert!(
+            prepared.count() >= 2,
+            "Expected at least 2 tasks, got {}",
+            prepared.count()
+        );
+    }
+
+    #[test]
+    fn discover_labels_contain_maven_coordinates() {
+        let root = fixture_path();
+        let prepared = discover(&root, false).unwrap();
+        let labels: Vec<String> = prepared.tasks.iter().map(|t| t.label()).collect();
+        // Should contain the Maven artifact coordinates from the fixture
+        assert!(
+            labels.iter().any(|l| l.contains("junit-jupiter")),
+            "Expected a label containing 'junit-jupiter', got: {:?}",
+            labels
+        );
+        assert!(
+            labels.iter().any(|l| l.contains("maven-compiler-plugin")),
+            "Expected a label containing 'maven-compiler-plugin', got: {:?}",
+            labels
+        );
+    }
+
+    #[test]
+    fn resolve_task_error_id_for_tool() {
+        let property = VersionProperty {
+            name: "version.node".to_string(),
+            current_value: "20.0.0".to_string(),
+        };
+        let resolver = Arc::new(crate::maven::node::NodeResolver::new(false));
+        let task = ResolveTask::Tool { property, resolver };
+        let root = PathBuf::from("/tmp");
+        let (id, current) = task.error_id(&root);
+        assert_eq!(id.kind, DependencyKind::ToolVersion);
+        assert_eq!(id.artifact, "version.node");
+        assert_eq!(current, "20.0.0");
+    }
+}

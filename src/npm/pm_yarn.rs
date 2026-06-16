@@ -179,4 +179,58 @@ mod tests {
     fn parse_tree_name_no_version() {
         assert!(parse_tree_name("react").is_none());
     }
+
+    #[test]
+    fn parse_tree_name_trailing_at() {
+        assert!(parse_tree_name("react@").is_none());
+    }
+
+    #[test]
+    fn parse_tree_line_json() {
+        let json = r#"{"type":"tree","data":{"trees":[{"name":"react@18.2.0"},{"name":"express@4.18.2"}]}}"#;
+        let parsed: TreeLine = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.line_type, "tree");
+        let data = parsed.data.unwrap();
+        assert_eq!(data.trees.len(), 2);
+        assert_eq!(data.trees[0].name, "react@18.2.0");
+        assert_eq!(data.trees[1].name, "express@4.18.2");
+    }
+
+    #[test]
+    fn parse_tree_line_non_tree_type() {
+        let json = r#"{"type":"info","data":null}"#;
+        let parsed: TreeLine = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.line_type, "info");
+        assert!(parsed.data.is_none());
+    }
+
+    #[test]
+    fn parse_outdated_line_json() {
+        let json = r#"{"type":"table","data":{"body":[["react","18.0.0","18.2.0","19.0.0",""],["express","4.17.0","4.18.2","5.0.0",""]]}}"#;
+        let parsed: OutdatedLine = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.line_type, "table");
+        let data = parsed.data.unwrap();
+        assert_eq!(data.body.len(), 2);
+        assert_eq!(data.body[0][0], "react");
+        assert_eq!(data.body[0][1], "18.0.0"); // current
+        assert_eq!(data.body[0][3], "19.0.0"); // latest
+        assert_eq!(data.body[1][0], "express");
+    }
+
+    #[test]
+    fn parse_outdated_line_non_table_type() {
+        let json = r#"{"type":"info","data":null}"#;
+        let parsed: OutdatedLine = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.line_type, "info");
+        assert!(parsed.data.is_none());
+    }
+
+    #[test]
+    fn parse_tree_line_empty_trees() {
+        let json = r#"{"type":"tree","data":{"trees":[]}}"#;
+        let parsed: TreeLine = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.line_type, "tree");
+        let data = parsed.data.unwrap();
+        assert!(data.trees.is_empty());
+    }
 }

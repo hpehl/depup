@@ -28,15 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Extract shared CLI argument builders (`common_filter_args`, `kind_args_with_tools`, `kind_args_without_tools`) to eliminate duplication across `check`, `update`, and `audit`
-- Extract `pipeline::detect_ecosystems()` for shared ecosystem detection logic
-- Extract `print_kind_legend()` helper to deduplicate summary output across all subcommands
-- Move OSV client into `command::audit::osv` submodule (only used by audit)
-- Restructure `command/audit.rs` into `command/audit/` module directory
+- Split `output.rs` into `output/` module (`mod.rs`, `line.rs`, `summary.rs`, `format.rs`)
+- Split `dependency.rs` into `dependency/` module (`mod.rs`, `check.rs`, `update.rs`, `audit.rs`)
+- Split `filter.rs` into `filter/` module (`mod.rs`, `glob.rs`)
+- Split `pom_writer.rs` into `pom_writer/` module (`properties.rs`, `inline.rs`)
 - Extract shared discovery+check pipeline into `command::pipeline` (used by `check`, `update`, and `audit`)
-- Extract shared types into `dependency.rs` (previously spread across `registry.rs` and ecosystem modules)
-- Split `pom_writer.rs` into `pom_writer/` module with `properties.rs` and `inline.rs` sub-modules
-- Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary`)
+- Extract shared CLI argument builders to eliminate duplication across subcommands
+- Restructure `command/audit.rs` into `command/audit/` module directory
+- Rename crate to `depup-cli` for crates.io publishing (`cargo install depup-cli` installs the `depup` binary)
+- Document error handling strategy (`DepupError` vs `anyhow::Result`) in `error.rs`
+- Improve test coverage from 75% to 80%+ with 56 new tests across npm, audit, maven, and output modules
 
 ### Removed
 

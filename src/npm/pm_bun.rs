@@ -110,3 +110,86 @@ fn get_installed_version(dir: &Path, package: &str) -> Option<String> {
         .and_then(|v| v.as_str())
         .map(String::from)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn get_installed_version_found() {
+        let tmp = TempDir::new().unwrap();
+        let pkg_dir = tmp.path().join("node_modules").join("react");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"name": "react", "version": "1.0.0"}"#,
+        )
+        .unwrap();
+
+        let version = get_installed_version(tmp.path(), "react");
+        assert_eq!(version, Some("1.0.0".to_string()));
+    }
+
+    #[test]
+    fn get_installed_version_scoped_package() {
+        let tmp = TempDir::new().unwrap();
+        let pkg_dir = tmp.path().join("node_modules").join("@types/node");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        fs::write(
+            pkg_dir.join("package.json"),
+            r#"{"name": "@types/node", "version": "20.0.0"}"#,
+        )
+        .unwrap();
+
+        let version = get_installed_version(tmp.path(), "@types/node");
+        assert_eq!(version, Some("20.0.0".to_string()));
+    }
+
+    #[test]
+    fn get_installed_version_not_found() {
+        let tmp = TempDir::new().unwrap();
+        let version = get_installed_version(tmp.path(), "nonexistent-package");
+        assert_eq!(version, None);
+    }
+
+    #[test]
+    fn get_installed_version_malformed_json() {
+        let tmp = TempDir::new().unwrap();
+        let pkg_dir = tmp.path().join("node_modules").join("broken");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        fs::write(pkg_dir.join("package.json"), "not json").unwrap();
+
+        let version = get_installed_version(tmp.path(), "broken");
+        assert_eq!(version, None);
+    }
+
+    #[test]
+    fn get_installed_version_missing_version_field() {
+        let tmp = TempDir::new().unwrap();
+        let pkg_dir = tmp.path().join("node_modules").join("no-ver");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        fs::write(pkg_dir.join("package.json"), r#"{"name": "no-ver"}"#).unwrap();
+
+        let version = get_installed_version(tmp.path(), "no-ver");
+        assert_eq!(version, None);
+    }
+
+    #[test]
+    fn parse_outdated_output() {
+        let json = r#"{"current":"4.18.2","latest":"5.0.0"}"#;
+        let entry: OutdatedOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.current, "4.18.2");
+        assert_eq!(entry.latest, "5.0.0");
+    }
+
+    #[test]
+    fn parse_outdated_output_as_map() {
+        let json = r#"{"lodash":{"current":"4.17.21","latest":"5.0.0"}}"#;
+        let packages: HashMap<String, OutdatedOutput> = serde_json::from_str(json).unwrap();
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages["lodash"].current, "4.17.21");
+        assert_eq!(packages["lodash"].latest, "5.0.0");
+    }
+}

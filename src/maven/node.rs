@@ -172,4 +172,44 @@ mod tests {
         let not_lts: LtsField = serde_json::from_str("false").unwrap();
         assert!(!not_lts.is_lts());
     }
+
+    #[test]
+    fn lts_false_is_not_lts() {
+        let field: LtsField = serde_json::from_str("false").unwrap();
+        assert!(!field.is_lts());
+
+        // Also verify that `true` (unusual but valid JSON) does not count as LTS
+        // since LTS requires a codename string
+        let field_true: LtsField = serde_json::from_str("true").unwrap();
+        assert!(!field_true.is_lts());
+    }
+
+    #[test]
+    fn tool_id_returns_correct_dependency() {
+        let dep = tool_id("pom.xml");
+        assert_eq!(dep.ecosystem, Ecosystem::Maven);
+        assert_eq!(dep.kind, DependencyKind::ToolVersion);
+        assert_eq!(dep.artifact, "nodejs.org");
+        assert!(dep.property.is_none());
+        assert_eq!(dep.source, "pom.xml");
+    }
+
+    #[test]
+    fn node_patterns_contains_all_expected() {
+        assert_eq!(NODE_PATTERNS.len(), 4);
+        assert!(NODE_PATTERNS.contains(&"version.node"));
+        assert!(NODE_PATTERNS.contains(&"version.nodejs"));
+        assert!(NODE_PATTERNS.contains(&"node.version"));
+        assert!(NODE_PATTERNS.contains(&"nodejs.version"));
+    }
+
+    #[test]
+    fn label_returns_nodejs_org() {
+        let resolver = NodeResolver::new(false);
+        let prop = VersionProperty {
+            name: "version.node".to_string(),
+            current_value: "20.0.0".to_string(),
+        };
+        assert_eq!(resolver.label(&prop), "nodejs.org");
+    }
 }

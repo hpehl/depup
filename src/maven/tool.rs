@@ -54,3 +54,36 @@ impl ToolResolverRegistry {
             .cloned()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_node_resolver() {
+        let registry = ToolResolverRegistry::new(false);
+        let resolver = registry.find("version.node");
+        assert!(resolver.is_some());
+        assert!(resolver.unwrap().patterns().contains(&"version.node"));
+    }
+
+    #[test]
+    fn find_pm_resolver_for_npm() {
+        let registry = ToolResolverRegistry::new(false);
+        let resolver = registry.find("version.npm");
+        assert!(resolver.is_some());
+        assert!(resolver.unwrap().patterns().contains(&"version.npm"));
+    }
+
+    #[test]
+    fn find_returns_none_for_non_tool_property() {
+        let registry = ToolResolverRegistry::new(false);
+        assert!(registry.find("version.junit").is_none());
+    }
+
+    #[test]
+    fn find_returns_none_for_random_property() {
+        let registry = ToolResolverRegistry::new(false);
+        assert!(registry.find("random.property").is_none());
+    }
+}

@@ -5,6 +5,8 @@
 //! active filters. Include/exclude use glob-style wildcards (`*`) matched
 //! against artifact names (Maven `groupId:artifactId`, npm package name).
 
+mod glob;
+
 use clap::ArgMatches;
 
 use crate::dependency::{DependencyInfo, DependencyKind, Ecosystem, Severity, VersionResult};
@@ -39,42 +41,6 @@ impl KindFilter {
             Self::ToolVersions => kind == DependencyKind::ToolVersion,
         }
     }
-}
-
-/// Returns true if `text` matches a glob `pattern` containing `*` wildcards.
-///
-/// Each `*` matches zero or more characters. All other characters are compared
-/// literally (case-sensitive). Examples: `"org.junit:*"` matches any artifact
-/// starting with `"org.junit:"`, `"*:core"` matches any artifact ending with
-/// `":core"`, `"*"` matches everything.
-fn glob_matches(pattern: &str, text: &str) -> bool {
-    let segments: Vec<&str> = pattern.split('*').collect();
-    if segments.len() == 1 {
-        return pattern == text;
-    }
-
-    let mut pos = 0;
-    for (i, segment) in segments.iter().enumerate() {
-        if segment.is_empty() {
-            continue;
-        }
-        if i == 0 {
-            if !text.starts_with(segment) {
-                return false;
-            }
-            pos = segment.len();
-        } else if i == segments.len() - 1 {
-            if !text[pos..].ends_with(segment) {
-                return false;
-            }
-        } else {
-            match text[pos..].find(segment) {
-                Some(offset) => pos += offset + segment.len(),
-                None => return false,
-            }
-        }
-    }
-    true
 }
 
 /// Composite filter built from CLI arguments.
@@ -167,36 +133,7 @@ impl Filter {
         }
     }
 
-    /// Returns true if the dependency passes ecosystem, kind, managed, include, and exclude filters.
-    pub fn matches_dependency(&self, dep: &impl DependencyInfo) -> bool {
-        if let Some(managed) = self.managed
-            && dep.ecosystem() == Ecosystem::Maven
-            && dep.has_property() != managed
-        {
-            return false;
-        }
-        if let Some(ecosystem) = self.ecosystem
-            && dep.ecosystem() != ecosystem
-        {
-            return false;
-        }
-        if let Some(kind) = self.kind
-            && !kind.matches(dep.kind())
-        {
-            return false;
-        }
-        if !self.include.is_empty() && !self.include.iter().any(|p| glob_matches(p, dep.artifact()))
-        {
-            return false;
-        }
-        if self.exclude.iter().any(|p| glob_matches(p, dep.artifact())) {
-            return false;
-        }
-        true
-    }
-
-    /// Returns true if the version result passes all active filter criteria,
-    /// including `VersionResult`-specific checks (outdated, stable/skipped).
+    /// Returns true if the result passes all active filter criteria.
     pub fn matches(&self, result: &VersionResult) -> bool {
         if self.outdated && !result.is_outdated() {
             return false;
@@ -204,7 +141,38 @@ impl Filter {
         if self.stable && result.is_skipped() {
             return false;
         }
-        self.matches_dependency(result)
+        if let Some(managed) = self.managed
+            && result.ecosystem() == Ecosystem::Maven
+            && result.has_property() != managed
+        {
+            return false;
+        }
+        if let Some(ecosystem) = self.ecosystem
+            && result.ecosystem() != ecosystem
+        {
+            return false;
+        }
+        if let Some(kind) = self.kind
+            && !kind.matches(result.kind())
+        {
+            return false;
+        }
+        if !self.include.is_empty()
+            && !self
+                .include
+                .iter()
+                .any(|p| glob::glob_matches(p, result.artifact()))
+        {
+            return false;
+        }
+        if self
+            .exclude
+            .iter()
+            .any(|p| glob::glob_matches(p, result.artifact()))
+        {
+            return false;
+        }
+        true
     }
 }
 
@@ -459,57 +427,6 @@ mod tests {
         assert!(!f.matches(&maven_dep(false)));
         assert!(!f.matches(&maven_plugin()));
         assert!(!f.matches(&npm_dep()));
-    }
-
-    // ------------------------------------------------------------------
-    // Glob matching
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn glob_exact_match() {
-        assert!(glob_matches("org.junit:junit", "org.junit:junit"));
-        assert!(!glob_matches("org.junit:junit", "org.junit:junit-bom"));
-    }
-
-    #[test]
-    fn glob_trailing_wildcard() {
-        assert!(glob_matches("org.junit:*", "org.junit:junit"));
-        assert!(glob_matches("org.junit:*", "org.junit:junit-bom"));
-        assert!(!glob_matches("org.junit:*", "org.mockito:mockito-core"));
-    }
-
-    #[test]
-    fn glob_leading_wildcard() {
-        assert!(glob_matches("*:core", "org.example:core"));
-        assert!(!glob_matches("*:core", "org.example:core-api"));
-    }
-
-    #[test]
-    fn glob_both_wildcards() {
-        assert!(glob_matches("*:junit*", "org.junit:junit"));
-        assert!(glob_matches("*:junit*", "org.junit:junit-bom"));
-        assert!(!glob_matches("*:junit*", "org.junit:mockito"));
-    }
-
-    #[test]
-    fn glob_match_all() {
-        assert!(glob_matches("*", "anything"));
-        assert!(glob_matches("*:*", "org.junit:junit"));
-    }
-
-    #[test]
-    fn glob_middle_wildcard() {
-        assert!(glob_matches("org.*:core", "org.example:core"));
-        assert!(glob_matches("org.*:core", "org.wildfly:core"));
-        assert!(!glob_matches("org.*:core", "com.example:core"));
-    }
-
-    #[test]
-    fn glob_npm_packages() {
-        assert!(glob_matches("react*", "react"));
-        assert!(glob_matches("react*", "react-dom"));
-        assert!(!glob_matches("react*", "preact"));
-        assert!(glob_matches("@scope/*", "@scope/utils"));
     }
 
     // ------------------------------------------------------------------
