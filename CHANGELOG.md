@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-06-16
+
 ### Added
 
 - Track `packageManager` version from `package.json` (e.g., `"pnpm@9.15.0"`) as a `ToolVersion` dependency across all subcommands
@@ -68,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/hpehl/depup/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/hpehl/depup/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hpehl/depup/releases/tag/v0.1.0

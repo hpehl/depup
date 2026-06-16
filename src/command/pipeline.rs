@@ -9,8 +9,8 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::filter::Filter;
+use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
 use crate::npm::discovery::NpmProject;
 use crate::progress;
 

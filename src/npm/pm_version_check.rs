@@ -10,8 +10,8 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use crate::constants::{self, NPM_REGISTRY_URL};
-use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::error::DepupError;
+use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
 use crate::version;
 
 /// Checks the project's `packageManager` version against the npm registry.

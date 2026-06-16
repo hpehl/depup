@@ -1,7 +1,7 @@
 use console::style;
 
 use crate::model::{
-    AuditResult, CommandResult, DependencyKind, Severity, UpdateResult, CheckResult,
+    AuditResult, CheckResult, CommandResult, DependencyKind, Severity, UpdateResult,
 };
 
 use super::format::print_kind_legend;

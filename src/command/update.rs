@@ -17,9 +17,9 @@ use tokio::time::Instant;
 
 use crate::app;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::model::{CommandResult, Ecosystem, UpdateResult, CheckResult};
 use crate::filter::Filter;
 use crate::json::UpdateJsonResult;
+use crate::model::{CheckResult, CommandResult, Ecosystem, UpdateResult};
 use crate::output;
 use crate::progress;
 

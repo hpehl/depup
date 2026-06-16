@@ -12,9 +12,9 @@ use indicatif::ProgressBar;
 use tokio::time::Instant;
 
 use crate::app;
-use crate::model::{AuditResult, CommandResult, DependencyKind, CheckResult};
 use crate::filter::Filter;
 use crate::json::AuditJsonResult;
+use crate::model::{AuditResult, CheckResult, CommandResult, DependencyKind};
 use crate::output;
 use crate::progress;
 

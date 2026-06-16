@@ -9,7 +9,7 @@ mod glob;
 
 use clap::ArgMatches;
 
-use crate::model::{CommandResult, DependencyKind, Ecosystem, Severity, CheckResult};
+use crate::model::{CheckResult, CommandResult, DependencyKind, Ecosystem, Severity};
 
 /// Safely reads a boolean flag, returning `false` if the flag is not defined.
 fn try_get_flag(matches: &ArgMatches, name: &str) -> bool {

@@ -6,8 +6,7 @@
 use serde::Serialize;
 
 use crate::model::{
-    AuditResult, CommandResult, UpdateResult, UpdateStatus, CheckResult, CheckStatus,
-    Vulnerability,
+    AuditResult, CheckResult, CheckStatus, CommandResult, UpdateResult, UpdateStatus, Vulnerability,
 };
 
 /// Flat JSON representation of a single dependency check result.

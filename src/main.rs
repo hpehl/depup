@@ -6,11 +6,11 @@
 mod app;
 mod command;
 mod constants;
-mod model;
 mod error;
 mod filter;
 mod json;
 mod maven;
+mod model;
 mod npm;
 mod output;
 mod progress;

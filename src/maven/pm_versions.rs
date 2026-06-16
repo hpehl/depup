@@ -9,10 +9,10 @@ use std::pin::Pin;
 use anyhow::Result;
 
 use crate::constants::{self, NPM_REGISTRY_URL};
-use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionResolver;
+use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
 use crate::version;
 
 /// Generates the pattern-to-package mapping table and the flat pattern list.

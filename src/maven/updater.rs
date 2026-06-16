@@ -7,8 +7,8 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use indicatif::ProgressBar;
 
-use crate::model::{CommandResult, UpdateResult, CheckResult};
 use crate::maven::pom_writer::{self, InlineVersionUpdate};
+use crate::model::{CheckResult, CommandResult, UpdateResult};
 
 /// Applies updates to POM files for all outdated Maven check results.
 ///

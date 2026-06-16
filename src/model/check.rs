@@ -1,4 +1,4 @@
-use super::{Dependency, CommandResult, DependencyKind, Ecosystem};
+use super::{CommandResult, Dependency, DependencyKind, Ecosystem};
 
 /// The outcome of checking a dependency version.
 #[derive(Debug, Clone)]

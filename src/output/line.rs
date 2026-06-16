@@ -1,6 +1,6 @@
 use console::style;
 
-use crate::model::{AuditResult, CommandResult, UpdateResult, CheckResult, CheckStatus};
+use crate::model::{AuditResult, CheckResult, CheckStatus, CommandResult, UpdateResult};
 
 use super::format::{format_columns, severity_style, truncate_middle_pad};
 

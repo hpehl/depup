@@ -1,5 +1,5 @@
 use super::check::CheckResult;
-use super::{Dependency, CommandResult, DependencyKind, Ecosystem};
+use super::{CommandResult, Dependency, DependencyKind, Ecosystem};
 
 /// CVSS-based severity level for vulnerabilities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]

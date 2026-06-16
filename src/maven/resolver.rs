@@ -14,10 +14,10 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::maven::discovery::{self, ArtifactMapping, VersionProperty};
 use crate::maven::maven_central::MavenVersionResolver;
 use crate::maven::tool::{ToolResolverRegistry, ToolVersionResolver};
+use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
 
 /// A single unit of work: either a Maven artifact or a tool version to resolve.
 enum ResolveTask {

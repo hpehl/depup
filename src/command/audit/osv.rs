@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 
 use crate::constants::{MAX_CONCURRENT_REQUESTS, http_client};
 use crate::model::{
-    AuditResult, CommandResult, DependencyKind, Ecosystem, Severity, CheckResult, Vulnerability,
+    AuditResult, CheckResult, CommandResult, DependencyKind, Ecosystem, Severity, Vulnerability,
 };
 
 const OSV_API_URL: &str = "https://api.osv.dev";

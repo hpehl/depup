@@ -10,9 +10,9 @@ use clap::ArgMatches;
 use tokio::time::Instant;
 
 use crate::app;
-use crate::model::CheckResult;
 use crate::filter::Filter;
 use crate::json::JsonResult;
+use crate::model::CheckResult;
 use crate::output;
 use crate::progress;
 

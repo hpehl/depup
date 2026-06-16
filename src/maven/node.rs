@@ -11,10 +11,10 @@ use anyhow::Result;
 use serde::Deserialize;
 
 use crate::constants::{self, NODEJS_DIST_URL};
-use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionResolver;
+use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
 use crate::version;
 
 /// Property name patterns that trigger Node.js version resolution.

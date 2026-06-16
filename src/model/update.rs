@@ -1,5 +1,5 @@
 use super::check::CheckResult;
-use super::{Dependency, CommandResult, DependencyKind, Ecosystem};
+use super::{CommandResult, Dependency, DependencyKind, Ecosystem};
 
 /// The outcome of updating a dependency version.
 #[derive(Debug, Clone)]
