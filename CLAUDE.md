@@ -88,7 +88,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`resolver.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `VersionResult` values.
 
-- **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
+- **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips directories in `SKIP_DIRS` (e.g., `node_modules`, `.pnpm-store`, `.yarn`, `.bun`) and workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
 
 - **`pm_version_check.rs`** — Checks and updates the `packageManager` version in `package.json`. Queries the npm registry for the latest PM version (`check_pm_version()`), and rewrites the field when updating (`update_pm_version()`). Strips Corepack `+hash` suffixes.
 
@@ -146,6 +146,7 @@ These patterns are shared with the `mgt` and `wado` CLI tools:
 - Maven Central requires a `User-Agent` header or returns 403. The client sets `depup/{version}`.
 - Artifacts not on Maven Central that also aren't in any POM-defined repository will show as errors.
 - npm ecosystem checks require the respective package manager (npm, pnpm, yarn, or bun) to be installed and on PATH.
+- **pnpm catalogs** (`"catalog:<name>"` in `package.json`, defined in `pnpm-workspace.yaml`) are not explicitly supported. Versions are resolved correctly via `pnpm list`/`pnpm outdated`, and updates are handled by `pnpm update`. Explicit support would require rewriting `pnpm-workspace.yaml` — not worth it while catalogs remain pnpm-only and the delegation approach works.
 
 ## Installation
 

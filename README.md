@@ -194,6 +194,8 @@ Discovers npm ecosystem projects in the directory tree by detecting the package 
 
 Supported package managers: **npm**, **pnpm**, **yarn** (classic), **bun**.
 
+> **Note:** pnpm [catalogs](https://pnpm.io/catalogs) (`"catalog:<name>"` version specifiers defined in `pnpm-workspace.yaml`) are resolved transparently by pnpm's own commands — depup does not need to handle them explicitly.
+
 ## Example Output
 
 ```
