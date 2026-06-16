@@ -17,13 +17,14 @@ use tokio::time::Instant;
 
 use crate::app;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::dependency::{Ecosystem, UpdateResult, VersionResult};
+use crate::dependency::{DependencyInfo, Ecosystem, UpdateResult, VersionResult};
 use crate::filter::Filter;
 use crate::json::UpdateJsonResult;
 use crate::output;
 use crate::progress;
 
-pub async fn update(matches: &ArgMatches) -> Result<()> {
+/// Returns `true` if the process should exit with code 1 (update errors occurred).
+pub async fn update(matches: &ArgMatches) -> Result<bool> {
     let path = app::path_argument(matches);
     let json = app::is_json(matches);
     let dry_run = matches.get_flag("dry-run");
@@ -51,7 +52,7 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
         } else {
             println!("{}", style("All dependencies are up to date.").green());
         }
-        return Ok(());
+        return Ok(false);
     }
 
     if dry_run {
@@ -60,7 +61,7 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
                 .iter()
                 .map(UpdateJsonResult::would_update)
                 .collect();
-            output::print_update_json(&json_results);
+            output::print_json(&json_results);
         } else {
             println!();
             println!("{}", style("Dry run \u{2014} no changes made:").bold());
@@ -68,10 +69,10 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
                 .iter()
                 .map(|r| UpdateResult::updated(r, r.latest_version().unwrap_or("?").to_string()))
                 .collect();
-            output::print_update_results(&preview);
+            output::print_table(&preview, "", output::update_summary);
             progress::done(instant);
         }
-        return Ok(());
+        return Ok(false);
     }
 
     // Phase 2: Apply updates
@@ -118,18 +119,14 @@ pub async fn update(matches: &ArgMatches) -> Result<()> {
     if json {
         let json_results: Vec<UpdateJsonResult> =
             all_results.iter().map(UpdateJsonResult::from).collect();
-        output::print_update_json(&json_results);
+        output::print_json(&json_results);
     } else {
         println!();
-        output::print_update_results(&all_results);
+        output::print_table(&all_results, "", output::update_summary);
         progress::done(instant);
     }
 
-    if all_results.iter().any(|r| r.is_error()) {
-        std::process::exit(1);
-    }
-
-    Ok(())
+    Ok(all_results.iter().any(|r| r.is_error()))
 }
 
 /// Matches outdated results to their npm projects by source path.
@@ -201,4 +198,87 @@ async fn run_npm_updates(
     }
 
     join_set.join_all().await.into_iter().flatten().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
+    use crate::npm::PackageManager;
+    use crate::npm::discovery::NpmProject;
+    use std::path::PathBuf;
+
+    fn npm_result(name: &str, source: &str) -> VersionResult {
+        VersionResult::checked(
+            Dependency::new(
+                Ecosystem::Npm,
+                DependencyKind::NpmDep,
+                name.into(),
+                None,
+                source.into(),
+            ),
+            "1.0.0".into(),
+            "2.0.0".into(),
+            true,
+        )
+    }
+
+    fn npm_project(root: &std::path::Path, subdir: &str) -> NpmProject {
+        NpmProject {
+            name: subdir.to_string(),
+            path: root.join(subdir),
+            package_manager: PackageManager::Npm,
+        }
+    }
+
+    #[test]
+    fn matches_outdated_to_correct_project() {
+        let root = PathBuf::from("/repo");
+        let projects = vec![npm_project(&root, "app-a"), npm_project(&root, "app-b")];
+        let r1 = npm_result("react", "app-a/package.json");
+        let r2 = npm_result("lodash", "app-b/package.json");
+        let outdated: Vec<&VersionResult> = vec![&r1, &r2];
+
+        let matched = match_npm_projects(&projects, &root, &outdated);
+        assert_eq!(matched.len(), 2);
+        assert_eq!(matched[0].0.name, "app-a");
+        assert_eq!(matched[0].1.len(), 1);
+        assert_eq!(matched[1].0.name, "app-b");
+        assert_eq!(matched[1].1.len(), 1);
+    }
+
+    #[test]
+    fn skips_projects_without_outdated() {
+        let root = PathBuf::from("/repo");
+        let projects = vec![npm_project(&root, "app-a"), npm_project(&root, "app-b")];
+        let r1 = npm_result("react", "app-a/package.json");
+        let outdated: Vec<&VersionResult> = vec![&r1];
+
+        let matched = match_npm_projects(&projects, &root, &outdated);
+        assert_eq!(matched.len(), 1);
+        assert_eq!(matched[0].0.name, "app-a");
+    }
+
+    #[test]
+    fn empty_outdated_returns_empty() {
+        let root = PathBuf::from("/repo");
+        let projects = vec![npm_project(&root, "app-a")];
+        let outdated: Vec<&VersionResult> = vec![];
+
+        let matched = match_npm_projects(&projects, &root, &outdated);
+        assert!(matched.is_empty());
+    }
+
+    #[test]
+    fn count_matches_len() {
+        let root = PathBuf::from("/repo");
+        let projects = vec![npm_project(&root, "app-a"), npm_project(&root, "app-b")];
+        let r1 = npm_result("react", "app-a/package.json");
+        let outdated: Vec<&VersionResult> = vec![&r1];
+
+        assert_eq!(
+            count_npm_projects_with_outdated(&projects, &root, &outdated),
+            1
+        );
+    }
 }

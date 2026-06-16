@@ -7,7 +7,7 @@
 
 use clap::ArgMatches;
 
-use crate::dependency::{DependencyKind, Ecosystem, Severity, VersionResult};
+use crate::dependency::{DependencyInfo, DependencyKind, Ecosystem, Severity, VersionResult};
 
 /// Safely reads a boolean flag, returning `false` if the flag is not defined.
 fn try_get_flag(matches: &ArgMatches, name: &str) -> bool {
@@ -167,7 +167,36 @@ impl Filter {
         }
     }
 
-    /// Returns true if the result passes all active filter criteria.
+    /// Returns true if the dependency passes ecosystem, kind, managed, include, and exclude filters.
+    pub fn matches_dependency(&self, dep: &impl DependencyInfo) -> bool {
+        if let Some(managed) = self.managed
+            && dep.ecosystem() == Ecosystem::Maven
+            && dep.has_property() != managed
+        {
+            return false;
+        }
+        if let Some(ecosystem) = self.ecosystem
+            && dep.ecosystem() != ecosystem
+        {
+            return false;
+        }
+        if let Some(kind) = self.kind
+            && !kind.matches(dep.kind())
+        {
+            return false;
+        }
+        if !self.include.is_empty() && !self.include.iter().any(|p| glob_matches(p, dep.artifact()))
+        {
+            return false;
+        }
+        if self.exclude.iter().any(|p| glob_matches(p, dep.artifact())) {
+            return false;
+        }
+        true
+    }
+
+    /// Returns true if the version result passes all active filter criteria,
+    /// including `VersionResult`-specific checks (outdated, stable/skipped).
     pub fn matches(&self, result: &VersionResult) -> bool {
         if self.outdated && !result.is_outdated() {
             return false;
@@ -175,38 +204,7 @@ impl Filter {
         if self.stable && result.is_skipped() {
             return false;
         }
-        if let Some(managed) = self.managed
-            && result.ecosystem() == Ecosystem::Maven
-            && result.has_property() != managed
-        {
-            return false;
-        }
-        if let Some(ecosystem) = self.ecosystem
-            && result.ecosystem() != ecosystem
-        {
-            return false;
-        }
-        if let Some(kind) = self.kind
-            && !kind.matches(result.kind())
-        {
-            return false;
-        }
-        if !self.include.is_empty()
-            && !self
-                .include
-                .iter()
-                .any(|p| glob_matches(p, result.artifact()))
-        {
-            return false;
-        }
-        if self
-            .exclude
-            .iter()
-            .any(|p| glob_matches(p, result.artifact()))
-        {
-            return false;
-        }
-        true
+        self.matches_dependency(result)
     }
 }
 

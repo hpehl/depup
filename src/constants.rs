@@ -1,5 +1,6 @@
 //! Global constants and shared HTTP client factory.
 
+use std::sync::LazyLock;
 use std::time::Duration;
 
 /// Maven Central base URL for fetching `maven-metadata.xml`.
@@ -17,12 +18,16 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10;
 /// HTTP request timeout in seconds.
 pub const HTTP_TIMEOUT_SECS: u64 = 30;
 
-/// Creates a pre-configured HTTP client with a `depup/{version}` user agent.
-/// Maven Central returns 403 without a proper User-Agent header.
-pub fn http_client() -> reqwest::Client {
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
         .build()
         .expect("Failed to create HTTP client")
+});
+
+/// Returns a shared HTTP client with a `depup/{version}` user agent.
+/// Maven Central returns 403 without a proper User-Agent header.
+pub fn http_client() -> reqwest::Client {
+    HTTP_CLIENT.clone()
 }

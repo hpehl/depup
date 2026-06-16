@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 
 use crate::constants::{MAX_CONCURRENT_REQUESTS, http_client};
 use crate::dependency::{
-    AuditResult, DependencyKind, Ecosystem, Severity, VersionResult, Vulnerability,
+    AuditResult, DependencyInfo, DependencyKind, Ecosystem, Severity, VersionResult, Vulnerability,
 };
 
 const OSV_API_URL: &str = "https://api.osv.dev";
@@ -134,14 +134,7 @@ pub async fn audit(results: &[VersionResult], bar: &ProgressBar) -> Result<Vec<A
         bar.inc(1);
         return Ok(auditable
             .iter()
-            .map(|r| AuditResult {
-                ecosystem: r.ecosystem(),
-                kind: r.kind(),
-                artifact: r.artifact().to_string(),
-                version: r.current_version.clone(),
-                source: r.source().to_string(),
-                vulnerabilities: Vec::new(),
-            })
+            .map(|r| AuditResult::from_version_result(r, Vec::new()))
             .collect());
     }
 
@@ -164,14 +157,7 @@ pub async fn audit(results: &[VersionResult], bar: &ProgressBar) -> Result<Vec<A
                         .collect()
                 })
                 .unwrap_or_default();
-            AuditResult {
-                ecosystem: r.ecosystem(),
-                kind: r.kind(),
-                artifact: r.artifact().to_string(),
-                version: r.current_version.clone(),
-                source: r.source().to_string(),
-                vulnerabilities: vulns,
-            }
+            AuditResult::from_version_result(r, vulns)
         })
         .collect();
 

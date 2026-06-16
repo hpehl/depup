@@ -12,11 +12,13 @@ use tokio::time::Instant;
 use crate::app;
 use crate::dependency::VersionResult;
 use crate::filter::Filter;
+use crate::json::JsonResult;
 use crate::output;
 use crate::progress;
 
 /// Main entry point for the `check` subcommand.
-pub async fn check(matches: &ArgMatches) -> Result<()> {
+/// Returns `true` if the process should exit with code 1 (outdated deps found).
+pub async fn check(matches: &ArgMatches) -> Result<bool> {
     let path = app::path_argument(matches);
     let json = app::is_json(matches);
     let filter = Filter::from_matches(matches);
@@ -35,7 +37,7 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         } else {
             println!("No supported project found.");
         }
-        return Ok(());
+        return Ok(false);
     }
 
     let filtered: Vec<VersionResult> = all_results
@@ -44,16 +46,13 @@ pub async fn check(matches: &ArgMatches) -> Result<()> {
         .collect();
 
     if json {
-        output::print_json(&filtered);
+        let json_results: Vec<JsonResult> = filtered.iter().map(JsonResult::from).collect();
+        output::print_json(&json_results);
     } else {
         println!();
-        output::print_results(&filtered);
+        output::print_table(&filtered, "No dependencies to show.", output::check_summary);
         progress::done(instant);
     }
 
-    if filtered.iter().any(|r| r.is_outdated()) {
-        std::process::exit(1);
-    }
-
-    Ok(())
+    Ok(filtered.iter().any(|r| r.is_outdated()))
 }

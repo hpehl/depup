@@ -74,6 +74,80 @@ pub async fn resolve_versions(
     Ok((results, npm_projects))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn no_filter() -> Filter {
+        Filter {
+            outdated: false,
+            stable: false,
+            managed: None,
+            ecosystem: None,
+            kind: None,
+            include: Vec::new(),
+            exclude: Vec::new(),
+            severity: None,
+        }
+    }
+
+    #[test]
+    fn detect_both_when_pom_exists_and_no_filter() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::write(tmp.path().join("pom.xml"), "<project/>").unwrap();
+        let (maven, npm) = detect_ecosystems(&no_filter(), tmp.path());
+        assert!(maven);
+        assert!(npm);
+    }
+
+    #[test]
+    fn detect_npm_only_when_no_pom() {
+        let tmp = TempDir::new().unwrap();
+        let (maven, npm) = detect_ecosystems(&no_filter(), tmp.path());
+        assert!(!maven);
+        assert!(npm);
+    }
+
+    #[test]
+    fn detect_maven_only_with_maven_filter() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::write(tmp.path().join("pom.xml"), "<project/>").unwrap();
+        let filter = Filter {
+            ecosystem: Some(Ecosystem::Maven),
+            ..no_filter()
+        };
+        let (maven, npm) = detect_ecosystems(&filter, tmp.path());
+        assert!(maven);
+        assert!(!npm);
+    }
+
+    #[test]
+    fn detect_npm_only_with_npm_filter() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::write(tmp.path().join("pom.xml"), "<project/>").unwrap();
+        let filter = Filter {
+            ecosystem: Some(Ecosystem::Npm),
+            ..no_filter()
+        };
+        let (maven, npm) = detect_ecosystems(&filter, tmp.path());
+        assert!(!maven);
+        assert!(npm);
+    }
+
+    #[test]
+    fn detect_nothing_when_npm_filter_and_no_pom() {
+        let tmp = TempDir::new().unwrap();
+        let filter = Filter {
+            ecosystem: Some(Ecosystem::Npm),
+            ..no_filter()
+        };
+        let (maven, npm) = detect_ecosystems(&filter, tmp.path());
+        assert!(!maven);
+        assert!(npm);
+    }
+}
+
 /// Spawns npm project version resolution concurrently with semaphore-based rate limiting.
 /// On failure, produces an error `VersionResult` rather than propagating the error.
 fn spawn_npm_resolves(

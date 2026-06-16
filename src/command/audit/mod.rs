@@ -12,12 +12,14 @@ use indicatif::ProgressBar;
 use tokio::time::Instant;
 
 use crate::app;
-use crate::dependency::{AuditResult, DependencyKind, VersionResult};
+use crate::dependency::{AuditResult, DependencyInfo, DependencyKind, VersionResult};
 use crate::filter::Filter;
+use crate::json::AuditJsonResult;
 use crate::output;
 use crate::progress;
 
-pub async fn audit(matches: &ArgMatches) -> Result<()> {
+/// Returns `true` if the process should exit with code 1 (vulnerabilities found).
+pub async fn audit(matches: &ArgMatches) -> Result<bool> {
     let path = app::path_argument(matches);
     let json = app::is_json(matches);
     let filter = Filter::from_matches(matches);
@@ -44,11 +46,10 @@ pub async fn audit(matches: &ArgMatches) -> Result<()> {
         } else {
             println!("No dependencies to audit.");
         }
-        return Ok(());
+        return Ok(false);
     }
 
     // Phase 2: Query OSV.dev for vulnerabilities
-    // Progress bar: 2 steps (batch query + detail fetch)
     let bar = if json {
         ProgressBar::hidden()
     } else {
@@ -63,18 +64,16 @@ pub async fn audit(matches: &ArgMatches) -> Result<()> {
 
     // Phase 4: Output
     if json {
-        output::print_audit_json(&filtered);
+        let json_results: Vec<AuditJsonResult> =
+            filtered.iter().map(AuditJsonResult::from).collect();
+        output::print_json(&json_results);
     } else {
         println!();
-        output::print_audit_results(&filtered);
+        output::print_table(&filtered, "No dependencies to show.", output::audit_summary);
         progress::done(instant);
     }
 
-    if filtered.iter().any(|r| r.is_vulnerable()) {
-        std::process::exit(1);
-    }
-
-    Ok(())
+    Ok(filtered.iter().any(|r| r.is_vulnerable()))
 }
 
 fn apply_severity_filter(results: Vec<AuditResult>, filter: &Filter) -> Vec<AuditResult> {
@@ -84,10 +83,13 @@ fn apply_severity_filter(results: Vec<AuditResult>, filter: &Filter) -> Vec<Audi
 
     results
         .into_iter()
-        .map(|mut r| {
-            r.vulnerabilities
-                .retain(|v| filter.matches_severity(v.severity));
-            r
+        .map(|r| AuditResult {
+            vulnerabilities: r
+                .vulnerabilities
+                .into_iter()
+                .filter(|v| filter.matches_severity(v.severity))
+                .collect(),
+            ..r
         })
         .collect()
 }

@@ -27,22 +27,30 @@ async fn main() {
 
     // Pre-check for --json flag before parsing to format top-level errors correctly.
     let json = std::env::args().any(|a| a == "--json");
-    if let Err(e) = run().await {
-        if json {
-            let envelope = JsonErrorEnvelope::from_anyhow(&e);
-            match serde_json::to_string(&envelope) {
-                Ok(json) => println!("{json}"),
-                Err(ser) => eprintln!("Error: {e:#}\n(JSON serialization also failed: {ser})"),
+    match run().await {
+        Ok(should_fail) => {
+            if should_fail {
+                std::process::exit(1);
             }
-        } else {
-            eprintln!("Error: {e:#}");
         }
-        std::process::exit(1);
+        Err(e) => {
+            if json {
+                let envelope = JsonErrorEnvelope::from_anyhow(&e);
+                match serde_json::to_string(&envelope) {
+                    Ok(json) => println!("{json}"),
+                    Err(ser) => eprintln!("Error: {e:#}\n(JSON serialization also failed: {ser})"),
+                }
+            } else {
+                eprintln!("Error: {e:#}");
+            }
+            std::process::exit(1);
+        }
     }
 }
 
 /// Parses CLI arguments and dispatches to the appropriate subcommand handler.
-async fn run() -> Result<()> {
+/// Returns `true` if the process should exit with code 1.
+async fn run() -> Result<bool> {
     let matches = app::build_app()
         .try_get_matches()
         .map_err(classify_clap_error)?;
@@ -51,7 +59,7 @@ async fn run() -> Result<()> {
         Some(("check", m)) => command::check::check(m).await,
         Some(("update", m)) => command::update::update(m).await,
         Some(("audit", m)) => command::audit::audit(m).await,
-        Some(("completions", m)) => command::completions::completions(m),
+        Some(("completions", m)) => command::completions::completions(m).map(|()| false),
         _ => unreachable!("subcommand_required is set"),
     }
 }

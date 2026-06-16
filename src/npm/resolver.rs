@@ -10,7 +10,7 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use super::{PackageManager, PackageManagerResolver, pm_bun, pm_npm, pm_pnpm, pm_yarn};
-use crate::dependency::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::dependency::{Dependency, DependencyInfo, DependencyKind, Ecosystem, VersionResult};
 use crate::version;
 
 /// Runs `list_packages` and `outdated_packages` concurrently for any resolver.

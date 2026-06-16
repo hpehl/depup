@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use indicatif::ProgressBar;
 
-use crate::dependency::{UpdateResult, VersionResult};
+use crate::dependency::{DependencyInfo, UpdateResult, VersionResult};
 use crate::maven::pom_writer::{self, InlineVersionUpdate};
 
 /// Applies updates to POM files for all outdated Maven check results.
@@ -145,7 +145,7 @@ pub fn apply_updates(
     bar.finish_and_clear();
 
     // Sort by artifact for stable output
-    update_results.sort_by(|a, b| a.artifact.cmp(&b.artifact));
+    update_results.sort_by(|a, b| a.id.artifact.cmp(&b.id.artifact));
 
     Ok(update_results)
 }
@@ -203,7 +203,7 @@ mod tests {
         let updated = apply_updates(temp.path(), &results, &ProgressBar::hidden()).unwrap();
 
         assert_eq!(updated.len(), 1);
-        assert_eq!(updated[0].property, Some("version.foo".to_string()));
+        assert_eq!(updated[0].id.property, Some("version.foo".to_string()));
         assert_eq!(updated[0].old_version, "1.0.0");
         assert_eq!(updated[0].new_version, "1.1.0");
         assert!(!updated[0].is_error());
@@ -242,7 +242,7 @@ mod tests {
         let updated = apply_updates(temp.path(), &results, &ProgressBar::hidden()).unwrap();
 
         assert_eq!(updated.len(), 1);
-        assert_eq!(updated[0].artifact, "com.google.guava:guava");
+        assert_eq!(updated[0].id.artifact, "com.google.guava:guava");
         assert_eq!(updated[0].old_version, "30.0");
         assert_eq!(updated[0].new_version, "31.0");
         assert!(!updated[0].is_error());
@@ -326,7 +326,7 @@ mod tests {
         // Find the property update
         let property_update = updated
             .iter()
-            .find(|u| u.property == Some("version.junit".to_string()))
+            .find(|u| u.id.property == Some("version.junit".to_string()))
             .unwrap();
         assert_eq!(property_update.old_version, "5.10.0");
         assert_eq!(property_update.new_version, "5.11.0");
@@ -334,7 +334,7 @@ mod tests {
         // Find the inline update
         let inline_update = updated
             .iter()
-            .find(|u| u.artifact == "com.google.guava:guava")
+            .find(|u| u.id.artifact == "com.google.guava:guava")
             .unwrap();
         assert_eq!(inline_update.old_version, "33.0.0-jre");
         assert_eq!(inline_update.new_version, "33.4.0-jre");

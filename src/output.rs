@@ -1,236 +1,211 @@
 //! Terminal and JSON output formatting.
 //!
-//! Results are grouped by ecosystem (Maven, npm) and then by kind
-//! (Dependencies, Plugins, Tool Versions, Dev Dependencies). Each line
-//! shows the artifact name, current version, source file, and status
-//! with color-coded symbols.
+//! All subcommands share the same output functions:
+//! - [`print_table`] groups results by ecosystem/kind and prints styled lines.
+//! - [`print_json`] serializes any `Serialize` value as pretty JSON.
+//!
+//! Each result type implements [`OutputLine`] to provide its version label
+//! and styled status column, while the shared columns (artifact, source)
+//! are formatted uniformly via the [`DependencyInfo`] trait.
 
 use std::collections::BTreeSet;
 
 use console::style;
+use serde::Serialize;
 
 use crate::dependency::{
-    AuditResult, DependencyKind, Ecosystem, Severity, UpdateResult, VersionResult, VersionStatus,
+    AuditResult, DependencyInfo, DependencyKind, Ecosystem, Severity, UpdateResult, VersionResult,
+    VersionStatus,
 };
-use crate::json::{AuditJsonResult, JsonResult, UpdateJsonResult};
 
 const ARTIFACT_WIDTH: usize = 40;
 const VERSION_WIDTH: usize = 30;
 const SOURCE_WIDTH: usize = 25;
 
-fn kind_color(kind: DependencyKind) -> console::Style {
-    match kind {
-        DependencyKind::Dependency => console::Style::new().cyan(),
-        DependencyKind::Plugin => console::Style::new().magenta(),
-        DependencyKind::ToolVersion => console::Style::new().green(),
-        DependencyKind::NpmDep | DependencyKind::NpmDevDep => console::Style::new().blue(),
+// ---------------------------------------------------------------------------
+// OutputLine trait — subcommand-specific rendering
+// ---------------------------------------------------------------------------
+
+/// Subcommand-specific line rendering. Each result type provides its own
+/// version label and status output while sharing the common column layout.
+pub trait OutputLine: DependencyInfo {
+    fn version_label(&self) -> String;
+    fn print_line(&self);
+}
+
+impl OutputLine for VersionResult {
+    fn version_label(&self) -> String {
+        format_version_with_property(&self.current_version, self.property())
     }
-}
 
-fn kind_symbol(kind: DependencyKind) -> &'static str {
-    match kind {
-        DependencyKind::Dependency => "\u{25cf}",
-        DependencyKind::Plugin => "\u{25a0}",
-        DependencyKind::ToolVersion => "\u{25b2}",
-        DependencyKind::NpmDep | DependencyKind::NpmDevDep => "\u{25c6}",
-    }
-}
-
-fn kind_group_label(kind: DependencyKind) -> &'static str {
-    match kind {
-        DependencyKind::Dependency => "Dependencies",
-        DependencyKind::Plugin => "Plugins",
-        DependencyKind::ToolVersion => "Tool Versions",
-        DependencyKind::NpmDep => "Dependencies",
-        DependencyKind::NpmDevDep => "Dev Dependencies",
-    }
-}
-
-/// Prints a kind legend suffix like `  (● Dependency, ■ Plugin)` at the end of a summary line.
-fn print_kind_legend(kinds: &[DependencyKind]) {
-    let mut sorted = kinds.to_vec();
-    sorted.sort();
-    sorted.dedup();
-    let legend: Vec<String> = sorted
-        .iter()
-        .map(|k| format!("{} {k}", kind_color(*k).apply_to(kind_symbol(*k))))
-        .collect();
-    println!("  ({})", legend.join(", "));
-}
-
-/// Prints results as a JSON array to stdout.
-pub fn print_json(results: &[VersionResult]) {
-    let json_results: Vec<JsonResult> = results.iter().map(JsonResult::from).collect();
-
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json_results).unwrap_or_else(|_| "[]".to_string())
-    );
-}
-
-fn print_ecosystem_header(ecosystem: Ecosystem) {
-    let label = ecosystem.to_string();
-    let line = "\u{2500}".repeat(3);
-    println!(
-        "{} {} {}",
-        style(line.clone()).dim(),
-        style(label).bold(),
-        style(line).dim()
-    );
-}
-
-/// Groups items by ecosystem, then by kind, printing section headers and
-/// calling `print_item` for each entry. Extracts the shared grouping/sorting
-/// logic used by both check and update output.
-fn print_grouped<T>(
-    items: &[T],
-    get_ecosystem: impl Fn(&T) -> Ecosystem,
-    get_kind: impl Fn(&T) -> DependencyKind,
-    get_sort_key: impl Fn(&T) -> &str,
-    print_item: impl Fn(&T),
-) {
-    let ecosystems: Vec<Ecosystem> = items
-        .iter()
-        .map(&get_ecosystem)
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-
-    let multiple_ecosystems = ecosystems.len() > 1;
-    for ecosystem in &ecosystems {
-        let mut group: Vec<&T> = items
-            .iter()
-            .filter(|r| get_ecosystem(r) == *ecosystem)
-            .collect();
-        group.sort_by(|a, b| {
-            get_kind(a)
-                .cmp(&get_kind(b))
-                .then_with(|| get_sort_key(a).cmp(get_sort_key(b)))
-        });
-
-        if multiple_ecosystems {
-            print_ecosystem_header(*ecosystem);
-        }
-
-        let kinds: Vec<DependencyKind> = group
-            .iter()
-            .map(|r| get_kind(r))
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect();
-        let multiple_kinds = kinds.len() > 1;
-
-        for kind in &kinds {
-            if multiple_kinds {
-                println!("  {}", style(kind_group_label(*kind)).dim().bold());
+    fn print_line(&self) {
+        let (styled_artifact, version, source) = format_columns(self);
+        match &self.status {
+            VersionStatus::UpToDate { .. } => {
+                println!(
+                    "  {} {}  {}  {}  {}",
+                    style("\u{2713}").green().bold(),
+                    styled_artifact,
+                    style(version).white(),
+                    style(source).dim(),
+                    style("up-to-date").green()
+                );
             }
-            for item in group.iter().filter(|r| get_kind(r) == *kind) {
-                print_item(item);
+            VersionStatus::Outdated { latest } => {
+                println!(
+                    "  {} {}  {}  {}  {}",
+                    style("\u{2192}").yellow().bold(),
+                    styled_artifact,
+                    style(version).white(),
+                    style(source).dim(),
+                    style(format!("\u{2192} {latest}")).yellow()
+                );
+            }
+            VersionStatus::Skipped => {
+                println!(
+                    "  {} {}  {}  {}  {}",
+                    style("-").dim().bold(),
+                    styled_artifact,
+                    style(version).dim(),
+                    style(source).dim(),
+                    style("skipped").dim()
+                );
+            }
+            VersionStatus::Error { message } => {
+                println!(
+                    "  {} {}  {}  {}  {}",
+                    style("\u{2717}").red().bold(),
+                    styled_artifact,
+                    style(version).white(),
+                    style(source).dim(),
+                    style(message).red()
+                );
             }
         }
-        println!();
     }
 }
 
-/// Prints a styled summary table to stdout, grouped by ecosystem and kind.
-pub fn print_results(results: &[VersionResult]) {
-    if results.is_empty() {
-        println!("{}", style("No dependencies to show.").dim());
-        return;
+impl OutputLine for UpdateResult {
+    fn version_label(&self) -> String {
+        let old = format_version_with_property(&self.old_version, self.property());
+        format!("{old} \u{2192} {}", self.new_version)
     }
 
-    print_grouped(
-        results,
-        |r| r.ecosystem(),
-        |r| r.kind(),
-        |r| r.artifact(),
-        print_result_line,
-    );
-    print_summary(results);
+    fn print_line(&self) {
+        let (styled_artifact, version, source) = format_columns(self);
+        match &self.status {
+            crate::dependency::UpdateStatus::Updated => {
+                println!(
+                    "  {} {}  {}  {}  {}",
+                    style("\u{2713}").green().bold(),
+                    styled_artifact,
+                    style(version).white(),
+                    style(source).dim(),
+                    style("updated").green()
+                );
+            }
+            crate::dependency::UpdateStatus::Error { message } => {
+                println!(
+                    "  {} {}  {}  {}  {}",
+                    style("\u{2717}").red().bold(),
+                    styled_artifact,
+                    style(version).white(),
+                    style(source).dim(),
+                    style(message).red()
+                );
+            }
+        }
+    }
 }
 
-fn print_result_line(result: &VersionResult) {
-    let artifact = truncate_middle_pad(result.artifact(), ARTIFACT_WIDTH);
-    let styled_artifact = kind_color(result.kind()).apply_to(artifact);
+impl OutputLine for AuditResult {
+    fn version_label(&self) -> String {
+        format_version_with_property(&self.version, self.property())
+    }
 
-    let version_label = format_version(result);
-    let version = truncate_middle_pad(&version_label, VERSION_WIDTH);
-
-    let source = truncate_middle_pad(result.source(), SOURCE_WIDTH);
-
-    match &result.status {
-        VersionStatus::UpToDate { .. } => {
+    fn print_line(&self) {
+        let (styled_artifact, version, source) = format_columns(self);
+        if self.vulnerabilities.is_empty() {
             println!(
                 "  {} {}  {}  {}  {}",
                 style("\u{2713}").green().bold(),
                 styled_artifact,
                 style(version).white(),
                 style(source).dim(),
-                style("up-to-date").green()
+                style("no vulnerabilities").green()
             );
-        }
-        VersionStatus::Outdated { latest } => {
-            println!(
-                "  {} {}  {}  {}  {}",
-                style("\u{2192}").yellow().bold(),
-                styled_artifact,
-                style(version).white(),
-                style(source).dim(),
-                style(format!("\u{2192} {latest}")).yellow()
-            );
-        }
-        VersionStatus::Skipped => {
-            println!(
-                "  {} {}  {}  {}  {}",
-                style("-").dim().bold(),
-                styled_artifact,
-                style(version).dim(),
-                style(source).dim(),
-                style("skipped").dim()
-            );
-        }
-        VersionStatus::Error { message } => {
+        } else {
+            let count = self.vulnerabilities.len();
+            let max_sev = self.max_severity();
+            let label = if count == 1 {
+                "vulnerability"
+            } else {
+                "vulnerabilities"
+            };
             println!(
                 "  {} {}  {}  {}  {}",
                 style("\u{2717}").red().bold(),
                 styled_artifact,
                 style(version).white(),
                 style(source).dim(),
-                style(message).red()
+                severity_style(max_sev).apply_to(format!("{count} {label}")),
             );
+            for vuln in &self.vulnerabilities {
+                let id_and_aliases = if vuln.aliases.is_empty() {
+                    vuln.id.clone()
+                } else {
+                    format!("{} ({})", vuln.id, vuln.aliases.join(", "))
+                };
+                let summary = if vuln.summary.is_empty() {
+                    String::new()
+                } else {
+                    let truncated = truncate_middle_pad(&vuln.summary, 60);
+                    format!(" {truncated}")
+                };
+                println!(
+                    "      {} {}{}",
+                    severity_style(vuln.severity).apply_to(format!("[{}]", vuln.severity)),
+                    style(id_and_aliases).dim(),
+                    style(summary).dim(),
+                );
+            }
         }
     }
 }
 
-/// Formats the version column, appending the property name in parentheses
-/// for Maven managed dependencies (those backed by a `<properties>` entry).
-fn format_version(result: &VersionResult) -> String {
-    if result.current_version.is_empty() {
-        return String::new();
+// ---------------------------------------------------------------------------
+// Public API — two functions for all subcommands
+// ---------------------------------------------------------------------------
+
+/// Prints a styled table grouped by ecosystem and kind, with a summary line.
+///
+/// The `empty_msg` is shown when `results` is empty (pass `""` to print nothing).
+/// The `summary` closure prints subcommand-specific summary statistics.
+pub fn print_table<T: OutputLine>(results: &[T], empty_msg: &str, summary: impl Fn(&[T])) {
+    if results.is_empty() {
+        if !empty_msg.is_empty() {
+            println!("{}", style(empty_msg).dim());
+        }
+        return;
     }
-    match result.property() {
-        Some(prop) => format!("{} ({})", result.current_version, prop),
-        None => result.current_version.clone(),
-    }
+
+    print_grouped(results);
+    summary(results);
 }
 
-/// Truncates a string to `width` characters using middle-ellipsis, or right-pads if shorter.
-fn truncate_middle_pad(s: &str, width: usize) -> String {
-    let char_count = s.chars().count();
-    if char_count > width {
-        let ellipsis = "\u{2026}";
-        let half = (width - 1) / 2;
-        let remainder = width - 1 - half;
-        let prefix: String = s.chars().take(half).collect();
-        let suffix: String = s.chars().skip(char_count - remainder).collect();
-        format!("{prefix}{ellipsis}{suffix}")
-    } else {
-        format!("{s:<width$}")
-    }
+/// Prints any serializable value as pretty JSON.
+pub fn print_json(items: &impl Serialize) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(items).unwrap_or_else(|_| "[]".to_string())
+    );
 }
 
-/// Prints a one-line summary with counts and a legend of kind symbols.
-fn print_summary(results: &[VersionResult]) {
+// ---------------------------------------------------------------------------
+// Summary helpers — called by subcommands via `print_table`
+// ---------------------------------------------------------------------------
+
+pub fn check_summary(results: &[VersionResult]) {
     let total = results.len();
     let outdated = results.iter().filter(|r| r.is_outdated()).count();
     let skipped = results.iter().filter(|r| r.is_skipped()).count();
@@ -256,158 +231,20 @@ fn print_summary(results: &[VersionResult]) {
     print_kind_legend(&kinds);
 }
 
-/// Prints update results as a JSON array to stdout.
-pub fn print_update_json(results: &[UpdateJsonResult]) {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".to_string())
-    );
-}
+pub fn update_summary(results: &[UpdateResult]) {
+    let total = results.len();
+    let errors = results.iter().filter(|r| r.is_error()).count();
 
-/// Prints a styled update results table, grouped by ecosystem and kind.
-pub fn print_update_results(results: &[UpdateResult]) {
-    if results.is_empty() {
-        return;
+    print!("{total} updated");
+    if errors > 0 {
+        print!(", {}", style(format!("{errors} errors")).red());
     }
 
-    print_grouped(
-        results,
-        |r| r.ecosystem,
-        |r| r.kind,
-        |r| r.artifact.as_str(),
-        print_update_line,
-    );
-    print_update_summary(results);
+    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind()).collect();
+    print_kind_legend(&kinds);
 }
 
-fn print_update_line(result: &UpdateResult) {
-    let artifact = truncate_middle_pad(&result.artifact, ARTIFACT_WIDTH);
-    let styled_artifact = kind_color(result.kind).apply_to(artifact);
-
-    let version_label = format!("{} \u{2192} {}", result.old_version, result.new_version);
-    let version = truncate_middle_pad(&version_label, VERSION_WIDTH);
-
-    let source = truncate_middle_pad(&result.source, SOURCE_WIDTH);
-
-    match &result.status {
-        crate::dependency::UpdateStatus::Updated => {
-            println!(
-                "  {} {}  {}  {}  {}",
-                style("\u{2713}").green().bold(),
-                styled_artifact,
-                style(version).white(),
-                style(source).dim(),
-                style("updated").green()
-            );
-        }
-        crate::dependency::UpdateStatus::Error { message } => {
-            println!(
-                "  {} {}  {}  {}  {}",
-                style("\u{2717}").red().bold(),
-                styled_artifact,
-                style(version).white(),
-                style(source).dim(),
-                style(message).red()
-            );
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Audit output
-// ---------------------------------------------------------------------------
-
-/// Prints audit results as a JSON array to stdout.
-pub fn print_audit_json(results: &[AuditResult]) {
-    let json_results: Vec<AuditJsonResult> = results.iter().map(AuditJsonResult::from).collect();
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json_results).unwrap_or_else(|_| "[]".to_string())
-    );
-}
-
-/// Prints a styled audit results table, grouped by ecosystem and kind.
-pub fn print_audit_results(results: &[AuditResult]) {
-    if results.is_empty() {
-        println!("{}", style("No dependencies to show.").dim());
-        return;
-    }
-
-    print_grouped(
-        results,
-        |r| r.ecosystem,
-        |r| r.kind,
-        |r| r.artifact.as_str(),
-        print_audit_line,
-    );
-    print_audit_summary(results);
-}
-
-fn severity_style(severity: Severity) -> console::Style {
-    match severity {
-        Severity::Critical => console::Style::new().red().bold(),
-        Severity::High => console::Style::new().red(),
-        Severity::Medium => console::Style::new().yellow(),
-        Severity::Low => console::Style::new().dim(),
-        Severity::Unknown => console::Style::new().dim(),
-    }
-}
-
-fn print_audit_line(result: &AuditResult) {
-    let artifact = truncate_middle_pad(&result.artifact, ARTIFACT_WIDTH);
-    let styled_artifact = kind_color(result.kind).apply_to(artifact);
-
-    let version = truncate_middle_pad(&result.version, VERSION_WIDTH);
-    let source = truncate_middle_pad(&result.source, SOURCE_WIDTH);
-
-    if result.vulnerabilities.is_empty() {
-        println!(
-            "  {} {}  {}  {}  {}",
-            style("\u{2713}").green().bold(),
-            styled_artifact,
-            style(version).white(),
-            style(source).dim(),
-            style("no vulnerabilities").green()
-        );
-    } else {
-        let count = result.vulnerabilities.len();
-        let max_sev = result.max_severity();
-        let label = if count == 1 {
-            "vulnerability".to_string()
-        } else {
-            "vulnerabilities".to_string()
-        };
-        println!(
-            "  {} {}  {}  {}  {}",
-            style("\u{2717}").red().bold(),
-            styled_artifact,
-            style(version).white(),
-            style(source).dim(),
-            severity_style(max_sev).apply_to(format!("{count} {label}")),
-        );
-        for vuln in &result.vulnerabilities {
-            let id_and_aliases = if vuln.aliases.is_empty() {
-                vuln.id.clone()
-            } else {
-                format!("{} ({})", vuln.id, vuln.aliases.join(", "))
-            };
-            let summary = if vuln.summary.is_empty() {
-                String::new()
-            } else {
-                let truncated = truncate_middle_pad(&vuln.summary, 60);
-                format!(" {truncated}")
-            };
-            println!(
-                "      {} {}{}",
-                severity_style(vuln.severity).apply_to(format!("[{}]", vuln.severity)),
-                style(id_and_aliases).dim(),
-                style(summary).dim(),
-            );
-        }
-    }
-}
-
-fn print_audit_summary(results: &[AuditResult]) {
+pub fn audit_summary(results: &[AuditResult]) {
     let total = results.len();
     let vulnerable = results.iter().filter(|r| r.is_vulnerable()).count();
     let clean = total - vulnerable;
@@ -447,21 +284,148 @@ fn print_audit_summary(results: &[AuditResult]) {
         }
     }
 
-    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind).collect();
+    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind()).collect();
     print_kind_legend(&kinds);
 }
 
-fn print_update_summary(results: &[UpdateResult]) {
-    let total = results.len();
-    let errors = results.iter().filter(|r| r.is_error()).count();
+// ---------------------------------------------------------------------------
+// Shared formatting internals
+// ---------------------------------------------------------------------------
 
-    print!("{total} updated");
-    if errors > 0 {
-        print!(", {}", style(format!("{errors} errors")).red());
+fn format_columns(item: &impl OutputLine) -> (console::StyledObject<String>, String, String) {
+    let artifact = truncate_middle_pad(item.artifact(), ARTIFACT_WIDTH);
+    let styled_artifact = kind_color(item.kind()).apply_to(artifact);
+    let version = truncate_middle_pad(&item.version_label(), VERSION_WIDTH);
+    let source = truncate_middle_pad(item.source(), SOURCE_WIDTH);
+    (styled_artifact, version, source)
+}
+
+fn format_version_with_property(version: &str, property: Option<&str>) -> String {
+    if version.is_empty() {
+        return String::new();
     }
+    match property {
+        Some(prop) => format!("{version} ({prop})"),
+        None => version.to_string(),
+    }
+}
 
-    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind).collect();
-    print_kind_legend(&kinds);
+fn truncate_middle_pad(s: &str, width: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count > width {
+        let ellipsis = "\u{2026}";
+        let half = (width - 1) / 2;
+        let remainder = width - 1 - half;
+        let prefix: String = s.chars().take(half).collect();
+        let suffix: String = s.chars().skip(char_count - remainder).collect();
+        format!("{prefix}{ellipsis}{suffix}")
+    } else {
+        format!("{s:<width$}")
+    }
+}
+
+fn kind_color(kind: DependencyKind) -> console::Style {
+    match kind {
+        DependencyKind::Dependency => console::Style::new().cyan(),
+        DependencyKind::Plugin => console::Style::new().magenta(),
+        DependencyKind::ToolVersion => console::Style::new().green(),
+        DependencyKind::NpmDep | DependencyKind::NpmDevDep => console::Style::new().blue(),
+    }
+}
+
+fn kind_symbol(kind: DependencyKind) -> &'static str {
+    match kind {
+        DependencyKind::Dependency => "\u{25cf}",
+        DependencyKind::Plugin => "\u{25a0}",
+        DependencyKind::ToolVersion => "\u{25b2}",
+        DependencyKind::NpmDep | DependencyKind::NpmDevDep => "\u{25c6}",
+    }
+}
+
+fn kind_group_label(kind: DependencyKind) -> &'static str {
+    match kind {
+        DependencyKind::Dependency => "Dependencies",
+        DependencyKind::Plugin => "Plugins",
+        DependencyKind::ToolVersion => "Tool Versions",
+        DependencyKind::NpmDep => "Dependencies",
+        DependencyKind::NpmDevDep => "Dev Dependencies",
+    }
+}
+
+fn print_kind_legend(kinds: &[DependencyKind]) {
+    let mut sorted = kinds.to_vec();
+    sorted.sort();
+    sorted.dedup();
+    let legend: Vec<String> = sorted
+        .iter()
+        .map(|k| format!("{} {k}", kind_color(*k).apply_to(kind_symbol(*k))))
+        .collect();
+    println!("  ({})", legend.join(", "));
+}
+
+fn severity_style(severity: Severity) -> console::Style {
+    match severity {
+        Severity::Critical => console::Style::new().red().bold(),
+        Severity::High => console::Style::new().red(),
+        Severity::Medium => console::Style::new().yellow(),
+        Severity::Low => console::Style::new().dim(),
+        Severity::Unknown => console::Style::new().dim(),
+    }
+}
+
+fn print_ecosystem_header(ecosystem: Ecosystem) {
+    let label = ecosystem.to_string();
+    let line = "\u{2500}".repeat(3);
+    println!(
+        "{} {} {}",
+        style(line.clone()).dim(),
+        style(label).bold(),
+        style(line).dim()
+    );
+}
+
+fn print_grouped<T: OutputLine>(items: &[T]) {
+    let ecosystems: Vec<Ecosystem> = items
+        .iter()
+        .map(|r| r.ecosystem())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+
+    let multiple_ecosystems = ecosystems.len() > 1;
+    for ecosystem in &ecosystems {
+        let mut group: Vec<&T> = items
+            .iter()
+            .filter(|r| r.ecosystem() == *ecosystem)
+            .collect();
+        group.sort_by(|a, b| {
+            a.kind()
+                .cmp(&b.kind())
+                .then_with(|| a.artifact().cmp(b.artifact()))
+        });
+
+        if multiple_ecosystems {
+            print_ecosystem_header(*ecosystem);
+        }
+
+        let kinds: Vec<DependencyKind> = group
+            .iter()
+            .map(|r| r.kind())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let multiple_kinds = kinds.len() > 1;
+
+        for kind in &kinds {
+            if multiple_kinds {
+                println!("  {}", style(kind_group_label(*kind)).dim().bold());
+            }
+            for item in group.iter().filter(|r| r.kind() == *kind) {
+                item.print_line();
+            }
+        }
+        println!();
+    }
 }
 
 #[cfg(test)]
@@ -508,70 +472,79 @@ mod tests {
     }
 
     #[test]
-    fn format_version_with_property() {
-        let r = VersionResult::checked(
-            Dependency::new(
-                Ecosystem::Maven,
-                DependencyKind::Dependency,
-                "org.junit.jupiter:junit-jupiter".to_string(),
-                Some("version.junit".to_string()),
-                String::new(),
-            ),
-            "5.10.0".to_string(),
-            "5.12.0".to_string(),
-            true,
+    fn format_version_with_prop() {
+        assert_eq!(
+            format_version_with_property("5.10.0", Some("version.junit")),
+            "5.10.0 (version.junit)"
         );
-        assert_eq!(format_version(&r), "5.10.0 (version.junit)");
     }
 
     #[test]
     fn format_version_plain() {
-        let r = VersionResult::checked(
-            Dependency::new(
-                Ecosystem::Maven,
-                DependencyKind::Dependency,
-                "com.google.guava:guava".to_string(),
-                None,
-                String::new(),
-            ),
-            "33.0.0-jre".to_string(),
-            "33.4.0-jre".to_string(),
-            true,
+        assert_eq!(
+            format_version_with_property("33.0.0-jre", None),
+            "33.0.0-jre"
         );
-        assert_eq!(format_version(&r), "33.0.0-jre");
-    }
-
-    #[test]
-    fn format_version_npm() {
-        let r = VersionResult::checked(
-            Dependency::new(
-                Ecosystem::Npm,
-                DependencyKind::NpmDep,
-                "react".to_string(),
-                None,
-                String::new(),
-            ),
-            "18.2.0".to_string(),
-            "19.0.0".to_string(),
-            true,
-        );
-        assert_eq!(format_version(&r), "18.2.0");
     }
 
     #[test]
     fn format_version_empty() {
-        let r = VersionResult::error(
+        assert_eq!(format_version_with_property("", None), "");
+        assert_eq!(format_version_with_property("", Some("prop")), "");
+    }
+
+    #[test]
+    fn version_label_check_with_property() {
+        let r = VersionResult::checked(
             Dependency::new(
-                Ecosystem::Npm,
-                DependencyKind::NpmDep,
-                "my-app".to_string(),
-                None,
+                Ecosystem::Maven,
+                DependencyKind::Dependency,
+                "g:a".into(),
+                Some("version.junit".into()),
                 String::new(),
             ),
-            String::new(),
-            "pnpm not found".to_string(),
+            "5.10.0".into(),
+            "5.12.0".into(),
+            true,
         );
-        assert_eq!(format_version(&r), "");
+        assert_eq!(r.version_label(), "5.10.0 (version.junit)");
+    }
+
+    #[test]
+    fn version_label_update_with_property() {
+        let check = VersionResult::checked(
+            Dependency::new(
+                Ecosystem::Maven,
+                DependencyKind::Dependency,
+                "g:a".into(),
+                Some("version.junit".into()),
+                String::new(),
+            ),
+            "5.10.0".into(),
+            "5.12.0".into(),
+            true,
+        );
+        let update = UpdateResult::updated(&check, "5.12.0".into());
+        assert_eq!(
+            update.version_label(),
+            "5.10.0 (version.junit) \u{2192} 5.12.0"
+        );
+    }
+
+    #[test]
+    fn version_label_audit_with_property() {
+        let r = AuditResult {
+            id: Dependency::new(
+                Ecosystem::Maven,
+                DependencyKind::Dependency,
+                "g:a".into(),
+                Some("version.junit".into()),
+                String::new(),
+            ),
+            version: "5.10.0".into(),
+            vulnerabilities: Vec::new(),
+        };
+        assert_eq!(r.version_label(), "5.10.0 (version.junit)");
     }
 
     #[test]

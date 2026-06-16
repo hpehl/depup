@@ -6,7 +6,8 @@
 use serde::Serialize;
 
 use crate::dependency::{
-    AuditResult, UpdateResult, UpdateStatus, VersionResult, VersionStatus, Vulnerability,
+    AuditResult, DependencyInfo, UpdateResult, UpdateStatus, VersionResult, VersionStatus,
+    Vulnerability,
 };
 
 /// Flat JSON representation of a single dependency check result.
@@ -75,16 +76,16 @@ impl From<&UpdateResult> for UpdateJsonResult {
             UpdateStatus::Error { message } => ("error", Some(message.clone())),
         };
         Self {
-            ecosystem: r.ecosystem.to_string().to_lowercase(),
-            property: r.property.as_deref().unwrap_or(&r.artifact).to_string(),
+            ecosystem: r.ecosystem().to_string().to_lowercase(),
+            property: r.property().unwrap_or(r.artifact()).to_string(),
             old_version: r.old_version.clone(),
             new_version: r.new_version.clone(),
-            kind: r.kind.to_string().to_lowercase(),
+            kind: r.kind().to_string().to_lowercase(),
             managed: r.has_property(),
             status: status.to_string(),
             error,
-            artifact: Some(r.artifact.clone()),
-            source: r.source.clone(),
+            artifact: Some(r.artifact().to_string()),
+            source: r.source().to_string(),
         }
     }
 }
@@ -94,6 +95,8 @@ impl From<&UpdateResult> for UpdateJsonResult {
 pub struct AuditJsonResult {
     pub ecosystem: String,
     pub artifact: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub property: Option<String>,
     pub version: String,
     pub kind: String,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -118,11 +121,12 @@ pub struct VulnerabilityJson {
 impl From<&AuditResult> for AuditJsonResult {
     fn from(r: &AuditResult) -> Self {
         Self {
-            ecosystem: r.ecosystem.to_string().to_lowercase(),
-            artifact: r.artifact.clone(),
+            ecosystem: r.ecosystem().to_string().to_lowercase(),
+            artifact: r.artifact().to_string(),
+            property: r.property().map(ToString::to_string),
             version: r.version.clone(),
-            kind: r.kind.to_string().to_lowercase(),
-            source: r.source.clone(),
+            kind: r.kind().to_string().to_lowercase(),
+            source: r.source().to_string(),
             vulnerable: r.is_vulnerable(),
             vulnerabilities: r
                 .vulnerabilities
