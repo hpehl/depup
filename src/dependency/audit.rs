@@ -113,8 +113,8 @@ impl AuditResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
     use crate::dependency::check::VersionResult;
+    use crate::dependency::{Dependency, DependencyKind, Ecosystem};
 
     fn make_dep() -> Dependency {
         Dependency::new(
