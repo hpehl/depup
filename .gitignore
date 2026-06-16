@@ -1,8 +1,9 @@
-/target
+*.iml
 *.swp
 *.swo
 *~
 .DS_Store
+.claude/
 .idea/
-*.iml
 .vscode/
+/target
