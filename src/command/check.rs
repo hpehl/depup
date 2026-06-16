@@ -10,7 +10,7 @@ use clap::ArgMatches;
 use tokio::time::Instant;
 
 use crate::app;
-use crate::model::VersionResult;
+use crate::model::CheckResult;
 use crate::filter::Filter;
 use crate::json::JsonResult;
 use crate::output;
@@ -40,7 +40,7 @@ pub async fn check(matches: &ArgMatches) -> Result<bool> {
         return Ok(false);
     }
 
-    let filtered: Vec<VersionResult> = all_results
+    let filtered: Vec<CheckResult> = all_results
         .into_iter()
         .filter(|r| filter.matches(r))
         .collect();

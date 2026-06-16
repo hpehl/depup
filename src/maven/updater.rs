@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use indicatif::ProgressBar;
 
-use crate::model::{CommandResult, UpdateResult, VersionResult};
+use crate::model::{CommandResult, UpdateResult, CheckResult};
 use crate::maven::pom_writer::{self, InlineVersionUpdate};
 
 /// Applies updates to POM files for all outdated Maven check results.
@@ -23,15 +23,15 @@ use crate::maven::pom_writer::{self, InlineVersionUpdate};
 /// A vector of `UpdateResult` entries — one per updated dependency.
 pub fn apply_updates(
     root: &Path,
-    outdated: &[VersionResult],
+    outdated: &[CheckResult],
     bar: &ProgressBar,
 ) -> Result<Vec<UpdateResult>> {
     let mut update_results = Vec::new();
 
     // Group ALL updates (managed + inline) by POM path
     struct PomUpdates<'a> {
-        properties: HashMap<String, &'a VersionResult>,
-        inline: Vec<&'a VersionResult>,
+        properties: HashMap<String, &'a CheckResult>,
+        inline: Vec<&'a CheckResult>,
     }
 
     let mut updates_by_pom: HashMap<String, PomUpdates> = HashMap::new();
@@ -163,8 +163,8 @@ mod tests {
         current: &str,
         latest: &str,
         source: &str,
-    ) -> VersionResult {
-        VersionResult::checked(
+    ) -> CheckResult {
+        CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,

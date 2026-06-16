@@ -12,7 +12,7 @@ use indicatif::ProgressBar;
 use tokio::time::Instant;
 
 use crate::app;
-use crate::model::{AuditResult, CommandResult, DependencyKind, VersionResult};
+use crate::model::{AuditResult, CommandResult, DependencyKind, CheckResult};
 use crate::filter::Filter;
 use crate::json::AuditJsonResult;
 use crate::output;
@@ -35,7 +35,7 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
             .await?;
 
     // Filter to deps matching the user's filters (excluding tool versions)
-    let auditable: Vec<VersionResult> = check_results
+    let auditable: Vec<CheckResult> = check_results
         .into_iter()
         .filter(|r| r.kind() != DependencyKind::Tool && filter.matches(r))
         .collect();

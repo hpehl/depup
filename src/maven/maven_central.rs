@@ -11,7 +11,7 @@ use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 
 use crate::constants::{self, MAVEN_CENTRAL_URL};
-use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::error::DepupError;
 use crate::maven::discovery::ArtifactMapping;
 use crate::maven::pom::{ArtifactKind, Repository, RepositoryKind};
@@ -83,7 +83,7 @@ fn dependency_from_mapping(mapping: &ArtifactMapping, source: &str) -> Dependenc
 impl MavenVersionResolver {
     /// Resolves a single Maven artifact to find newer versions.
     /// Tries Maven Central first, then custom repos in parallel on miss.
-    pub async fn resolve(&self, mapping: &ArtifactMapping, source: &str) -> Result<VersionResult> {
+    pub async fn resolve(&self, mapping: &ArtifactMapping, source: &str) -> Result<CheckResult> {
         let id = dependency_from_mapping(mapping, source);
         let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
         let current = mapping.property.current_value.clone();
@@ -92,7 +92,7 @@ impl MavenVersionResolver {
             && let Some(parsed) = Version::parse(&current)
             && parsed.is_pre_release()
         {
-            return Ok(VersionResult::skipped(id, current));
+            return Ok(CheckResult::skipped(id, current));
         }
 
         let central_result = self
@@ -105,8 +105,8 @@ impl MavenVersionResolver {
                 let custom_urls = self.repo_urls_for(mapping.kind);
                 if custom_urls.is_empty() {
                     return match central_result {
-                        Err(e) => Ok(VersionResult::error(id, current, e.to_string())),
-                        Ok(_) => Ok(VersionResult::error(
+                        Err(e) => Ok(CheckResult::error(id, current, e.to_string())),
+                        Ok(_) => Ok(CheckResult::error(
                             id,
                             current,
                             format!("No versions found for {artifact}"),
@@ -133,7 +133,7 @@ impl MavenVersionResolver {
                     .collect();
 
                 if merged.is_empty() {
-                    return Ok(VersionResult::error(
+                    return Ok(CheckResult::error(
                         id,
                         current,
                         format!("No versions found for {artifact}"),
@@ -148,7 +148,7 @@ impl MavenVersionResolver {
 
         let filtered = filter_versions(&all_versions, self.releases_only);
         if filtered.is_empty() {
-            return Ok(VersionResult::error(
+            return Ok(CheckResult::error(
                 id,
                 current,
                 format!("No release versions found for {artifact}"),
@@ -156,7 +156,7 @@ impl MavenVersionResolver {
         }
 
         let Some(latest) = version::find_latest(&filtered) else {
-            return Ok(VersionResult::error(
+            return Ok(CheckResult::error(
                 id,
                 current,
                 format!("Could not determine latest version for {artifact}"),
@@ -164,7 +164,7 @@ impl MavenVersionResolver {
         };
 
         let is_outdated = version::is_newer(&current, &latest);
-        Ok(VersionResult::checked(id, current, latest, is_outdated))
+        Ok(CheckResult::checked(id, current, latest, is_outdated))
     }
 }
 

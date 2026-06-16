@@ -6,7 +6,7 @@
 use serde::Serialize;
 
 use crate::model::{
-    AuditResult, CommandResult, UpdateResult, UpdateStatus, VersionResult, VersionStatus,
+    AuditResult, CommandResult, UpdateResult, UpdateStatus, CheckResult, CheckStatus,
     Vulnerability,
 };
 
@@ -28,13 +28,13 @@ pub struct JsonResult {
     pub source: String,
 }
 
-impl From<&VersionResult> for JsonResult {
-    fn from(r: &VersionResult) -> Self {
+impl From<&CheckResult> for JsonResult {
+    fn from(r: &CheckResult) -> Self {
         let (status, error) = match &r.status {
-            VersionStatus::UpToDate { .. } => ("up-to-date", None),
-            VersionStatus::Outdated { .. } => ("outdated", None),
-            VersionStatus::Skipped => ("skipped", None),
-            VersionStatus::Error { message } => ("error", Some(message.clone())),
+            CheckStatus::UpToDate { .. } => ("up-to-date", None),
+            CheckStatus::Outdated { .. } => ("outdated", None),
+            CheckStatus::Skipped => ("skipped", None),
+            CheckStatus::Error { message } => ("error", Some(message.clone())),
         };
         Self {
             ecosystem: r.ecosystem().to_string().to_lowercase(),
@@ -150,7 +150,7 @@ impl From<&Vulnerability> for VulnerabilityJson {
 }
 
 impl UpdateJsonResult {
-    pub fn would_update(r: &VersionResult) -> Self {
+    pub fn would_update(r: &CheckResult) -> Self {
         Self {
             ecosystem: r.ecosystem().to_string().to_lowercase(),
             property: r.property().unwrap_or(r.artifact()).to_string(),
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn json_result_round_trip() {
-        let r = VersionResult::checked(
+        let r = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn json_result_error_includes_error_field() {
-        let r = VersionResult::error(
+        let r = CheckResult::error(
             Dependency::new(
                 Ecosystem::Npm,
                 DependencyKind::NpmDep,
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn update_json_result_updated() {
-        let check = VersionResult::checked(
+        let check = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn update_json_result_would_update() {
-        let check = VersionResult::checked(
+        let check = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Plugin,
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn json_result_skips_none_fields() {
-        let r = VersionResult::checked(
+        let r = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,

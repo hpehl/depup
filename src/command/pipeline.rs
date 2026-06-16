@@ -9,7 +9,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::filter::Filter;
 use crate::npm::discovery::NpmProject;
 use crate::progress;
@@ -32,7 +32,7 @@ pub async fn resolve_versions(
     do_npm: bool,
     stable: bool,
     json: bool,
-) -> Result<(Vec<VersionResult>, Vec<NpmProject>)> {
+) -> Result<(Vec<CheckResult>, Vec<NpmProject>)> {
     let maven_prepared = if do_maven {
         Some(crate::maven::resolver::discover(root, stable)?)
     } else {
@@ -58,7 +58,7 @@ pub async fn resolve_versions(
         progress::bar(total as u64)
     };
 
-    let mut join_set: JoinSet<Vec<VersionResult>> = JoinSet::new();
+    let mut join_set: JoinSet<Vec<CheckResult>> = JoinSet::new();
 
     if let Some(prepared) = maven_prepared {
         let root = root.to_path_buf();
@@ -68,7 +68,7 @@ pub async fn resolve_versions(
 
     spawn_npm_resolves(&mut join_set, &npm_projects, root, &bar);
 
-    let results: Vec<VersionResult> = join_set.join_all().await.into_iter().flatten().collect();
+    let results: Vec<CheckResult> = join_set.join_all().await.into_iter().flatten().collect();
     bar.finish_and_clear();
 
     Ok((results, npm_projects))
@@ -138,7 +138,7 @@ mod tests {
 /// Spawns npm project version resolution concurrently with semaphore-based rate limiting.
 /// On failure, produces an error `VersionResult` rather than propagating the error.
 fn spawn_npm_resolves(
-    join_set: &mut JoinSet<Vec<VersionResult>>,
+    join_set: &mut JoinSet<Vec<CheckResult>>,
     projects: &[NpmProject],
     root: &Path,
     bar: &ProgressBar,
@@ -174,7 +174,7 @@ fn spawn_npm_resolves(
                         None,
                         source,
                     );
-                    vec![VersionResult::error(id, String::new(), e.to_string())]
+                    vec![CheckResult::error(id, String::new(), e.to_string())]
                 });
             bar.inc(1);
             results

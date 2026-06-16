@@ -2,22 +2,24 @@ use super::{Dependency, CommandResult, DependencyKind, Ecosystem};
 
 /// The outcome of checking a dependency version.
 #[derive(Debug, Clone)]
-pub enum VersionStatus {
+pub enum CheckStatus {
     UpToDate { latest: String },
     Outdated { latest: String },
     Skipped,
     Error { message: String },
 }
 
+// ------------------------------------------------------ command result
+
 /// Result of checking a single dependency against its registry.
 #[derive(Debug, Clone)]
-pub struct VersionResult {
+pub struct CheckResult {
     pub dep: Dependency,
     pub current_version: String,
-    pub status: VersionStatus,
+    pub status: CheckStatus,
 }
 
-impl CommandResult for VersionResult {
+impl CommandResult for CheckResult {
     fn ecosystem(&self) -> Ecosystem {
         self.dep.ecosystem
     }
@@ -35,12 +37,12 @@ impl CommandResult for VersionResult {
     }
 }
 
-impl VersionResult {
+impl CheckResult {
     pub fn checked(id: Dependency, current: String, latest: String, is_outdated: bool) -> Self {
         let status = if is_outdated {
-            VersionStatus::Outdated { latest }
+            CheckStatus::Outdated { latest }
         } else {
-            VersionStatus::UpToDate { latest }
+            CheckStatus::UpToDate { latest }
         };
         Self {
             dep: id,
@@ -53,7 +55,7 @@ impl VersionResult {
         Self {
             dep: id,
             current_version: current,
-            status: VersionStatus::Skipped,
+            status: CheckStatus::Skipped,
         }
     }
 
@@ -61,32 +63,34 @@ impl VersionResult {
         Self {
             dep: id,
             current_version: current,
-            status: VersionStatus::Error { message },
+            status: CheckStatus::Error { message },
         }
     }
 
     pub fn is_outdated(&self) -> bool {
-        matches!(self.status, VersionStatus::Outdated { .. })
+        matches!(self.status, CheckStatus::Outdated { .. })
     }
 
     pub fn is_skipped(&self) -> bool {
-        matches!(self.status, VersionStatus::Skipped)
+        matches!(self.status, CheckStatus::Skipped)
     }
 
     pub fn error_message(&self) -> Option<&str> {
         match &self.status {
-            VersionStatus::Error { message } => Some(message),
+            CheckStatus::Error { message } => Some(message),
             _ => None,
         }
     }
 
     pub fn latest_version(&self) -> Option<&str> {
         match &self.status {
-            VersionStatus::UpToDate { latest } | VersionStatus::Outdated { latest } => Some(latest),
+            CheckStatus::UpToDate { latest } | CheckStatus::Outdated { latest } => Some(latest),
             _ => None,
         }
     }
 }
+
+// ------------------------------------------------------ test
 
 #[cfg(test)]
 mod tests {
@@ -104,7 +108,7 @@ mod tests {
 
     #[test]
     fn checked_result_fields() {
-        let r = VersionResult::checked(dep_id(), "5.10.0".to_string(), "5.12.0".to_string(), true);
+        let r = CheckResult::checked(dep_id(), "5.10.0".to_string(), "5.12.0".to_string(), true);
         assert!(r.is_outdated());
         assert!(!r.is_skipped());
         assert!(r.error_message().is_none());
@@ -120,7 +124,7 @@ mod tests {
             Some("version.alpha".to_string()),
             String::new(),
         );
-        let r = VersionResult::skipped(id, "1.0.0-alpha".to_string());
+        let r = CheckResult::skipped(id, "1.0.0-alpha".to_string());
         assert!(r.is_skipped());
         assert!(!r.is_outdated());
         assert!(r.latest_version().is_none());
@@ -135,7 +139,7 @@ mod tests {
             Some("version.plugin".to_string()),
             String::new(),
         );
-        let r = VersionResult::error(id, "1.0".to_string(), "timeout".to_string());
+        let r = CheckResult::error(id, "1.0".to_string(), "timeout".to_string());
         assert!(r.error_message().is_some());
         assert!(!r.is_outdated());
         assert!(!r.is_skipped());
@@ -143,7 +147,7 @@ mod tests {
 
     #[test]
     fn status_matches_state() {
-        let up_to_date = VersionResult::checked(
+        let up_to_date = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -155,9 +159,9 @@ mod tests {
             "1.0".into(),
             false,
         );
-        assert!(matches!(up_to_date.status, VersionStatus::UpToDate { .. }));
+        assert!(matches!(up_to_date.status, CheckStatus::UpToDate { .. }));
 
-        let outdated = VersionResult::checked(
+        let outdated = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -169,9 +173,9 @@ mod tests {
             "2.0".into(),
             true,
         );
-        assert!(matches!(outdated.status, VersionStatus::Outdated { .. }));
+        assert!(matches!(outdated.status, CheckStatus::Outdated { .. }));
 
-        let skipped = VersionResult::skipped(
+        let skipped = CheckResult::skipped(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -181,9 +185,9 @@ mod tests {
             ),
             "1.0".into(),
         );
-        assert!(matches!(skipped.status, VersionStatus::Skipped));
+        assert!(matches!(skipped.status, CheckStatus::Skipped));
 
-        let error = VersionResult::error(
+        let error = CheckResult::error(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -194,6 +198,6 @@ mod tests {
             "1.0".into(),
             "fail".into(),
         );
-        assert!(matches!(error.status, VersionStatus::Error { .. }));
+        assert!(matches!(error.status, CheckStatus::Error { .. }));
     }
 }

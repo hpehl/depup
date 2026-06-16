@@ -14,7 +14,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::maven::discovery::{self, ArtifactMapping, VersionProperty};
 use crate::maven::maven_central::MavenVersionResolver;
 use crate::maven::tool::{ToolResolverRegistry, ToolVersionResolver};
@@ -130,7 +130,7 @@ pub async fn resolve(
     root: &Path,
     prepared: PreparedResolves,
     bar: &ProgressBar,
-) -> Vec<VersionResult> {
+) -> Vec<CheckResult> {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let mut join_set = JoinSet::new();
     let root = root.to_path_buf();
@@ -160,7 +160,7 @@ pub async fn resolve(
                         .await
                         .unwrap_or_else(|e| {
                             let (id, current) = task.error_id(&root);
-                            VersionResult::error(id, current, e.to_string())
+                            CheckResult::error(id, current, e.to_string())
                         })
                 }
                 ResolveTask::Tool {
@@ -171,7 +171,7 @@ pub async fn resolve(
                     .await
                     .unwrap_or_else(|e| {
                         let (id, current) = task.error_id(&root);
-                        VersionResult::error(id, current, e.to_string())
+                        CheckResult::error(id, current, e.to_string())
                     }),
             };
             bar.inc(1);

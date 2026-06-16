@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 
 use crate::constants::{MAX_CONCURRENT_REQUESTS, http_client};
 use crate::model::{
-    AuditResult, CommandResult, DependencyKind, Ecosystem, Severity, VersionResult, Vulnerability,
+    AuditResult, CommandResult, DependencyKind, Ecosystem, Severity, CheckResult, Vulnerability,
 };
 
 const OSV_API_URL: &str = "https://api.osv.dev";
@@ -108,8 +108,8 @@ struct OsvDatabaseSpecific {
 // ---------------------------------------------------------------------------
 
 /// Audits dependencies against OSV.dev and returns results with full vulnerability details.
-pub async fn audit(results: &[VersionResult], bar: &ProgressBar) -> Result<Vec<AuditResult>> {
-    let auditable: Vec<&VersionResult> = results
+pub async fn audit(results: &[CheckResult], bar: &ProgressBar) -> Result<Vec<AuditResult>> {
+    let auditable: Vec<&CheckResult> = results
         .iter()
         .filter(|r| {
             r.kind() != DependencyKind::Tool
@@ -170,7 +170,7 @@ pub async fn audit(results: &[VersionResult], bar: &ProgressBar) -> Result<Vec<A
 // Internals
 // ---------------------------------------------------------------------------
 
-fn dep_key(r: &VersionResult) -> String {
+fn dep_key(r: &CheckResult) -> String {
     format!("{}:{}:{}", r.ecosystem(), r.artifact(), r.current_version)
 }
 
@@ -181,7 +181,7 @@ fn osv_ecosystem(ecosystem: Ecosystem) -> &'static str {
     }
 }
 
-async fn query_batch(deps: &[&VersionResult]) -> Result<HashMap<String, Vec<String>>> {
+async fn query_batch(deps: &[&CheckResult]) -> Result<HashMap<String, Vec<String>>> {
     let client = http_client();
     let mut result_map: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn dep_key_format() {
         use crate::model::{Dependency, DependencyKind};
-        let r = VersionResult::checked(
+        let r = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn dep_key_npm_format() {
         use crate::model::{Dependency, DependencyKind};
-        let r = VersionResult::checked(
+        let r = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Npm,
                 DependencyKind::NpmDep,

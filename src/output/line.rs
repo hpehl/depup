@@ -1,6 +1,6 @@
 use console::style;
 
-use crate::model::{AuditResult, CommandResult, UpdateResult, VersionResult, VersionStatus};
+use crate::model::{AuditResult, CommandResult, UpdateResult, CheckResult, CheckStatus};
 
 use super::format::{
     format_columns, format_version_with_property, severity_style, truncate_middle_pad,
@@ -13,7 +13,7 @@ pub(crate) trait OutputLine: CommandResult {
     fn print_line(&self);
 }
 
-impl OutputLine for VersionResult {
+impl OutputLine for CheckResult {
     fn version_label(&self) -> String {
         format_version_with_property(&self.current_version, self.property())
     }
@@ -21,7 +21,7 @@ impl OutputLine for VersionResult {
     fn print_line(&self) {
         let (styled_artifact, version, source) = format_columns(self);
         match &self.status {
-            VersionStatus::UpToDate { .. } => {
+            CheckStatus::UpToDate { .. } => {
                 println!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2713}").green().bold(),
@@ -31,7 +31,7 @@ impl OutputLine for VersionResult {
                     style("up-to-date").green()
                 );
             }
-            VersionStatus::Outdated { latest } => {
+            CheckStatus::Outdated { latest } => {
                 println!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2192}").yellow().bold(),
@@ -41,7 +41,7 @@ impl OutputLine for VersionResult {
                     style(format!("\u{2192} {latest}")).yellow()
                 );
             }
-            VersionStatus::Skipped => {
+            CheckStatus::Skipped => {
                 println!(
                     "  {} {}  {}  {}  {}",
                     style("-").dim().bold(),
@@ -51,7 +51,7 @@ impl OutputLine for VersionResult {
                     style("skipped").dim()
                 );
             }
-            VersionStatus::Error { message } => {
+            CheckStatus::Error { message } => {
                 println!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2717}").red().bold(),
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn version_label_check_with_property() {
-        let r = VersionResult::checked(
+        let r = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn version_label_update_with_property() {
-        let check = VersionResult::checked(
+        let check = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,

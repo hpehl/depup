@@ -17,7 +17,7 @@ use tokio::time::Instant;
 
 use crate::app;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::model::{CommandResult, Ecosystem, UpdateResult, VersionResult};
+use crate::model::{CommandResult, Ecosystem, UpdateResult, CheckResult};
 use crate::filter::Filter;
 use crate::json::UpdateJsonResult;
 use crate::output;
@@ -41,7 +41,7 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
             .await?;
 
     // Filter to outdated results matching the user's filters
-    let outdated: Vec<VersionResult> = check_results
+    let outdated: Vec<CheckResult> = check_results
         .into_iter()
         .filter(|r| r.is_outdated() && filter.matches(r))
         .collect();
@@ -78,12 +78,12 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
     // Phase 2: Apply updates
     let mut all_results: Vec<UpdateResult> = Vec::new();
 
-    let maven_outdated: Vec<VersionResult> = outdated
+    let maven_outdated: Vec<CheckResult> = outdated
         .iter()
         .filter(|r| r.ecosystem() == Ecosystem::Maven)
         .cloned()
         .collect();
-    let npm_outdated: Vec<&VersionResult> = outdated
+    let npm_outdated: Vec<&CheckResult> = outdated
         .iter()
         .filter(|r| r.ecosystem() == Ecosystem::Npm)
         .collect();
@@ -133,8 +133,8 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
 fn match_npm_projects<'a>(
     projects: &'a [crate::npm::discovery::NpmProject],
     root: &std::path::Path,
-    outdated: &[&VersionResult],
-) -> Vec<(&'a crate::npm::discovery::NpmProject, Vec<VersionResult>)> {
+    outdated: &[&CheckResult],
+) -> Vec<(&'a crate::npm::discovery::NpmProject, Vec<CheckResult>)> {
     projects
         .iter()
         .filter_map(|p| {
@@ -145,7 +145,7 @@ fn match_npm_projects<'a>(
                 .join("package.json")
                 .display()
                 .to_string();
-            let project_results: Vec<VersionResult> = outdated
+            let project_results: Vec<CheckResult> = outdated
                 .iter()
                 .filter(|r| r.source() == project_source)
                 .map(|r| (*r).clone())
@@ -162,7 +162,7 @@ fn match_npm_projects<'a>(
 fn count_npm_projects_with_outdated(
     projects: &[crate::npm::discovery::NpmProject],
     root: &std::path::Path,
-    outdated: &[&VersionResult],
+    outdated: &[&CheckResult],
 ) -> usize {
     match_npm_projects(projects, root, outdated).len()
 }
@@ -170,7 +170,7 @@ fn count_npm_projects_with_outdated(
 async fn run_npm_updates(
     projects: &[crate::npm::discovery::NpmProject],
     root: &std::path::Path,
-    outdated: &[&VersionResult],
+    outdated: &[&CheckResult],
     bar: &ProgressBar,
 ) -> Vec<UpdateResult> {
     let projects_with_outdated = match_npm_projects(projects, root, outdated);
@@ -208,8 +208,8 @@ mod tests {
     use crate::npm::discovery::NpmProject;
     use std::path::PathBuf;
 
-    fn npm_result(name: &str, source: &str) -> VersionResult {
-        VersionResult::checked(
+    fn npm_result(name: &str, source: &str) -> CheckResult {
+        CheckResult::checked(
             Dependency::new(
                 Ecosystem::Npm,
                 DependencyKind::NpmDep,
@@ -238,7 +238,7 @@ mod tests {
         let projects = vec![npm_project(&root, "app-a"), npm_project(&root, "app-b")];
         let r1 = npm_result("react", "app-a/package.json");
         let r2 = npm_result("lodash", "app-b/package.json");
-        let outdated: Vec<&VersionResult> = vec![&r1, &r2];
+        let outdated: Vec<&CheckResult> = vec![&r1, &r2];
 
         let matched = match_npm_projects(&projects, &root, &outdated);
         assert_eq!(matched.len(), 2);
@@ -253,7 +253,7 @@ mod tests {
         let root = PathBuf::from("/repo");
         let projects = vec![npm_project(&root, "app-a"), npm_project(&root, "app-b")];
         let r1 = npm_result("react", "app-a/package.json");
-        let outdated: Vec<&VersionResult> = vec![&r1];
+        let outdated: Vec<&CheckResult> = vec![&r1];
 
         let matched = match_npm_projects(&projects, &root, &outdated);
         assert_eq!(matched.len(), 1);
@@ -264,7 +264,7 @@ mod tests {
     fn empty_outdated_returns_empty() {
         let root = PathBuf::from("/repo");
         let projects = vec![npm_project(&root, "app-a")];
-        let outdated: Vec<&VersionResult> = vec![];
+        let outdated: Vec<&CheckResult> = vec![];
 
         let matched = match_npm_projects(&projects, &root, &outdated);
         assert!(matched.is_empty());
@@ -275,7 +275,7 @@ mod tests {
         let root = PathBuf::from("/repo");
         let projects = vec![npm_project(&root, "app-a"), npm_project(&root, "app-b")];
         let r1 = npm_result("react", "app-a/package.json");
-        let outdated: Vec<&VersionResult> = vec![&r1];
+        let outdated: Vec<&CheckResult> = vec![&r1];
 
         assert_eq!(
             count_npm_projects_with_outdated(&projects, &root, &outdated),

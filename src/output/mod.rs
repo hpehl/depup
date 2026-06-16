@@ -46,12 +46,12 @@ pub fn print_json(items: &impl Serialize) {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{Dependency, CommandResult, DependencyKind, Ecosystem, VersionResult};
+    use crate::model::{Dependency, CommandResult, DependencyKind, Ecosystem, CheckResult};
 
     #[test]
     fn print_table_groups_by_ecosystem() {
         let results = vec![
-            VersionResult::checked(
+            CheckResult::checked(
                 Dependency::new(
                     Ecosystem::Maven,
                     DependencyKind::Dependency,
@@ -63,7 +63,7 @@ mod tests {
                 "5.12.0".to_string(),
                 true,
             ),
-            VersionResult::checked(
+            CheckResult::checked(
                 Dependency::new(
                     Ecosystem::Npm,
                     DependencyKind::NpmDep,

@@ -11,7 +11,7 @@ use anyhow::Result;
 use super::discovery::NpmProject;
 use super::pm_version_check;
 use super::{PackageManager, PackageManagerResolver, pm_bun, pm_npm, pm_pnpm, pm_yarn};
-use crate::model::{Dependency, CommandResult, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, CommandResult, DependencyKind, Ecosystem, CheckResult};
 use crate::version;
 
 /// Runs `list_packages` and `outdated_packages` concurrently for any resolver.
@@ -27,7 +27,7 @@ async fn run_queries(
 
 /// Resolves versions for a single npm project.
 /// Dispatches to the detected package manager and merges installed + outdated data.
-pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<VersionResult>> {
+pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<CheckResult>> {
     let source = project
         .path
         .strip_prefix(root)
@@ -43,7 +43,7 @@ pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<Ve
         PackageManager::Bun => run_queries(&pm_bun::Bun, &project.path).await?,
     };
 
-    let mut results: Vec<VersionResult> = installed
+    let mut results: Vec<CheckResult> = installed
         .into_iter()
         .map(|(name, current, is_dev)| {
             let kind = if is_dev {
@@ -54,9 +54,9 @@ pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<Ve
             let id = Dependency::new(Ecosystem::Npm, kind, name.clone(), None, source.clone());
             if let Some(entry) = outdated.get(&id.artifact) {
                 let is_outdated = version::is_newer(&entry.current, &entry.latest);
-                VersionResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)
+                CheckResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)
             } else {
-                VersionResult::checked(id, current.clone(), current, false)
+                CheckResult::checked(id, current.clone(), current, false)
             }
         })
         .collect();

@@ -9,7 +9,7 @@ use std::pin::Pin;
 use anyhow::Result;
 
 use crate::constants::{self, NPM_REGISTRY_URL};
-use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionResolver;
@@ -56,7 +56,7 @@ impl PmVersionsResolver {
         &self,
         property: &VersionProperty,
         source: &str,
-    ) -> Result<VersionResult> {
+    ) -> Result<CheckResult> {
         let Some(package) = Self::resolve_package(&property.name) else {
             let id = Dependency::new(
                 Ecosystem::Maven,
@@ -65,7 +65,7 @@ impl PmVersionsResolver {
                 None,
                 source.to_string(),
             );
-            return Ok(VersionResult::error(
+            return Ok(CheckResult::error(
                 id,
                 property.current_value.clone(),
                 format!("Unknown tool property: {}", property.name),
@@ -108,9 +108,9 @@ impl PmVersionsResolver {
         match latest {
             Some(latest) => {
                 let is_outdated = version::is_newer(&current, &latest);
-                Ok(VersionResult::checked(id, current, latest, is_outdated))
+                Ok(CheckResult::checked(id, current, latest, is_outdated))
             }
-            None => Ok(VersionResult::error(
+            None => Ok(CheckResult::error(
                 id,
                 current,
                 format!("No latest version found for {package}"),
@@ -134,7 +134,7 @@ impl ToolVersionResolver for PmVersionsResolver {
         &'a self,
         property: &'a VersionProperty,
         source: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<VersionResult>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send + 'a>> {
         Box::pin(self.fetch_and_check(property, source))
     }
 }

@@ -1,8 +1,8 @@
 //! Core types shared across all ecosystems.
 //!
 //! - [`Dependency`] identifies a dependency (ecosystem, kind, artifact, optional property, source).
-//! - [`VersionStatus`] is an enum of mutually exclusive outcomes (up-to-date, outdated, skipped, error).
-//! - [`VersionResult`] combines a `Dependency`, the current version, and a `VersionStatus`.
+//! - [`CheckStatus`] is an enum of mutually exclusive outcomes (up-to-date, outdated, skipped, error).
+//! - [`CheckResult`] combines a `Dependency`, the current version, and a `CheckStatus`.
 //!
 //! These types form the common currency passed between discovery, checking, filtering,
 //! and output stages.
@@ -12,8 +12,10 @@ pub mod check;
 pub mod update;
 
 pub use audit::{AuditResult, Severity, Vulnerability};
-pub use check::{VersionResult, VersionStatus};
+pub use check::{CheckResult, CheckStatus};
 pub use update::{UpdateResult, UpdateStatus};
+
+// ------------------------------------------------------ ecosystem
 
 /// Supported dependency ecosystems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -31,6 +33,8 @@ impl std::fmt::Display for Ecosystem {
         }
     }
 }
+
+// ------------------------------------------------------ dependency
 
 /// Classifies a dependency for display grouping and styling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -51,21 +55,6 @@ impl std::fmt::Display for DependencyKind {
             Self::NpmDep => write!(f, "Dependency"),
             Self::NpmDevDep => write!(f, "Dev Dependency"),
         }
-    }
-}
-
-/// Common accessors shared by all result types (`VersionResult`, `UpdateResult`, `AuditResult`).
-///
-/// Used by the output layer to group, sort, and format results generically
-/// across subcommands.
-pub trait CommandResult {
-    fn ecosystem(&self) -> Ecosystem;
-    fn kind(&self) -> DependencyKind;
-    fn artifact(&self) -> &str;
-    fn property(&self) -> Option<&str>;
-    fn source(&self) -> &str;
-    fn has_property(&self) -> bool {
-        self.property().is_some()
     }
 }
 
@@ -100,6 +89,25 @@ impl Dependency {
         }
     }
 }
+
+// ------------------------------------------------------ command result
+
+/// Common accessors shared by all result types (`VersionResult`, `UpdateResult`, `AuditResult`).
+///
+/// Used by the output layer to group, sort, and format results generically
+/// across subcommands.
+pub trait CommandResult {
+    fn ecosystem(&self) -> Ecosystem;
+    fn kind(&self) -> DependencyKind;
+    fn artifact(&self) -> &str;
+    fn property(&self) -> Option<&str>;
+    fn source(&self) -> &str;
+    fn has_property(&self) -> bool {
+        self.property().is_some()
+    }
+}
+
+// ------------------------------------------------------ test
 
 #[cfg(test)]
 mod tests {

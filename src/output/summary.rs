@@ -1,12 +1,12 @@
 use console::style;
 
 use crate::model::{
-    AuditResult, CommandResult, DependencyKind, Severity, UpdateResult, VersionResult,
+    AuditResult, CommandResult, DependencyKind, Severity, UpdateResult, CheckResult,
 };
 
 use super::format::print_kind_legend;
 
-pub fn check_summary(results: &[VersionResult]) {
+pub fn check_summary(results: &[CheckResult]) {
     let total = results.len();
     let outdated = results.iter().filter(|r| r.is_outdated()).count();
     let skipped = results.iter().filter(|r| r.is_skipped()).count();
@@ -94,8 +94,8 @@ mod tests {
     use super::*;
     use crate::model::{Dependency, Ecosystem, Vulnerability};
 
-    fn make_check_result(artifact: &str, kind: DependencyKind, outdated: bool) -> VersionResult {
-        VersionResult::checked(
+    fn make_check_result(artifact: &str, kind: DependencyKind, outdated: bool) -> CheckResult {
+        CheckResult::checked(
             Dependency::new(Ecosystem::Maven, kind, artifact.into(), None, String::new()),
             "1.0.0".into(),
             "2.0.0".into(),
@@ -104,7 +104,7 @@ mod tests {
     }
 
     fn make_update_result(artifact: &str, is_error: bool) -> UpdateResult {
-        let check = VersionResult::checked(
+        let check = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -152,7 +152,7 @@ mod tests {
         let results = vec![
             make_check_result("g:a", DependencyKind::Dependency, false),
             make_check_result("g:b", DependencyKind::Dependency, true),
-            VersionResult::error(
+            CheckResult::error(
                 Dependency::new(
                     Ecosystem::Maven,
                     DependencyKind::Plugin,

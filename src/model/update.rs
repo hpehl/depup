@@ -1,4 +1,4 @@
-use super::check::VersionResult;
+use super::check::CheckResult;
 use super::{Dependency, CommandResult, DependencyKind, Ecosystem};
 
 /// The outcome of updating a dependency version.
@@ -7,6 +7,8 @@ pub enum UpdateStatus {
     Updated,
     Error { message: String },
 }
+
+// ------------------------------------------------------ command result
 
 /// Result of updating a single dependency.
 #[derive(Debug, Clone)]
@@ -36,7 +38,7 @@ impl CommandResult for UpdateResult {
 }
 
 impl UpdateResult {
-    pub fn updated(check: &VersionResult, new_version: String) -> Self {
+    pub fn updated(check: &CheckResult, new_version: String) -> Self {
         Self {
             dep: check.dep.clone(),
             old_version: check.current_version.clone(),
@@ -45,7 +47,7 @@ impl UpdateResult {
         }
     }
 
-    pub fn error(check: &VersionResult, message: String) -> Self {
+    pub fn error(check: &CheckResult, message: String) -> Self {
         let new_version = check.latest_version().unwrap_or("").to_string();
         Self {
             dep: check.dep.clone(),
@@ -68,6 +70,8 @@ impl UpdateResult {
     }
 }
 
+// ------------------------------------------------------ test
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,7 +88,7 @@ mod tests {
 
     #[test]
     fn update_result_from_check_result() {
-        let check = VersionResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
+        let check = CheckResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
         let update = UpdateResult::updated(&check, "5.12.0".into());
         assert_eq!(update.dep.ecosystem, Ecosystem::Maven);
         assert_eq!(update.old_version, "5.10.0");
@@ -94,7 +98,7 @@ mod tests {
 
     #[test]
     fn update_result_error() {
-        let check = VersionResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
+        let check = CheckResult::checked(dep_id(), "5.10.0".into(), "5.12.0".into(), true);
         let update = UpdateResult::error(&check, "write failed".into());
         assert!(update.is_error());
         assert_eq!(update.error_message(), Some("write failed"));

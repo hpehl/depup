@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::model::VersionResult;
+use crate::model::CheckResult;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::node::NodeResolver;
 use crate::maven::pm_versions::PmVersionsResolver;
@@ -27,7 +27,7 @@ pub trait ToolVersionResolver: Send + Sync {
         &'a self,
         property: &'a VersionProperty,
         source: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<VersionResult>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send + 'a>>;
 }
 
 /// Registry of all available tool version resolvers.

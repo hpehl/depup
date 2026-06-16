@@ -9,7 +9,7 @@ mod glob;
 
 use clap::ArgMatches;
 
-use crate::model::{CommandResult, DependencyKind, Ecosystem, Severity, VersionResult};
+use crate::model::{CommandResult, DependencyKind, Ecosystem, Severity, CheckResult};
 
 /// Safely reads a boolean flag, returning `false` if the flag is not defined.
 fn try_get_flag(matches: &ArgMatches, name: &str) -> bool {
@@ -134,7 +134,7 @@ impl Filter {
     }
 
     /// Returns true if the result passes all active filter criteria.
-    pub fn matches(&self, result: &VersionResult) -> bool {
+    pub fn matches(&self, result: &CheckResult) -> bool {
         if self.outdated && !result.is_outdated() {
             return false;
         }
@@ -181,13 +181,13 @@ mod tests {
     use super::*;
     use crate::model::Dependency;
 
-    fn maven_dep(has_prop: bool) -> VersionResult {
+    fn maven_dep(has_prop: bool) -> CheckResult {
         let property = if has_prop {
             Some("version.junit".into())
         } else {
             None
         };
-        VersionResult::checked(
+        CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -201,8 +201,8 @@ mod tests {
         )
     }
 
-    fn maven_plugin() -> VersionResult {
-        VersionResult::checked(
+    fn maven_plugin() -> CheckResult {
+        CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Plugin,
@@ -216,8 +216,8 @@ mod tests {
         )
     }
 
-    fn npm_dep() -> VersionResult {
-        VersionResult::checked(
+    fn npm_dep() -> CheckResult {
+        CheckResult::checked(
             Dependency::new(
                 Ecosystem::Npm,
                 DependencyKind::NpmDep,
@@ -231,8 +231,8 @@ mod tests {
         )
     }
 
-    fn npm_dev_dep() -> VersionResult {
-        VersionResult::checked(
+    fn npm_dev_dep() -> CheckResult {
+        CheckResult::checked(
             Dependency::new(
                 Ecosystem::Npm,
                 DependencyKind::NpmDevDep,
@@ -246,8 +246,8 @@ mod tests {
         )
     }
 
-    fn tool_version_result() -> VersionResult {
-        VersionResult::checked(
+    fn tool_version_result() -> CheckResult {
+        CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Tool,
@@ -280,7 +280,7 @@ mod tests {
         };
         assert!(f.matches(&maven_dep(true)));
 
-        let up_to_date = VersionResult::checked(
+        let up_to_date = CheckResult::checked(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,
@@ -301,7 +301,7 @@ mod tests {
             stable: true,
             ..Filter::default()
         };
-        let skipped = VersionResult::skipped(
+        let skipped = CheckResult::skipped(
             Dependency::new(
                 Ecosystem::Maven,
                 DependencyKind::Dependency,

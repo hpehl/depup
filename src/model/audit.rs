@@ -1,4 +1,4 @@
-use super::check::VersionResult;
+use super::check::CheckResult;
 use super::{Dependency, CommandResult, DependencyKind, Ecosystem};
 
 /// CVSS-based severity level for vulnerabilities.
@@ -62,6 +62,8 @@ pub struct Vulnerability {
     pub url: Option<String>,
 }
 
+// ------------------------------------------------------ command result
+
 /// Result of auditing a single dependency against OSV.
 #[derive(Debug, Clone)]
 pub struct AuditResult {
@@ -89,7 +91,7 @@ impl CommandResult for AuditResult {
 }
 
 impl AuditResult {
-    pub fn from_version_result(r: &VersionResult, vulnerabilities: Vec<Vulnerability>) -> Self {
+    pub fn from_version_result(r: &CheckResult, vulnerabilities: Vec<Vulnerability>) -> Self {
         Self {
             dep: r.dep.clone(),
             version: r.current_version.clone(),
@@ -110,10 +112,12 @@ impl AuditResult {
     }
 }
 
+// ------------------------------------------------------ test
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::check::VersionResult;
+    use crate::model::check::CheckResult;
     use crate::model::{Dependency, DependencyKind, Ecosystem};
 
     fn make_dep() -> Dependency {
@@ -182,7 +186,7 @@ mod tests {
 
     #[test]
     fn from_version_result_copies_fields() {
-        let check = VersionResult::checked(make_dep(), "1.0.0".into(), "2.0.0".into(), true);
+        let check = CheckResult::checked(make_dep(), "1.0.0".into(), "2.0.0".into(), true);
         let vulns = vec![make_vuln("CVE-1", Severity::High)];
         let audit = AuditResult::from_version_result(&check, vulns);
         assert_eq!(audit.version, "1.0.0");

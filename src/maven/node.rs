@@ -11,7 +11,7 @@ use anyhow::Result;
 use serde::Deserialize;
 
 use crate::constants::{self, NODEJS_DIST_URL};
-use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionResolver;
@@ -75,7 +75,7 @@ impl NodeResolver {
         &self,
         property: &VersionProperty,
         source: &str,
-    ) -> Result<VersionResult> {
+    ) -> Result<CheckResult> {
         let id = tool_id(source);
         let current = property.current_value.clone();
 
@@ -111,7 +111,7 @@ impl NodeResolver {
             .collect();
 
         if versions.is_empty() {
-            return Ok(VersionResult::error(
+            return Ok(CheckResult::error(
                 id,
                 current,
                 "No Node.js versions found".to_string(),
@@ -119,7 +119,7 @@ impl NodeResolver {
         }
 
         let Some(latest) = version::find_latest(&versions) else {
-            return Ok(VersionResult::error(
+            return Ok(CheckResult::error(
                 id,
                 current,
                 "Could not determine latest Node.js version".to_string(),
@@ -128,7 +128,7 @@ impl NodeResolver {
 
         let current_normalized = current.strip_prefix('v').unwrap_or(&current);
         let is_outdated = version::is_newer(current_normalized, &latest);
-        Ok(VersionResult::checked(id, current, latest, is_outdated))
+        Ok(CheckResult::checked(id, current, latest, is_outdated))
     }
 }
 
@@ -145,7 +145,7 @@ impl ToolVersionResolver for NodeResolver {
         &'a self,
         property: &'a VersionProperty,
         source: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<VersionResult>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send + 'a>> {
         Box::pin(self.fetch_and_check(property, source))
     }
 }

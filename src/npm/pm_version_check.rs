@@ -10,19 +10,19 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use crate::constants::{self, NPM_REGISTRY_URL};
-use crate::model::{Dependency, DependencyKind, Ecosystem, VersionResult};
+use crate::model::{Dependency, DependencyKind, Ecosystem, CheckResult};
 use crate::error::DepupError;
 use crate::version;
 
 /// Checks the project's `packageManager` version against the npm registry.
 /// Returns `None` if no `pm_version` is set on the project.
-pub async fn check_pm_version(project: &NpmProject, source: &str) -> Option<VersionResult> {
+pub async fn check_pm_version(project: &NpmProject, source: &str) -> Option<CheckResult> {
     let current = project.pm_version.as_ref()?;
     let pm_name = project.package_manager.command();
     Some(fetch_and_check(pm_name, current, source).await)
 }
 
-async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> VersionResult {
+async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> CheckResult {
     let id = Dependency::new(
         Ecosystem::Npm,
         DependencyKind::Tool,
@@ -37,7 +37,7 @@ async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> VersionR
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
         Err(e) => {
-            return VersionResult::error(
+            return CheckResult::error(
                 id,
                 current.to_string(),
                 DepupError::http_request_failed(&url, &e.to_string()).to_string(),
@@ -46,7 +46,7 @@ async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> VersionR
     };
 
     if !resp.status().is_success() {
-        return VersionResult::error(
+        return CheckResult::error(
             id,
             current.to_string(),
             DepupError::http_request_failed(&url, &format!("HTTP {}", resp.status())).to_string(),
@@ -56,7 +56,7 @@ async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> VersionR
     let body: serde_json::Value = match resp.json().await {
         Ok(v) => v,
         Err(e) => {
-            return VersionResult::error(
+            return CheckResult::error(
                 id,
                 current.to_string(),
                 DepupError::http_request_failed(&url, &e.to_string()).to_string(),
@@ -67,9 +67,9 @@ async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> VersionR
     match body["dist-tags"]["latest"].as_str() {
         Some(latest) => {
             let is_outdated = version::is_newer(current, latest);
-            VersionResult::checked(id, current.to_string(), latest.to_string(), is_outdated)
+            CheckResult::checked(id, current.to_string(), latest.to_string(), is_outdated)
         }
-        None => VersionResult::error(
+        None => CheckResult::error(
             id,
             current.to_string(),
             format!("No latest version found for {pm_name}"),
