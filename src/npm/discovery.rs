@@ -16,6 +16,8 @@ pub struct NpmProject {
     pub path: PathBuf,
     pub name: String,
     pub package_manager: PackageManager,
+    /// Version from the `packageManager` field in `package.json` (e.g., `"9.15.0"` from `"pnpm@9.15.0"`).
+    pub pm_version: Option<String>,
 }
 
 /// Discovers all npm ecosystem projects under the given root directory.
@@ -44,10 +46,12 @@ pub fn discover(root: &Path) -> Vec<NpmProject> {
         }
         if let Some(pm) = detect_package_manager(dir) {
             let name = read_package_name(dir).unwrap_or_else(|| dir.display().to_string());
+            let pm_version = read_pm_version(dir);
             projects.push(NpmProject {
                 path: dir.clone(),
                 name,
                 package_manager: pm,
+                pm_version,
             });
         }
     }
@@ -72,23 +76,36 @@ fn detect_package_manager(dir: &Path) -> Option<PackageManager> {
     detect_from_package_manager_field(dir)
 }
 
-/// Reads the `packageManager` field from `package.json` (e.g., `"pnpm@9.15.0"`).
+/// Reads the `packageManager` field from `package.json` (e.g., `"pnpm@9.15.0"`)
+/// and returns the detected package manager.
 fn detect_from_package_manager_field(dir: &Path) -> Option<PackageManager> {
+    parse_package_manager_field(dir).map(|(pm, _)| pm)
+}
+
+/// Reads the version from the `packageManager` field in `package.json`.
+/// Strips any `+hash` suffix (Corepack format: `pnpm@9.15.0+sha512.abc...`).
+fn read_pm_version(dir: &Path) -> Option<String> {
+    parse_package_manager_field(dir).map(|(_, version)| version)
+}
+
+/// Parses the `packageManager` field from `package.json`, returning the
+/// detected package manager and version. Strips `+hash` suffixes.
+fn parse_package_manager_field(dir: &Path) -> Option<(PackageManager, String)> {
     let content = fs::read_to_string(dir.join("package.json")).ok()?;
     let pkg: serde_json::Value = serde_json::from_str(&content).ok()?;
     let pm_field = pkg.get("packageManager")?.as_str()?;
 
-    if pm_field.starts_with("pnpm@") {
-        Some(PackageManager::Pnpm)
-    } else if pm_field.starts_with("npm@") {
-        Some(PackageManager::Npm)
-    } else if pm_field.starts_with("yarn@") {
-        Some(PackageManager::Yarn)
-    } else if pm_field.starts_with("bun@") {
-        Some(PackageManager::Bun)
-    } else {
-        None
-    }
+    let (name, version) = pm_field.split_once('@')?;
+    let version = version.split_once('+').map_or(version, |(v, _)| v);
+
+    let pm = match name {
+        "pnpm" => PackageManager::Pnpm,
+        "npm" => PackageManager::Npm,
+        "yarn" => PackageManager::Yarn,
+        "bun" => PackageManager::Bun,
+        _ => return None,
+    };
+    Some((pm, version.to_string()))
 }
 
 /// Checks if a directory is a workspace root (pnpm: `pnpm-workspace.yaml`,
@@ -169,6 +186,7 @@ mod tests {
         let projects = discover(tmp.path());
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].package_manager, PackageManager::Pnpm);
+        assert_eq!(projects[0].pm_version, None);
     }
 
     #[test]
@@ -179,6 +197,7 @@ mod tests {
         let projects = discover(tmp.path());
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].package_manager, PackageManager::Npm);
+        assert_eq!(projects[0].pm_version, None);
     }
 
     #[test]
@@ -211,6 +230,22 @@ mod tests {
         assert_eq!(projects[0].package_manager, PackageManager::Bun);
     }
 
+    #[test]
+    fn lockfile_with_package_manager_field_captures_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(
+            tmp.path().join("package.json"),
+            r#"{"name": "my-app", "packageManager": "pnpm@9.15.0"}"#,
+        )
+        .unwrap();
+        fs::write(tmp.path().join("pnpm-lock.yaml"), "").unwrap();
+
+        let projects = discover(tmp.path());
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].package_manager, PackageManager::Pnpm);
+        assert_eq!(projects[0].pm_version, Some("9.15.0".to_string()));
+    }
+
     // -- packageManager field fallback --
 
     #[test]
@@ -225,6 +260,7 @@ mod tests {
         let projects = discover(tmp.path());
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].package_manager, PackageManager::Pnpm);
+        assert_eq!(projects[0].pm_version, Some("9.15.0".to_string()));
     }
 
     #[test]
@@ -239,6 +275,7 @@ mod tests {
         let projects = discover(tmp.path());
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].package_manager, PackageManager::Npm);
+        assert_eq!(projects[0].pm_version, Some("10.0.0".to_string()));
     }
 
     #[test]
@@ -253,6 +290,7 @@ mod tests {
         let projects = discover(tmp.path());
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].package_manager, PackageManager::Yarn);
+        assert_eq!(projects[0].pm_version, Some("4.0.0".to_string()));
     }
 
     #[test]
@@ -267,6 +305,46 @@ mod tests {
         let projects = discover(tmp.path());
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].package_manager, PackageManager::Bun);
+        assert_eq!(projects[0].pm_version, Some("1.1.0".to_string()));
+    }
+
+    #[test]
+    fn strips_hash_suffix_from_pm_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(
+            tmp.path().join("package.json"),
+            r#"{"name": "hash-app", "packageManager": "pnpm@9.15.0+sha512.abc123"}"#,
+        )
+        .unwrap();
+
+        let projects = discover(tmp.path());
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].package_manager, PackageManager::Pnpm);
+        assert_eq!(projects[0].pm_version, Some("9.15.0".to_string()));
+    }
+
+    // -- parse_package_manager_field unit tests --
+
+    #[test]
+    fn parse_pm_field_returns_none_for_unknown_pm() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(
+            tmp.path().join("package.json"),
+            r#"{"name": "app", "packageManager": "deno@1.0.0"}"#,
+        )
+        .unwrap();
+        assert!(parse_package_manager_field(tmp.path()).is_none());
+    }
+
+    #[test]
+    fn parse_pm_field_returns_none_without_at() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(
+            tmp.path().join("package.json"),
+            r#"{"name": "app", "packageManager": "pnpm"}"#,
+        )
+        .unwrap();
+        assert!(parse_package_manager_field(tmp.path()).is_none());
     }
 
     // -- skips and workspace --

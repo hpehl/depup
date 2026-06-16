@@ -90,6 +90,8 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`discovery.rs`** — Walks a directory tree finding npm ecosystem projects. Detects package manager by lock file (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`/`bun.lockb`) or `packageManager` field in `package.json`. Skips `node_modules/`, workspace members (pnpm: `pnpm-workspace.yaml`, npm/yarn/bun: `workspaces` field).
 
+- **`pm_version_check.rs`** — Checks and updates the `packageManager` version in `package.json`. Queries the npm registry for the latest PM version (`check_pm_version()`), and rewrites the field when updating (`update_pm_version()`). Strips Corepack `+hash` suffixes.
+
 - **`pm_npm.rs`** — npm resolver: `npm list --json` + `npm outdated --json`. Uses shared `read_dev_dependency_names()` to classify dev dependencies.
 
 - **`pm_pnpm.rs`** — pnpm resolver: `pnpm list --json` + `pnpm outdated --format json`.

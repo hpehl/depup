@@ -12,6 +12,7 @@ pub mod discovery;
 mod pm_bun;
 mod pm_npm;
 mod pm_pnpm;
+pub mod pm_version_check;
 mod pm_yarn;
 pub mod resolver;
 pub mod updater;

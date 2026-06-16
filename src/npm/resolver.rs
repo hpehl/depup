@@ -9,6 +9,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use super::discovery::NpmProject;
+use super::pm_version_check;
 use super::{PackageManager, PackageManagerResolver, pm_bun, pm_npm, pm_pnpm, pm_yarn};
 use crate::dependency::{Dependency, DependencyInfo, DependencyKind, Ecosystem, VersionResult};
 use crate::version;
@@ -59,6 +60,10 @@ pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<Ve
             }
         })
         .collect();
+
+    if let Some(pm_result) = pm_version_check::check_pm_version(project, &source).await {
+        results.push(pm_result);
+    }
 
     results.sort_by(|a, b| a.artifact().cmp(b.artifact()));
     Ok(results)

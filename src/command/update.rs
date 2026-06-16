@@ -228,6 +228,7 @@ mod tests {
             name: subdir.to_string(),
             path: root.join(subdir),
             package_manager: PackageManager::Npm,
+            pm_version: None,
         }
     }
 
