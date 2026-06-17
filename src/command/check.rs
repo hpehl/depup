@@ -15,8 +15,8 @@ use crate::output::json::JsonResult;
 use crate::progress;
 
 /// Main entry point for the `check` subcommand.
-/// Returns `true` if the process should exit with code 1 (outdated deps found).
-pub async fn check(matches: &ArgMatches) -> Result<bool> {
+/// Returns exit code 1 if outdated dependencies are found, 0 otherwise.
+pub async fn check(matches: &ArgMatches) -> Result<u8> {
     let setup = super::pipeline::CommandSetup::from_matches(matches);
     let instant = Instant::now();
 
@@ -25,7 +25,7 @@ pub async fn check(matches: &ArgMatches) -> Result<bool> {
 
     if all_results.is_empty() {
         super::pipeline::print_empty(setup.json, "No supported project found.");
-        return Ok(false);
+        return Ok(0);
     }
 
     let filtered: Vec<CheckResult> = all_results
@@ -43,5 +43,9 @@ pub async fn check(matches: &ArgMatches) -> Result<bool> {
         progress::done(instant);
     }
 
-    Ok(filtered.iter().any(|r| r.is_outdated()))
+    if filtered.iter().any(|r| r.is_outdated()) {
+        Ok(1)
+    } else {
+        Ok(0)
+    }
 }

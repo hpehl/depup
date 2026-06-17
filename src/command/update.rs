@@ -22,8 +22,8 @@ use crate::output::json::UpdateJsonResult;
 use crate::output::symbols::EM_DASH;
 use crate::progress;
 
-/// Returns `true` if the process should exit with code 1 (update errors occurred).
-pub async fn update(matches: &ArgMatches) -> Result<bool> {
+/// Returns exit code 1 if update errors occurred, 0 otherwise.
+pub async fn update(matches: &ArgMatches) -> Result<u8> {
     let setup = super::pipeline::CommandSetup::from_matches(matches);
     let dry_run = matches.get_flag("dry-run");
     let instant = Instant::now();
@@ -43,7 +43,7 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
             setup.json,
             &format!("{}", style("All dependencies are up to date.").green()),
         );
-        return Ok(false);
+        return Ok(0);
     }
 
     if dry_run {
@@ -67,7 +67,7 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
             output::print_table(&preview, "", output::update_summary);
             progress::done(instant);
         }
-        return Ok(false);
+        return Ok(0);
     }
 
     // Phase 2: Apply updates
@@ -121,7 +121,11 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
         progress::done(instant);
     }
 
-    Ok(all_results.iter().any(|r| r.is_error()))
+    if all_results.iter().any(|r| r.is_error()) {
+        Ok(1)
+    } else {
+        Ok(0)
+    }
 }
 
 /// Matches outdated results to their npm projects by source path.

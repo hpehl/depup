@@ -114,7 +114,7 @@ For Maven, `depup update` rewrites version numbers in POM files while preserving
 
 For npm, `depup update` delegates to the detected package manager's native update command (`npm update`, `pnpm update`, `yarn upgrade`, `bun update`).
 
-The exit code is `0` when all updates succeed, `1` when any update fails.
+The exit code is `0` when all updates succeed, `1` when any update fails (see [Exit Codes](#exit-codes)).
 
 ### Audit
 
@@ -152,7 +152,35 @@ depup audit --exclude '*:guava'
 
 The audit subcommand queries [OSV.dev](https://osv.dev/) for known vulnerabilities in all discovered dependencies. It works for both Maven and npm ecosystems using the same unified API. Tool versions (Node.js, package manager versions) are excluded — they aren't registry packages with OSV vulnerability advisories, so the `--tools` filter is not available for audit.
 
-The exit code is `0` when no vulnerabilities are found, `1` when any are detected.
+The exit code is `0` when no vulnerabilities are found, `2` when vulnerabilities are detected, or `3` when critical or high severity vulnerabilities are found (see [Exit Codes](#exit-codes)).
+
+### SBOM
+
+```bash
+# Generate a CycloneDX 1.5 SBOM to stdout
+depup sbom
+
+# Generate SBOM for a specific project
+depup sbom /path/to/project
+
+# Write SBOM to a file
+depup sbom -o bom.json
+
+# Filter by ecosystem
+depup sbom --maven
+depup sbom --npm
+
+# Filter by kind
+depup sbom --dependencies
+depup sbom --plugins
+depup sbom --dev-deps
+
+# Filter by artifact name (glob wildcards)
+depup sbom --include 'org.wildfly:*'
+depup sbom --exclude '*:guava'
+```
+
+The sbom subcommand generates a [CycloneDX](https://cyclonedx.org/) 1.5 JSON Bill of Materials from all discovered dependencies. Output includes [Package URL](https://github.com/package-url/purl-spec) (PURL) identifiers for each component. Tool versions (Node.js, package manager versions) are excluded.
 
 ### Completions
 
@@ -174,6 +202,7 @@ depup completions fish
 | `check` | Check dependencies for newer versions |
 | `update` | Update outdated dependencies in place |
 | `audit` | Audit dependencies for known vulnerabilities via [OSV.dev](https://osv.dev/) |
+| `sbom` | Generate a CycloneDX 1.5 SBOM (Software Bill of Materials) |
 | `completions` | Generate and install shell completions |
 
 ## Ecosystems
@@ -247,6 +276,110 @@ depup completions --install zsh   # install zsh completions
 ```
 
 Supported shells: bash, zsh, fish, elvish, powershell.
+
+## Exit Codes
+
+`depup` uses granular exit codes for CI/CD integration:
+
+| Code | Meaning | Subcommand |
+|------|---------|------------|
+| 0 | All clean — no issues found | all |
+| 1 | Outdated dependencies found, or update errors occurred | check, update |
+| 2 | Vulnerabilities found (any severity) | audit |
+| 3 | Critical or high severity vulnerabilities found | audit |
+
+CI pipelines can react to specific conditions:
+
+```bash
+depup audit --json /path/to/project
+case $? in
+  0) echo "Clean" ;;
+  2) echo "Vulnerabilities found (review recommended)" ;;
+  3) echo "Critical/high vulnerabilities — blocking merge" ; exit 1 ;;
+esac
+```
+
+## GitHub Action
+
+`depup` includes a composite GitHub Action for CI integration. It installs `depup` from GitHub Releases, runs the requested subcommand with `--json`, and posts a Markdown report to the GitHub Actions job summary.
+
+### Check for outdated dependencies on every PR
+
+```yaml
+# .github/workflows/depup.yml
+name: Dependency Check
+
+on: [pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hpehl/depup@v0
+        with:
+          command: check
+          args: '--outdated'
+          comment: 'true'
+```
+
+When `comment` is `true` and the workflow runs on a `pull_request` event, the report is posted as a PR comment in addition to the job summary. Re-runs update the existing comment in place instead of creating new ones.
+
+### Audit with severity gating
+
+The action always succeeds so the report is generated, but you can check the exit code in a subsequent step to fail the build selectively:
+
+```yaml
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hpehl/depup@v0
+        id: audit
+        with:
+          command: audit
+          args: '--severity high'
+      - name: Fail on critical/high vulnerabilities
+        if: steps.audit.outputs.exit-code == '3'
+        run: exit 1
+```
+
+### Generate an SBOM
+
+```yaml
+      - uses: hpehl/depup@v0
+        with:
+          command: sbom
+```
+
+### Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `command` | `check` | Subcommand to run: `check`, `audit`, or `sbom` |
+| `path` | `.` | Path to the project root |
+| `args` | | Additional CLI arguments (e.g., `--outdated`, `--maven`, `--severity critical`) |
+| `version` | `latest` | depup version to install (e.g., `0.3.0`) |
+| `comment` | `false` | Post results as a PR comment (only on `pull_request` events) |
+| `token` | `github.token` | GitHub token for PR comment posting |
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `exit-code` | The depup exit code (`0`/`1`/`2`/`3` — see [Exit Codes](#exit-codes)) |
+| `json` | Path to the raw JSON output file for use in subsequent steps |
+
+### How it works
+
+1. Downloads the `depup` binary for the runner's OS and architecture from GitHub Releases
+2. Runs `depup <command> --json <args> <path>` and captures the output and exit code
+3. Formats the JSON output as a Markdown table using `jq` and writes it to `$GITHUB_STEP_SUMMARY`
+
+### Limitations
+
+- The format script requires bash and `jq`, so it works on `ubuntu-latest` and `macos-latest` but not `windows-latest`.
 
 ## Requirements
 

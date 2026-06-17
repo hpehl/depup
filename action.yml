@@ -1,0 +1,140 @@
+name: 'depup'
+description: 'Check dependency versions, audit vulnerabilities, or generate SBOMs across Maven and npm ecosystems'
+author: 'Harald Pehl'
+
+branding:
+  icon: 'package'
+  color: 'blue'
+
+inputs:
+  command:
+    description: 'Subcommand to run (check, audit, sbom)'
+    required: false
+    default: 'check'
+  path:
+    description: 'Path to the project root'
+    required: false
+    default: '.'
+  args:
+    description: 'Additional CLI arguments (e.g., --outdated, --severity critical)'
+    required: false
+    default: ''
+  version:
+    description: 'depup version to install (e.g., 0.2.2). Defaults to latest release.'
+    required: false
+    default: 'latest'
+  comment:
+    description: 'Post results as a PR comment (only works on pull_request events)'
+    required: false
+    default: 'false'
+  token:
+    description: 'GitHub token for posting PR comments'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  exit-code:
+    description: 'Exit code from depup (0=clean, 1=outdated, 2=vulns, 3=critical/high vulns)'
+    value: ${{ steps.run.outputs.exit-code }}
+  json:
+    description: 'Path to the raw JSON output file'
+    value: ${{ steps.run.outputs.json }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install depup
+      shell: bash
+      env:
+        DEPUP_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        # Determine OS and architecture
+        case "$RUNNER_OS" in
+          Linux)  TARGET="x86_64-unknown-linux-gnu" ;;
+          macOS)
+            case "$(uname -m)" in
+              arm64) TARGET="aarch64-apple-darwin" ;;
+              *)     TARGET="x86_64-apple-darwin" ;;
+            esac ;;
+          Windows) TARGET="x86_64-pc-windows-msvc" ;;
+          *) echo "::error::Unsupported runner OS: $RUNNER_OS"; exit 1 ;;
+        esac
+
+        # Resolve version
+        if [ "$DEPUP_VERSION" = "latest" ]; then
+          DEPUP_VERSION=$(gh release view --repo hpehl/depup --json tagName -q '.tagName')
+        elif [[ ! "$DEPUP_VERSION" =~ ^v ]]; then
+          DEPUP_VERSION="v${DEPUP_VERSION}"
+        fi
+
+        # Download and extract
+        URL="https://github.com/hpehl/depup/releases/download/${DEPUP_VERSION}/depup-${TARGET}.tar.gz"
+        echo "::group::Installing depup ${DEPUP_VERSION} for ${TARGET}"
+        curl -fsSL "$URL" | tar xz -C /usr/local/bin
+        chmod +x /usr/local/bin/depup
+        echo "::endgroup::"
+        echo "Installed depup ${DEPUP_VERSION}"
+
+    - name: Run depup
+      id: run
+      shell: bash
+      env:
+        DEPUP_COMMAND: ${{ inputs.command }}
+        DEPUP_PATH: ${{ inputs.path }}
+        DEPUP_ARGS: ${{ inputs.args }}
+      run: |
+        set -uo pipefail
+
+        OUTPUT_FILE="${RUNNER_TEMP}/depup-output.json"
+        echo "json=${OUTPUT_FILE}" >> "$GITHUB_OUTPUT"
+
+        # Run depup with --json and capture exit code
+        set +e
+        depup ${DEPUP_COMMAND} --json ${DEPUP_ARGS} "${DEPUP_PATH}" > "$OUTPUT_FILE" 2>&1
+        EXIT_CODE=$?
+        set -e
+        echo "exit-code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
+
+    - name: Generate report
+      shell: bash
+      env:
+        DEPUP_COMMAND: ${{ inputs.command }}
+      run: |
+        set -euo pipefail
+        REPORT_FILE="${RUNNER_TEMP}/depup-report.md"
+        bash "${{ github.action_path }}/action-scripts/format-report.sh" \
+          "${{ steps.run.outputs.json }}" \
+          "${DEPUP_COMMAND}" \
+          "${{ steps.run.outputs.exit-code }}" \
+          > "$REPORT_FILE"
+        cat "$REPORT_FILE" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Post PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        REPORT_FILE="${RUNNER_TEMP}/depup-report.md"
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+
+        # Check if a previous depup comment exists (identified by the marker)
+        MARKER="<!-- depup-report -->"
+        BODY="$(printf '%s\n%s' "$MARKER" "$(cat "$REPORT_FILE")")"
+
+        EXISTING_COMMENT_ID=$(gh api \
+          "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+          --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" \
+          2>/dev/null | head -1)
+
+        if [ -n "$EXISTING_COMMENT_ID" ]; then
+          gh api \
+            --method PATCH \
+            "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
+            -f body="$BODY"
+        else
+          gh pr comment "$PR_NUMBER" --body "$BODY"
+        fi

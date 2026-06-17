@@ -32,6 +32,13 @@ pub fn build_app() -> Command {
     Command::new("depup")
         .version(crate_version!())
         .about("Check dependency versions across multiple ecosystems")
+        .after_long_help(
+            "Exit codes:\n  \
+             0  All dependencies are up to date / no vulnerabilities\n  \
+             1  Outdated dependencies found (check) or update errors (update)\n  \
+             2  Vulnerabilities found (audit)\n  \
+             3  Critical or high severity vulnerabilities found (audit)",
+        )
         .styles(styles)
         .propagate_version(true)
         .subcommand_required(true)
@@ -52,6 +59,10 @@ pub fn build_app() -> Command {
         )
         .subcommand(
             audit_args(Command::new("audit")).about("Audit dependencies for known vulnerabilities"),
+        )
+        .subcommand(
+            sbom_args(Command::new("sbom"))
+                .about("Generate a CycloneDX 1.5 SBOM (Software Bill of Materials)"),
         )
         .subcommand(
             Command::new("completions")
@@ -186,6 +197,16 @@ fn update_args(cmd: Command) -> Command {
             .long("dry-run")
             .action(ArgAction::SetTrue)
             .help("Show what would be updated without making changes"),
+    )
+}
+
+fn sbom_args(cmd: Command) -> Command {
+    kind_args(common_filter_args(cmd), false).arg(
+        Arg::new("output")
+            .short('o')
+            .long("output")
+            .value_name("FILE")
+            .help("Write SBOM to file instead of stdout"),
     )
 }
 

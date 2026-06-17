@@ -11,7 +11,7 @@ use clap::ArgMatches;
 use tokio::time::Instant;
 
 use crate::filter::Filter;
-use crate::model::{AuditResult, CheckResult, CommandResult, DependencyKind};
+use crate::model::{AuditResult, CheckResult, CommandResult, DependencyKind, Severity};
 use crate::output;
 use crate::output::json::AuditJsonResult;
 use crate::progress;
@@ -19,8 +19,9 @@ use crate::progress;
 /// OSV audit has two phases: batch query + fetch vulnerability details.
 const AUDIT_PHASES: u64 = 2;
 
-/// Returns `true` if the process should exit with code 1 (vulnerabilities found).
-pub async fn audit(matches: &ArgMatches) -> Result<bool> {
+/// Returns exit code 3 if critical/high vulnerabilities are found,
+/// 2 if any vulnerabilities are found, 0 otherwise.
+pub async fn audit(matches: &ArgMatches) -> Result<u8> {
     let setup = super::pipeline::CommandSetup::from_matches(matches);
     let instant = Instant::now();
 
@@ -37,7 +38,7 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
 
     if auditable.is_empty() {
         crate::command::pipeline::print_empty(setup.json, "No dependencies to audit.");
-        return Ok(false);
+        return Ok(0);
     }
 
     // Phase 2: Query OSV.dev for vulnerabilities
@@ -61,7 +62,18 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
         progress::done(instant);
     }
 
-    Ok(filtered.iter().any(|r| r.is_vulnerable()))
+    let has_critical_or_high = filtered.iter().any(|r| {
+        r.vulnerabilities
+            .iter()
+            .any(|v| matches!(v.severity, Severity::Critical | Severity::High))
+    });
+    if has_critical_or_high {
+        Ok(3)
+    } else if filtered.iter().any(|r| r.is_vulnerable()) {
+        Ok(2)
+    } else {
+        Ok(0)
+    }
 }
 
 fn apply_severity_filter(results: Vec<AuditResult>, filter: &Filter) -> Vec<AuditResult> {
