@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `--vulnerable` flag to the `audit` subcommand to show only dependencies with known vulnerabilities
+
+### Changed
+
+- Add labeled progress bars across all subcommands with consistent two-phase reporting: "Collecting" for dependency discovery, plus "Updating" or "Auditing" for the action phase
+- Extract shared `progress::phase_bar()` helper with label alignment, `▰▱` bar characters, and json-aware hiding
+- Keep progress bars visible after completion with a "done" message instead of clearing them
+
+### Removed
+
+- Remove sample output section from README
+
+### Fixed
+
+- Fix double `finish_and_clear()` call on progress bar in Maven updater
+
 ## [0.2.1] - 2026-06-16
 
 ### Added

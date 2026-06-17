@@ -31,7 +31,7 @@ cargo fmt                                 # format
 
 ## Architecture
 
-The check pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking. The update pipeline reuses the check pipeline to identify outdated dependencies, then applies updates: **Check → Filter Outdated → Update → Report**. The audit pipeline reuses the check pipeline to collect dependency versions, then queries OSV.dev for known vulnerabilities: **Check → Filter → OSV Batch Query → Fetch Details → Report**.
+The check pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking. The update pipeline reuses the check pipeline to identify outdated dependencies, then applies updates: **Check → Filter Outdated → Update → Report**. The audit pipeline reuses the check pipeline to collect dependency versions, then queries OSV.dev for known vulnerabilities: **Check → Filter → OSV Batch Query → Fetch Details → Report**. All three subcommands use labeled progress bars via `progress::phase_bar()`: check has one phase ("Collecting"), while update ("Collecting" + "Updating") and audit ("Collecting" + "Auditing") have two.
 
 ### CLI Layer
 
@@ -54,7 +54,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
   - Output mirrors check: grouped by ecosystem/kind, summary line, timing, exit code 1 on errors.
 
 - **`audit/`** — Audit subcommand module:
-  - **`mod.rs`** — Orchestrates the audit subcommand. Calls `pipeline::resolve_versions()` to discover dependencies with versions, filters out tool versions (they aren't registry packages with OSV vulnerability advisories), queries OSV.dev via `osv::audit()`, applies severity filter, outputs results as table or JSON. Same output style as check/update: progress bar, grouped table, summary line, timing. Exit code 1 when vulnerabilities are found.
+  - **`mod.rs`** — Orchestrates the audit subcommand. Calls `pipeline::resolve_versions()` to discover dependencies with versions, filters out tool versions (they aren't registry packages with OSV vulnerability advisories), queries OSV.dev via `osv::audit()`, applies severity and `--vulnerable` filters, outputs results as table or JSON. Same output style as check/update: progress bar, grouped table, summary line, timing. Exit code 1 when vulnerabilities are found.
   - **`osv.rs`** — OSV.dev API client for vulnerability auditing. Queries the batch endpoint (`POST /v1/querybatch`) with dependency coordinates and versions, fetches full vulnerability details from individual endpoints (`GET /v1/vulns/{id}`). Maps `Ecosystem::Maven` to OSV's `"Maven"` and `Ecosystem::Npm` to `"npm"`. Deduplicates queries and vuln IDs. Extracts severity from CVSS scores or ecosystem/database-specific labels. Skips tool versions.
 
 - **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
@@ -104,7 +104,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### Shared Layer
 
-- **`filter/`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-deps`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, `--include`/`--exclude` glob patterns, and `--severity` (audit only). Wildcards use `*` only (no regex).
+- **`filter/`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-deps`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, `--include`/`--exclude` glob patterns, `--vulnerable` and `--severity` (audit only). Wildcards use `*` only (no regex).
   - **`mod.rs`** — `Filter` struct (derives `Default`), `KindFilter` enum, `Filter::from_matches()` constructor, `Filter::matches()` predicate.
   - **`glob.rs`** — `glob_matches()` function for `*`-wildcard pattern matching against artifact names.
 
@@ -126,7 +126,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
   - **`line.rs`** — `OutputLine` trait with implementations for `CheckResult`, `UpdateResult`, and `AuditResult`. Each provides its own version value and styled status column.
   - **`summary.rs`** — `check_summary()`, `update_summary()`, `audit_summary()` — per-subcommand statistics with kind legend.
 
-- **`progress.rs`** — Progress bars using `indicatif`. Block-style bar with `MultiProgress` for concurrent checks. Hidden in JSON mode.
+- **`progress.rs`** — Progress bars using `indicatif`. `phase_bar(label, total, json)` creates labeled, aligned bars with `▰▱` characters; hidden in JSON mode. Labels are padded to 10 characters for vertical alignment across phases (e.g., "Collecting", "Updating", "Auditing"). Bars persist after completion with a "done" message.
 
 ## Patterns
 

@@ -8,7 +8,6 @@ mod osv;
 
 use anyhow::Result;
 use clap::ArgMatches;
-use indicatif::ProgressBar;
 use tokio::time::Instant;
 
 use crate::app;
@@ -51,14 +50,10 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
     }
 
     // Phase 2: Query OSV.dev for vulnerabilities
-    let bar = if json {
-        ProgressBar::hidden()
-    } else {
-        progress::bar(2)
-    };
+    let bar = progress::phase_bar("Auditing", 2, json);
 
     let audit_results = osv::audit(&auditable, &bar).await?;
-    bar.finish_and_clear();
+    bar.finish_with_message("done");
 
     // Phase 3: Apply severity filter
     let filtered: Vec<AuditResult> = apply_severity_filter(audit_results, &filter);
@@ -70,6 +65,7 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
         output::print_json(&json_results);
     } else {
         println!();
+        println!();
         output::print_table(&filtered, "No dependencies to show.", output::audit_summary);
         progress::done(instant);
     }
@@ -78,7 +74,7 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
 }
 
 fn apply_severity_filter(results: Vec<AuditResult>, filter: &Filter) -> Vec<AuditResult> {
-    if filter.severity.is_none() {
+    if filter.severity.is_none() && !filter.vulnerable {
         return results;
     }
 
@@ -97,10 +93,11 @@ fn apply_severity_filter(results: Vec<AuditResult>, filter: &Filter) -> Vec<Audi
             (filtered, was_vulnerable)
         })
         .filter(|(r, was_vulnerable)| {
-            // Keep deps that still have vulns after filtering,
-            // deps that were never vulnerable (clean),
-            // but drop deps whose vulns were all below the severity threshold.
-            r.is_vulnerable() || !was_vulnerable
+            if filter.vulnerable {
+                r.is_vulnerable()
+            } else {
+                r.is_vulnerable() || !was_vulnerable
+            }
         })
         .map(|(r, _)| r)
         .collect()
@@ -193,6 +190,38 @@ mod tests {
         let filtered = apply_severity_filter(results, &filter);
         assert_eq!(filtered.len(), 1);
         assert!(filtered[0].vulnerabilities.is_empty());
+    }
+
+    #[test]
+    fn vulnerable_flag_hides_clean_dependencies() {
+        let results = vec![
+            make_audit_result(Vec::new()),
+            make_audit_result(vec![make_vuln("V1", Severity::High)]),
+        ];
+        let filter = Filter {
+            vulnerable: true,
+            ..Filter::default()
+        };
+        let filtered = apply_severity_filter(results, &filter);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].vulnerabilities[0].id, "V1");
+    }
+
+    #[test]
+    fn vulnerable_flag_with_severity_filter() {
+        let results = vec![
+            make_audit_result(vec![make_vuln("V-LOW", Severity::Low)]),
+            make_audit_result(vec![make_vuln("V-CRIT", Severity::Critical)]),
+            make_audit_result(Vec::new()),
+        ];
+        let filter = Filter {
+            vulnerable: true,
+            severity: Some(Severity::High),
+            ..Filter::default()
+        };
+        let filtered = apply_severity_filter(results, &filter);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].vulnerabilities[0].id, "V-CRIT");
     }
 
     #[test]

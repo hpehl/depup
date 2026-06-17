@@ -142,7 +142,6 @@ pub fn apply_updates(
         }
         bar.inc(1);
     }
-    bar.finish_and_clear();
 
     // Sort by artifact for stable output
     update_results.sort_by(|a, b| a.dep.artifact.cmp(&b.dep.artifact));

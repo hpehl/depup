@@ -56,6 +56,7 @@ pub struct Filter {
     pub kind: Option<KindFilter>,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
+    pub vulnerable: bool,
     pub severity: Option<Severity>,
 }
 
@@ -121,6 +122,7 @@ impl Filter {
             kind,
             include,
             exclude,
+            vulnerable: try_get_flag(matches, "vulnerable"),
             severity,
         }
     }

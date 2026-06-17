@@ -200,10 +200,17 @@ fn update_args(cmd: Command) -> Command {
 }
 
 fn audit_args(cmd: Command) -> Command {
-    kind_args_without_tools(common_filter_args(cmd)).arg(
-        Arg::new("severity")
-            .long("severity")
-            .value_parser(["critical", "high", "medium", "low"])
-            .help("Only show vulnerabilities at or above this severity level"),
-    )
+    kind_args_without_tools(common_filter_args(cmd))
+        .arg(
+            Arg::new("vulnerable")
+                .long("vulnerable")
+                .action(ArgAction::SetTrue)
+                .help("Only show dependencies with known vulnerabilities"),
+        )
+        .arg(
+            Arg::new("severity")
+                .long("severity")
+                .value_parser(["critical", "high", "medium", "low"])
+                .help("Only show vulnerabilities at or above this severity level"),
+        )
 }

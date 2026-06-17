@@ -196,69 +196,6 @@ Supported package managers: **npm**, **pnpm**, **yarn** (classic), **bun**.
 
 > **Note:** pnpm [catalogs](https://pnpm.io/catalogs) (`"catalog:<name>"` version specifiers defined in `pnpm-workspace.yaml`) are resolved transparently by pnpm's own commands — depup does not need to handle them explicitly.
 
-## Example Output
-
-```
-  [2/4] ████████████████████████████▓░ org.junit.jupiter:junit-jupiter
-
-  Dependencies
-  ✓ org.apache.maven.plugins:maven-compiler-plugin  3.13.0    up-to-date
-  → org.junit.jupiter:junit-jupiter                 5.10.0    → 5.12.2
-  Plugins
-  ✓ org.apache.maven.plugins:maven-javadoc-plugin   3.12.0    up-to-date
-  ✓ org.mockito:mockito-core                        5.18.0    up-to-date
-
-4 checked: 3 current, 1 outdated  (● Dependency, ■ Plugin)
-
-Done in 1s
-```
-
-The exit code is `0` when all versions are current, `1` when any are outdated.
-
-### Update Output
-
-```
-  [1/1] ████████████████████████████████ pom.xml
-
-  ✓ org.junit.jupiter:junit-jupiter                 5.10.0 → 5.12.2   pom.xml    updated
-  ✓ org.mockito:mockito-core                         5.14.0 → 5.18.0   pom.xml    updated
-
-2 updated  (● Dependency)
-
-Done in 2s
-```
-
-Dry-run preview (`depup update --dry-run`):
-
-```
-Dry run — no changes made:
-  ✓ org.junit.jupiter:junit-jupiter                 5.10.0 → 5.12.2   pom.xml    updated
-  ✓ org.mockito:mockito-core                         5.14.0 → 5.18.0   pom.xml    updated
-
-2 updated  (● Dependency)
-
-Done in 1s
-```
-
-The exit code is `0` when all updates succeed, `1` when any update fails.
-
-### Audit Output
-
-```
-  [2/2] ████████████████████████████████ Fetching vulnerability details...
-
-  ✓ org.wildfly:wildfly-ee                         35.0.0    pom.xml    no vulnerabilities
-  ✗ com.fasterxml.jackson.core:jackson-databind     2.15.0    pom.xml    2 vulnerabilities
-      [CRITICAL] GHSA-xxxx-yyyy (CVE-2024-1234)    Deserialization of untrusted data
-      [HIGH]     GHSA-aaaa-bbbb (CVE-2024-5678)    Server-side request forgery
-
-2 audited: 1 clean, 1 vulnerable (1 critical, 1 high)  (● Dependency)
-
-Done in 3s
-```
-
-The exit code is `0` when no vulnerabilities are found, `1` when any are detected.
-
 ## JSON Mode
 
 Use `--json` for machine-readable output. Progress bars are suppressed, and errors produce structured JSON:

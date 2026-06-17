@@ -64,6 +64,7 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
             output::print_json(&json_results);
         } else {
             println!();
+            println!();
             println!("{}", style("Dry run \u{2014} no changes made:").bold());
             let preview: Vec<UpdateResult> = outdated
                 .iter()
@@ -96,11 +97,7 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
         .len();
     let npm_project_count = count_npm_projects_with_outdated(&npm_projects, &root, &npm_outdated);
     let total = maven_pom_count + npm_project_count;
-    let bar = if json || total == 0 {
-        ProgressBar::hidden()
-    } else {
-        progress::bar(total as u64)
-    };
+    let bar = progress::phase_bar("Updating", total as u64, json);
 
     // Maven updates
     if !maven_outdated.is_empty() {
@@ -114,13 +111,14 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
         all_results.extend(npm_results);
     }
 
-    bar.finish_and_clear();
+    bar.finish_with_message("done");
 
     if json {
         let json_results: Vec<UpdateJsonResult> =
             all_results.iter().map(UpdateJsonResult::from).collect();
         output::print_json(&json_results);
     } else {
+        println!();
         println!();
         output::print_table(&all_results, "", output::update_summary);
         progress::done(instant);

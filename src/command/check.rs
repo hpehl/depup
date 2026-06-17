@@ -50,6 +50,7 @@ pub async fn check(matches: &ArgMatches) -> Result<bool> {
         output::print_json(&json_results);
     } else {
         println!();
+        println!();
         output::print_table(&filtered, "No dependencies to show.", output::check_summary);
         progress::done(instant);
     }

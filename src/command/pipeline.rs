@@ -12,7 +12,6 @@ use crate::constants::MAX_CONCURRENT_REQUESTS;
 use crate::filter::Filter;
 use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
 use crate::npm::discovery::NpmProject;
-use crate::progress;
 
 /// Determines which ecosystems to discover based on filters and project files.
 pub fn detect_ecosystems(filter: &Filter, root: &Path) -> (bool, bool) {
@@ -52,11 +51,7 @@ pub async fn resolve_versions(
         return Ok((Vec::new(), npm_projects));
     }
 
-    let bar = if json {
-        ProgressBar::hidden()
-    } else {
-        progress::bar(total as u64)
-    };
+    let bar = crate::progress::phase_bar("Collecting", total as u64, json);
 
     let mut join_set: JoinSet<Vec<CheckResult>> = JoinSet::new();
 
@@ -69,7 +64,7 @@ pub async fn resolve_versions(
     spawn_npm_resolves(&mut join_set, &npm_projects, root, &bar);
 
     let results: Vec<CheckResult> = join_set.join_all().await.into_iter().flatten().collect();
-    bar.finish_and_clear();
+    bar.finish_with_message("done");
 
     Ok((results, npm_projects))
 }
