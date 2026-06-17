@@ -32,7 +32,7 @@ This installs the `depup` binary to `~/.cargo/bin/` which should be in your `$PA
 
 ## Usage
 
-If both Maven and npm ecosystem projects are found in the target path, both are checked and results are combined.
+If both Maven and npm ecosystem projects are found in the target path, both are processed and results are combined.
 
 ### Check
 
