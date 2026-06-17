@@ -491,7 +491,10 @@ mod tests {
             "5.12.0".into(),
             true,
         );
-        assert_eq!(DepKey::from_result(&r).to_string(), "Maven:org.junit:junit:5.10.0");
+        assert_eq!(
+            DepKey::from_result(&r).to_string(),
+            "Maven:org.junit:junit:5.10.0"
+        );
     }
 
     #[test]

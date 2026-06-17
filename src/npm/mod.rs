@@ -216,10 +216,7 @@ pub(super) fn read_dev_dependency_names(dir: &Path) -> HashSet<String> {
         return HashSet::new();
     };
     let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) else {
-        eprintln!(
-            "Warning: failed to parse {}",
-            path.display()
-        );
+        eprintln!("Warning: failed to parse {}", path.display());
         return HashSet::new();
     };
     pkg.get("devDependencies")
