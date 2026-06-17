@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{OutdatedEntry, PackageManagerResolver, read_dev_dependency_names};
+use super::{InstalledPackage, OutdatedEntry, PackageManagerResolver, read_dev_dependency_names};
 
 /// Yarn classic (v1) resolver implementation.
 pub struct Yarn;
@@ -48,7 +48,7 @@ struct OutdatedTableData {
 }
 
 impl PackageManagerResolver for Yarn {
-    async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>> {
+    async fn list_packages(&self, dir: &Path) -> Result<Vec<InstalledPackage>> {
         let output = Command::new("yarn")
             .args(["list", "--json", "--depth", "0"])
             .current_dir(dir)
@@ -77,7 +77,11 @@ impl PackageManagerResolver for Yarn {
             for entry in data.trees {
                 if let Some((name, version)) = parse_tree_name(&entry.name) {
                     let is_dev = dev_deps.contains(&name);
-                    packages.push((name, version, is_dev));
+                    packages.push(InstalledPackage {
+                        name,
+                        version,
+                        is_dev,
+                    });
                 }
             }
         }
@@ -125,24 +129,7 @@ impl PackageManagerResolver for Yarn {
     }
 
     async fn update_packages(&self, dir: &Path) -> Result<String> {
-        let output = Command::new("yarn")
-            .args(["upgrade"])
-            .current_dir(dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .with_context(|| format!("Failed to run 'yarn upgrade' in {}", dir.display()))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "yarn upgrade failed in {}: {}",
-                dir.display(),
-                stderr.trim()
-            );
-        }
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        super::run_pm_command("yarn", &["upgrade"], dir).await
     }
 }
 

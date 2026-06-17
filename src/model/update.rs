@@ -1,5 +1,5 @@
+use super::Dependency;
 use super::check::CheckResult;
-use super::{CommandResult, Dependency, DependencyKind, Ecosystem};
 
 /// The outcome of updating a dependency version.
 #[derive(Debug, Clone)]
@@ -8,8 +8,6 @@ pub enum UpdateStatus {
     Error { message: String },
 }
 
-// ------------------------------------------------------ command result
-
 /// Result of updating a single dependency.
 #[derive(Debug, Clone)]
 pub struct UpdateResult {
@@ -17,24 +15,6 @@ pub struct UpdateResult {
     pub old_version: String,
     pub new_version: String,
     pub status: UpdateStatus,
-}
-
-impl CommandResult for UpdateResult {
-    fn ecosystem(&self) -> Ecosystem {
-        self.dep.ecosystem
-    }
-    fn kind(&self) -> DependencyKind {
-        self.dep.kind
-    }
-    fn artifact(&self) -> &str {
-        &self.dep.artifact
-    }
-    fn property(&self) -> Option<&str> {
-        self.dep.property.as_deref()
-    }
-    fn source(&self) -> &str {
-        &self.dep.source
-    }
 }
 
 impl UpdateResult {
@@ -75,6 +55,7 @@ impl UpdateResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{DependencyKind, Ecosystem};
 
     fn dep_id() -> Dependency {
         Dependency::new(

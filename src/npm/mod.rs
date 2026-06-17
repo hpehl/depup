@@ -19,8 +19,12 @@ pub mod updater;
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::process::Stdio;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use tokio::process::Command;
 
 /// Supported npm ecosystem package managers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,10 +53,20 @@ impl std::fmt::Display for PackageManager {
     }
 }
 
-/// A package that has a newer version available.
+/// A single installed package from a package manager's list output.
 #[derive(Debug, Clone)]
+pub struct InstalledPackage {
+    pub name: String,
+    pub version: String,
+    pub is_dev: bool,
+}
+
+/// A package that has a newer version available.
+#[derive(Debug, Clone, Deserialize)]
 pub struct OutdatedEntry {
+    #[serde(default)]
     pub current: String,
+    #[serde(default)]
     pub latest: String,
 }
 
@@ -60,12 +74,84 @@ pub struct OutdatedEntry {
 /// and querying for outdated packages. Each PM implements this with its own
 /// CLI commands and JSON output format.
 pub trait PackageManagerResolver {
-    /// Lists installed packages as `(name, version, is_dev)` tuples.
-    async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>>;
+    /// Lists installed packages with name, version, and dev classification.
+    async fn list_packages(&self, dir: &Path) -> Result<Vec<InstalledPackage>>;
     /// Queries for outdated packages, returning a map of package name to outdated info.
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>>;
     /// Runs the package manager's native update command, returning stdout.
     async fn update_packages(&self, dir: &Path) -> Result<String>;
+}
+
+/// Runs a package manager command and returns stdout, or errors on non-zero exit.
+pub(crate) async fn run_pm_command(pm_name: &str, args: &[&str], dir: &Path) -> Result<String> {
+    let output = Command::new(pm_name)
+        .args(args)
+        .current_dir(dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to run '{} {}' in {}",
+                pm_name,
+                args.join(" "),
+                dir.display()
+            )
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "{} {} failed in {}: {}",
+            pm_name,
+            args.join(" "),
+            dir.display(),
+            stderr.trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Runs a package manager command, parses the JSON stdout, and returns `None` if stdout is empty.
+///
+/// Does not fail on non-zero exit codes because some commands (e.g. `npm outdated`)
+/// return exit code 1 when outdated packages exist while still producing valid JSON.
+pub(crate) async fn run_pm_json<T: DeserializeOwned>(
+    pm_name: &str,
+    args: &[&str],
+    dir: &Path,
+) -> Result<Option<T>> {
+    let output = Command::new(pm_name)
+        .args(args)
+        .current_dir(dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to run '{} {}' in {}",
+                pm_name,
+                args.join(" "),
+                dir.display()
+            )
+        })?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if stdout.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let parsed = serde_json::from_str(&stdout).with_context(|| {
+        format!(
+            "Failed to parse '{} {}' JSON in {}",
+            pm_name,
+            args.join(" "),
+            dir.display()
+        )
+    })?;
+    Ok(Some(parsed))
 }
 
 /// Reads `devDependencies` keys from `package.json` to classify dev vs. prod deps.

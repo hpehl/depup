@@ -268,7 +268,7 @@ fn update_dry_run_json_has_structured_fields() {
     assert!(!results.is_empty());
     for result in &results {
         assert!(result.get("ecosystem").is_some(), "must have ecosystem");
-        assert!(result.get("property").is_some(), "must have property");
+        // property is present only for managed deps (Maven version properties)
         assert!(result.get("old_version").is_some(), "must have old_version");
         assert!(result.get("new_version").is_some(), "must have new_version");
         assert!(result.get("kind").is_some(), "must have kind");
@@ -622,6 +622,99 @@ fn audit_severity_flag_rejects_invalid_value() {
         .output()
         .expect("Failed to run depup");
     assert!(!output.status.success());
+}
+
+#[test]
+fn audit_json_output_has_correct_structure() {
+    let output = depup()
+        .arg("audit")
+        .arg("--json")
+        .arg(&fixture_dir("multi-module"))
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert!(result.get("ecosystem").is_some(), "missing ecosystem field");
+        assert!(result.get("artifact").is_some(), "missing artifact field");
+        assert!(result.get("version").is_some(), "missing version field");
+        assert!(result.get("kind").is_some(), "missing kind field");
+        assert!(
+            result.get("vulnerable").is_some(),
+            "missing vulnerable field"
+        );
+        assert!(
+            result.get("vulnerabilities").is_some(),
+            "missing vulnerabilities field"
+        );
+        assert!(
+            result["vulnerabilities"].is_array(),
+            "vulnerabilities should be array"
+        );
+    }
+}
+
+#[test]
+fn audit_vulnerable_flag_returns_only_vulnerable() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let output = depup()
+        .arg("audit")
+        .arg("--json")
+        .arg("--vulnerable")
+        .arg(dir.path().to_str().unwrap())
+        .output()
+        .expect("Failed to run depup");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    for result in &results {
+        assert_eq!(
+            result["vulnerable"],
+            serde_json::json!(true),
+            "should only show vulnerable deps"
+        );
+    }
+}
+
+#[test]
+fn npm_check_json_returns_npm_results() {
+    if std::process::Command::new("npm")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("Skipping: npm not found on PATH");
+        return;
+    }
+
+    let output = depup()
+        .arg("check")
+        .arg("--json")
+        .arg("--npm")
+        .arg(&fixture_dir("npm-simple"))
+        .output()
+        .expect("Failed to run depup");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let results: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout).expect("Invalid JSON output");
+
+    assert!(!results.is_empty(), "should find npm packages");
+    for result in &results {
+        assert_eq!(
+            result["ecosystem"].as_str().unwrap(),
+            "npm",
+            "should report npm ecosystem"
+        );
+        assert!(result.get("artifact").is_some());
+        assert!(result.get("current").is_some());
+    }
 }
 
 #[test]

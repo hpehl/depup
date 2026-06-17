@@ -5,10 +5,10 @@ use crate::model::{AuditResult, CheckResult, CheckStatus, CommandResult, UpdateR
 use super::format::{format_columns, severity_style, truncate_middle_pad};
 
 /// Subcommand-specific line rendering. Each result type provides its own
-/// version label and status output while sharing the common column layout.
+/// version label and formatted output while sharing the common column layout.
 pub(crate) trait OutputLine: CommandResult {
     fn version_value(&self) -> String;
-    fn print_line(&self);
+    fn format_line(&self) -> String;
 }
 
 impl OutputLine for CheckResult {
@@ -16,48 +16,48 @@ impl OutputLine for CheckResult {
         self.current_version.clone()
     }
 
-    fn print_line(&self) {
+    fn format_line(&self) -> String {
         let (styled_artifact, version, source) = format_columns(self);
         match &self.status {
             CheckStatus::UpToDate { .. } => {
-                println!(
+                format!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2713}").green().bold(),
                     styled_artifact,
                     style(version).white(),
                     style(source).dim(),
                     style("up-to-date").green()
-                );
+                )
             }
             CheckStatus::Outdated { latest } => {
-                println!(
+                format!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2192}").yellow().bold(),
                     styled_artifact,
                     style(version).white(),
                     style(source).dim(),
                     style(format!("\u{2192} {latest}")).yellow()
-                );
+                )
             }
             CheckStatus::Skipped => {
-                println!(
+                format!(
                     "  {} {}  {}  {}  {}",
                     style("-").dim().bold(),
                     styled_artifact,
                     style(version).dim(),
                     style(source).dim(),
                     style("skipped").dim()
-                );
+                )
             }
             CheckStatus::Error { message } => {
-                println!(
+                format!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2717}").red().bold(),
                     styled_artifact,
                     style(version).white(),
                     style(source).dim(),
                     style(message).red()
-                );
+                )
             }
         }
     }
@@ -68,28 +68,28 @@ impl OutputLine for UpdateResult {
         format!("{} \u{2192} {}", self.old_version, self.new_version)
     }
 
-    fn print_line(&self) {
+    fn format_line(&self) -> String {
         let (styled_artifact, version, source) = format_columns(self);
         match &self.status {
             crate::model::UpdateStatus::Updated => {
-                println!(
+                format!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2713}").green().bold(),
                     styled_artifact,
                     style(version).white(),
                     style(source).dim(),
                     style("updated").green()
-                );
+                )
             }
             crate::model::UpdateStatus::Error { message } => {
-                println!(
+                format!(
                     "  {} {}  {}  {}  {}",
                     style("\u{2717}").red().bold(),
                     styled_artifact,
                     style(version).white(),
                     style(source).dim(),
                     style(message).red()
-                );
+                )
             }
         }
     }
@@ -100,10 +100,10 @@ impl OutputLine for AuditResult {
         self.version.clone()
     }
 
-    fn print_line(&self) {
+    fn format_line(&self) -> String {
         let (styled_artifact, version, source) = format_columns(self);
         if self.vulnerabilities.is_empty() {
-            println!(
+            return format!(
                 "  {} {}  {}  {}  {}",
                 style("\u{2713}").green().bold(),
                 styled_artifact,
@@ -111,42 +111,46 @@ impl OutputLine for AuditResult {
                 style(source).dim(),
                 style("no vulnerabilities").green()
             );
-        } else {
-            let count = self.vulnerabilities.len();
-            let max_sev = self.max_severity();
-            let label = if count == 1 {
-                "vulnerability"
-            } else {
-                "vulnerabilities"
-            };
-            println!(
-                "  {} {}  {}  {}  {}",
-                style("\u{2717}").red().bold(),
-                styled_artifact,
-                style(version).white(),
-                style(source).dim(),
-                severity_style(max_sev).apply_to(format!("{count} {label}")),
-            );
-            for vuln in &self.vulnerabilities {
-                let id_and_aliases = if vuln.aliases.is_empty() {
-                    vuln.id.clone()
-                } else {
-                    format!("{} ({})", vuln.id, vuln.aliases.join(", "))
-                };
-                let summary = if vuln.summary.is_empty() {
-                    String::new()
-                } else {
-                    let truncated = truncate_middle_pad(&vuln.summary, 60);
-                    format!(" {truncated}")
-                };
-                println!(
-                    "      {} {}{}",
-                    severity_style(vuln.severity).apply_to(format!("[{}]", vuln.severity)),
-                    style(id_and_aliases).dim(),
-                    style(summary).dim(),
-                );
-            }
         }
+
+        let count = self.vulnerabilities.len();
+        let max_sev = self.max_severity();
+        let label = if count == 1 {
+            "vulnerability"
+        } else {
+            "vulnerabilities"
+        };
+
+        let mut lines = vec![format!(
+            "  {} {}  {}  {}  {}",
+            style("\u{2717}").red().bold(),
+            styled_artifact,
+            style(version).white(),
+            style(source).dim(),
+            severity_style(max_sev).apply_to(format!("{count} {label}")),
+        )];
+
+        for vuln in &self.vulnerabilities {
+            let id_and_aliases = if vuln.aliases.is_empty() {
+                vuln.id.clone()
+            } else {
+                format!("{} ({})", vuln.id, vuln.aliases.join(", "))
+            };
+            let summary = if vuln.summary.is_empty() {
+                String::new()
+            } else {
+                let truncated = truncate_middle_pad(&vuln.summary, 60);
+                format!(" {truncated}")
+            };
+            lines.push(format!(
+                "      {} {}{}",
+                severity_style(vuln.severity).apply_to(format!("[{}]", vuln.severity)),
+                style(id_and_aliases).dim(),
+                style(summary).dim(),
+            ));
+        }
+
+        lines.join("\n")
     }
 }
 
@@ -204,5 +208,61 @@ mod tests {
             vulnerabilities: Vec::new(),
         };
         assert_eq!(r.version_value(), "5.10.0");
+    }
+
+    #[test]
+    fn format_line_check_contains_artifact() {
+        let r = CheckResult::checked(
+            Dependency::new(
+                Ecosystem::Maven,
+                DependencyKind::Dependency,
+                "org.junit:junit".into(),
+                None,
+                "pom.xml".into(),
+            ),
+            "5.10.0".into(),
+            "5.12.0".into(),
+            true,
+        );
+        let line = r.format_line();
+        assert!(line.contains("org.junit:junit"));
+        assert!(line.contains("5.10.0"));
+    }
+
+    #[test]
+    fn format_line_update_contains_versions() {
+        let check = CheckResult::checked(
+            Dependency::new(
+                Ecosystem::Maven,
+                DependencyKind::Dependency,
+                "g:a".into(),
+                None,
+                String::new(),
+            ),
+            "1.0.0".into(),
+            "2.0.0".into(),
+            true,
+        );
+        let update = UpdateResult::updated(&check, "2.0.0".into());
+        let line = update.format_line();
+        assert!(line.contains("1.0.0"));
+        assert!(line.contains("2.0.0"));
+    }
+
+    #[test]
+    fn format_line_audit_no_vulns() {
+        let r = AuditResult {
+            dep: Dependency::new(
+                Ecosystem::Maven,
+                DependencyKind::Dependency,
+                "g:a".into(),
+                None,
+                String::new(),
+            ),
+            version: "1.0.0".into(),
+            vulnerabilities: Vec::new(),
+        };
+        let line = r.format_line();
+        assert!(line.contains("no vulnerabilities"));
     }
 }

@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::Result;
 use indicatif::ProgressBar;
@@ -142,7 +143,15 @@ pub async fn audit(results: &[CheckResult], bar: &ProgressBar) -> Result<Vec<Aud
 
     // Phase 2: Fetch full vulnerability details
     bar.set_message("Fetching vulnerability details...");
-    let vuln_details = fetch_vulnerabilities(unique_ids).await;
+    let (vuln_details, fetch_failures) = fetch_vulnerabilities(unique_ids).await;
+    if fetch_failures > 0 {
+        bar.suspend(|| {
+            eprintln!(
+                "Warning: {} vulnerability detail(s) could not be fetched",
+                fetch_failures
+            );
+        });
+    }
     bar.inc(1);
 
     // Phase 3: Join deps with their vulnerabilities
@@ -241,36 +250,44 @@ async fn query_batch(deps: &[&CheckResult]) -> Result<HashMap<String, Vec<String
     Ok(full_map)
 }
 
-async fn fetch_vulnerabilities(ids: HashSet<String>) -> HashMap<String, Vulnerability> {
+async fn fetch_vulnerabilities(
+    ids: HashSet<String>,
+) -> (HashMap<String, Vulnerability>, usize) {
     let client = http_client();
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
+    let failed = Arc::new(AtomicUsize::new(0));
     let mut join_set = JoinSet::new();
 
     for id in ids {
         let client = client.clone();
         let semaphore = Arc::clone(&semaphore);
+        let failed = Arc::clone(&failed);
         join_set.spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            let result = client
+            let response = client
                 .get(format!("{OSV_API_URL}/v1/vulns/{id}"))
                 .send()
                 .await
-                .and_then(|r| r.error_for_status())
-                .ok();
+                .and_then(|r| r.error_for_status());
 
-            if let Some(response) = result {
-                response
-                    .json::<OsvVulnerability>()
-                    .await
-                    .ok()
-                    .map(|osv| (id, convert_vulnerability(osv)))
-            } else {
-                None
+            match response {
+                Ok(resp) => match resp.json::<OsvVulnerability>().await {
+                    Ok(osv) => Some((id, convert_vulnerability(osv))),
+                    Err(_) => {
+                        failed.fetch_add(1, Ordering::Relaxed);
+                        None
+                    }
+                },
+                Err(_) => {
+                    failed.fetch_add(1, Ordering::Relaxed);
+                    None
+                }
             }
         });
     }
 
-    join_set.join_all().await.into_iter().flatten().collect()
+    let vulns = join_set.join_all().await.into_iter().flatten().collect();
+    (vulns, failed.load(Ordering::Relaxed))
 }
 
 fn convert_vulnerability(osv: OsvVulnerability) -> Vulnerability {

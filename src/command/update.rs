@@ -15,39 +15,30 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 
-use crate::app;
 use crate::constants::MAX_CONCURRENT_REQUESTS;
-use crate::filter::Filter;
-use crate::json::UpdateJsonResult;
 use crate::model::{CheckResult, CommandResult, Ecosystem, UpdateResult};
 use crate::output;
+use crate::output::json::UpdateJsonResult;
 use crate::progress;
 
 /// Returns `true` if the process should exit with code 1 (update errors occurred).
 pub async fn update(matches: &ArgMatches) -> Result<bool> {
-    let path = app::path_argument(matches);
-    let json = app::is_json(matches);
+    let setup = super::pipeline::CommandSetup::from_matches(matches);
     let dry_run = matches.get_flag("dry-run");
-    let filter = Filter::from_matches(matches);
-
     let instant = Instant::now();
-    let root = path.canonicalize().unwrap_or_else(|_| path.clone());
-
-    let (do_maven, do_npm) = super::pipeline::detect_ecosystems(&filter, &root);
 
     // Phase 1: Check for outdated dependencies
-    let (check_results, npm_projects) =
-        crate::command::pipeline::resolve_versions(&root, do_maven, do_npm, filter.stable, json)
-            .await?;
+    let pipeline = crate::command::pipeline::resolve_versions(&setup.resolve_config()).await?;
 
     // Filter to outdated results matching the user's filters
-    let outdated: Vec<CheckResult> = check_results
+    let outdated: Vec<CheckResult> = pipeline
+        .results
         .into_iter()
-        .filter(|r| r.is_outdated() && filter.matches(r))
+        .filter(|r| r.is_outdated() && setup.filter.matches(r))
         .collect();
 
     if outdated.is_empty() {
-        if json {
+        if setup.json {
             println!("[]");
         } else {
             println!("{}", style("All dependencies are up to date.").green());
@@ -56,7 +47,7 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
     }
 
     if dry_run {
-        if json {
+        if setup.json {
             let json_results: Vec<UpdateJsonResult> = outdated
                 .iter()
                 .map(UpdateJsonResult::would_update)
@@ -95,25 +86,28 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
         .map(|r| r.source())
         .collect::<std::collections::HashSet<_>>()
         .len();
-    let npm_project_count = count_npm_projects_with_outdated(&npm_projects, &root, &npm_outdated);
+    let npm_project_count =
+        count_npm_projects_with_outdated(&pipeline.npm_projects, &setup.root, &npm_outdated);
     let total = maven_pom_count + npm_project_count;
-    let bar = progress::phase_bar("Updating", total as u64, json);
+    let bar = progress::phase_bar("Updating", total as u64, setup.json);
 
     // Maven updates
     if !maven_outdated.is_empty() {
-        let maven_results = crate::maven::updater::apply_updates(&root, &maven_outdated, &bar)?;
+        let maven_results =
+            crate::maven::updater::apply_updates(&setup.root, &maven_outdated, &bar)?;
         all_results.extend(maven_results);
     }
 
     // npm updates
     if !npm_outdated.is_empty() {
-        let npm_results = run_npm_updates(&npm_projects, &root, &npm_outdated, &bar).await;
+        let npm_results =
+            run_npm_updates(&pipeline.npm_projects, &setup.root, &npm_outdated, &bar).await;
         all_results.extend(npm_results);
     }
 
     bar.finish_with_message("done");
 
-    if json {
+    if setup.json {
         let json_results: Vec<UpdateJsonResult> =
             all_results.iter().map(UpdateJsonResult::from).collect();
         output::print_json(&json_results);
@@ -136,13 +130,7 @@ fn match_npm_projects<'a>(
     projects
         .iter()
         .filter_map(|p| {
-            let project_source = p
-                .path
-                .strip_prefix(root)
-                .unwrap_or(&p.path)
-                .join("package.json")
-                .display()
-                .to_string();
+            let project_source = p.relative_source(root);
             let project_results: Vec<CheckResult> = outdated
                 .iter()
                 .filter(|r| r.source() == project_source)

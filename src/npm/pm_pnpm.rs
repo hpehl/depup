@@ -5,13 +5,11 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Stdio;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::Deserialize;
-use tokio::process::Command;
 
-use super::{OutdatedEntry, PackageManagerResolver};
+use super::{InstalledPackage, OutdatedEntry, PackageManagerResolver};
 
 /// pnpm resolver implementation.
 pub struct Pnpm;
@@ -30,89 +28,49 @@ struct ListEntry {
 }
 
 impl PackageManagerResolver for Pnpm {
-    async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>> {
-        let output = Command::new("pnpm")
-            .args(["list", "--json", "--depth", "0"])
-            .current_dir(dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .with_context(|| format!("Failed to run 'pnpm list' in {}", dir.display()))?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if stdout.trim().is_empty() {
+    async fn list_packages(&self, dir: &Path) -> Result<Vec<InstalledPackage>> {
+        let Some(entries) = super::run_pm_json::<Vec<ListOutput>>(
+            "pnpm",
+            &["list", "--json", "--depth", "0"],
+            dir,
+        )
+        .await?
+        else {
             return Ok(Vec::new());
-        }
-
-        let entries: Vec<ListOutput> = serde_json::from_str(&stdout)
-            .with_context(|| format!("Failed to parse pnpm list JSON in {}", dir.display()))?;
+        };
 
         let mut packages = Vec::new();
         for entry in entries {
             for (name, info) in entry.dependencies {
-                packages.push((name, info.version, false));
+                packages.push(InstalledPackage {
+                    name,
+                    version: info.version,
+                    is_dev: false,
+                });
             }
             for (name, info) in entry.dev_dependencies {
-                packages.push((name, info.version, true));
+                packages.push(InstalledPackage {
+                    name,
+                    version: info.version,
+                    is_dev: true,
+                });
             }
         }
         Ok(packages)
     }
 
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>> {
-        let output = Command::new("pnpm")
-            .args(["outdated", "--format", "json"])
-            .current_dir(dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .with_context(|| format!("Failed to run 'pnpm outdated' in {}", dir.display()))?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if stdout.trim().is_empty() {
-            return Ok(HashMap::new());
-        }
-
-        #[derive(Debug, Deserialize)]
-        struct PnpmOutdatedEntry {
-            current: String,
-            latest: String,
-        }
-
-        let packages: HashMap<String, PnpmOutdatedEntry> = serde_json::from_str(&stdout)
-            .with_context(|| format!("Failed to parse pnpm outdated JSON in {}", dir.display()))?;
-
-        Ok(packages
-            .into_iter()
-            .map(|(name, entry)| {
-                (
-                    name,
-                    OutdatedEntry {
-                        current: entry.current,
-                        latest: entry.latest,
-                    },
-                )
-            })
-            .collect())
+        Ok(super::run_pm_json::<HashMap<String, OutdatedEntry>>(
+            "pnpm",
+            &["outdated", "--format", "json"],
+            dir,
+        )
+        .await?
+        .unwrap_or_default())
     }
 
     async fn update_packages(&self, dir: &Path) -> Result<String> {
-        let output = Command::new("pnpm")
-            .args(["update"])
-            .current_dir(dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .with_context(|| format!("Failed to run 'pnpm update' in {}", dir.display()))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("pnpm update failed in {}: {}", dir.display(), stderr.trim());
-        }
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        super::run_pm_command("pnpm", &["update"], dir).await
     }
 }
 
@@ -158,5 +116,18 @@ mod tests {
         assert_eq!(entries[0].dependencies["react"].version, "18.2.0");
         assert_eq!(entries[1].dependencies["express"].version, "4.18.2");
         assert_eq!(entries[1].dev_dependencies["jest"].version, "29.0.0");
+    }
+
+    #[test]
+    fn parse_list_rejects_malformed_json() {
+        let result = serde_json::from_str::<Vec<ListOutput>>("not valid json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_outdated_rejects_malformed_json() {
+        let result =
+            serde_json::from_str::<HashMap<String, OutdatedEntry>>("{{broken");
+        assert!(result.is_err());
     }
 }

@@ -1,5 +1,5 @@
+use super::Dependency;
 use super::check::CheckResult;
-use super::{CommandResult, Dependency, DependencyKind, Ecosystem};
 
 /// CVSS-based severity level for vulnerabilities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -62,6 +62,19 @@ pub struct Vulnerability {
     pub url: Option<String>,
 }
 
+#[cfg(test)]
+impl Vulnerability {
+    pub fn test(id: &str, severity: Severity) -> Self {
+        Self {
+            id: id.into(),
+            aliases: Vec::new(),
+            summary: String::new(),
+            severity,
+            url: None,
+        }
+    }
+}
+
 // ------------------------------------------------------ command result
 
 /// Result of auditing a single dependency against OSV.
@@ -70,24 +83,6 @@ pub struct AuditResult {
     pub dep: Dependency,
     pub version: String,
     pub vulnerabilities: Vec<Vulnerability>,
-}
-
-impl CommandResult for AuditResult {
-    fn ecosystem(&self) -> Ecosystem {
-        self.dep.ecosystem
-    }
-    fn kind(&self) -> DependencyKind {
-        self.dep.kind
-    }
-    fn artifact(&self) -> &str {
-        &self.dep.artifact
-    }
-    fn property(&self) -> Option<&str> {
-        self.dep.property.as_deref()
-    }
-    fn source(&self) -> &str {
-        &self.dep.source
-    }
 }
 
 impl AuditResult {
@@ -118,7 +113,7 @@ impl AuditResult {
 mod tests {
     use super::*;
     use crate::model::check::CheckResult;
-    use crate::model::{Dependency, DependencyKind, Ecosystem};
+    use crate::model::{CommandResult, Dependency, DependencyKind, Ecosystem};
 
     fn make_dep() -> Dependency {
         Dependency::new(
@@ -130,22 +125,12 @@ mod tests {
         )
     }
 
-    fn make_vuln(id: &str, severity: Severity) -> Vulnerability {
-        Vulnerability {
-            id: id.into(),
-            aliases: Vec::new(),
-            summary: String::new(),
-            severity,
-            url: None,
-        }
-    }
-
     #[test]
     fn is_vulnerable_with_vulns() {
         let result = AuditResult {
             dep: make_dep(),
             version: "1.0.0".into(),
-            vulnerabilities: vec![make_vuln("CVE-1", Severity::High)],
+            vulnerabilities: vec![Vulnerability::test("CVE-1", Severity::High)],
         };
         assert!(result.is_vulnerable());
     }
@@ -166,9 +151,9 @@ mod tests {
             dep: make_dep(),
             version: "1.0.0".into(),
             vulnerabilities: vec![
-                make_vuln("V1", Severity::Low),
-                make_vuln("V2", Severity::Critical),
-                make_vuln("V3", Severity::Medium),
+                Vulnerability::test("V1", Severity::Low),
+                Vulnerability::test("V2", Severity::Critical),
+                Vulnerability::test("V3", Severity::Medium),
             ],
         };
         assert_eq!(result.max_severity(), Severity::Critical);
@@ -187,7 +172,7 @@ mod tests {
     #[test]
     fn from_version_result_copies_fields() {
         let check = CheckResult::checked(make_dep(), "1.0.0".into(), "2.0.0".into(), true);
-        let vulns = vec![make_vuln("CVE-1", Severity::High)];
+        let vulns = vec![Vulnerability::test("CVE-1", Severity::High)];
         let audit = AuditResult::from_version_result(&check, vulns);
         assert_eq!(audit.version, "1.0.0");
         assert_eq!(audit.artifact(), "org.example:lib");

@@ -84,7 +84,7 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 ### npm Ecosystem (`src/npm/`)
 
-- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `PackageManagerResolver` trait with `list_packages()`, `outdated_packages()`, and `update_packages()` methods, shared `read_dev_dependency_names()` utility.
+- **`mod.rs`** — `PackageManager` enum (Npm, Pnpm, Yarn, Bun), `InstalledPackage` struct, `PackageManagerResolver` trait with `list_packages()`, `outdated_packages()`, and `update_packages()` methods, shared `run_pm_command()` helper and `read_dev_dependency_names()` utility.
 
 - **`resolver.rs`** — Dispatches to the detected PM, runs `list` and `outdated` commands concurrently via `tokio::try_join!`, and merges results into `CheckResult` values.
 
@@ -118,10 +118,9 @@ The check pipeline flows: **Discovery → Check → Comparison → Output**, wit
 
 - **`error.rs`** — Structured error types with `thiserror`. `DepupError` carries a stable `DepupErrorCode` for machine consumption. `JsonErrorEnvelope` provides structured JSON error output when `--json` is active.
 
-- **`json.rs`** — Serializable output types (`JsonResult`, `UpdateJsonResult`, `AuditJsonResult`) for JSON mode. Converts result types to flat JSON-friendly structs.
-
 - **`output/`** — Terminal and JSON output formatting. Groups results by ecosystem and kind with section headers.
   - **`mod.rs`** — `print_table()` (generic grouped table with summary callback), `print_json()` (pretty-print any `Serialize` value).
+  - **`json.rs`** — Serializable output types (`JsonResult`, `UpdateJsonResult`, `AuditJsonResult`) for JSON mode. Converts result types to flat JSON-friendly structs.
   - **`format.rs`** — Column formatting, `truncate_middle_pad()`, `DependencyKind` presentation helpers (`kind_color`, `kind_symbol`, `kind_group_label`) — separated from the data model for clean SoC.
   - **`line.rs`** — `OutputLine` trait with implementations for `CheckResult`, `UpdateResult`, and `AuditResult`. Each provides its own version value and styled status column.
   - **`summary.rs`** — `check_summary()`, `update_summary()`, `audit_summary()` — per-subcommand statistics with kind legend.

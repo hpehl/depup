@@ -9,6 +9,7 @@
 //! are formatted uniformly via the [`DependencyInfo`] trait.
 
 mod format;
+pub mod json;
 mod line;
 mod summary;
 

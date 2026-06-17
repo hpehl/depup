@@ -214,3 +214,86 @@ fn audit_args(cmd: Command) -> Command {
                 .help("Only show vulnerabilities at or above this severity level"),
         )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Result<ArgMatches, clap::Error> {
+        build_app().try_get_matches_from(args)
+    }
+
+    #[test]
+    fn check_subcommand_parses() {
+        let m = parse(&["depup", "check", "/some/path"]).unwrap();
+        let sub = m.subcommand_matches("check").unwrap();
+        assert_eq!(path_argument(sub), PathBuf::from("/some/path"));
+    }
+
+    #[test]
+    fn path_defaults_to_current_dir() {
+        let m = parse(&["depup", "check"]).unwrap();
+        let sub = m.subcommand_matches("check").unwrap();
+        assert_eq!(path_argument(sub), PathBuf::from("."));
+    }
+
+    #[test]
+    fn json_flag_global() {
+        let m = parse(&["depup", "--json", "check"]).unwrap();
+        assert!(is_json(&m));
+    }
+
+    #[test]
+    fn maven_npm_conflict_rejected() {
+        let result = parse(&["depup", "check", "--maven", "--npm"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn managed_unmanaged_conflict_rejected() {
+        let result = parse(&["depup", "check", "--managed", "--unmanaged"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn kind_filter_conflicts_rejected() {
+        assert!(parse(&["depup", "check", "--dependencies", "--plugins"]).is_err());
+        assert!(parse(&["depup", "check", "--dependencies", "--tools"]).is_err());
+        assert!(parse(&["depup", "check", "--plugins", "--dev-deps"]).is_err());
+    }
+
+    #[test]
+    fn audit_has_no_tools_flag() {
+        let result = parse(&["depup", "audit", "--tools"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn audit_severity_valid_values() {
+        assert!(parse(&["depup", "audit", "--severity", "critical"]).is_ok());
+        assert!(parse(&["depup", "audit", "--severity", "high"]).is_ok());
+        assert!(parse(&["depup", "audit", "--severity", "medium"]).is_ok());
+        assert!(parse(&["depup", "audit", "--severity", "low"]).is_ok());
+        assert!(parse(&["depup", "audit", "--severity", "invalid"]).is_err());
+    }
+
+    #[test]
+    fn update_dry_run_flag() {
+        let m = parse(&["depup", "update", "--dry-run"]).unwrap();
+        let sub = m.subcommand_matches("update").unwrap();
+        assert!(sub.get_flag("dry-run"));
+    }
+
+    #[test]
+    fn check_outdated_flag() {
+        let m = parse(&["depup", "check", "--outdated"]).unwrap();
+        let sub = m.subcommand_matches("check").unwrap();
+        assert!(sub.get_flag("outdated"));
+    }
+
+    #[test]
+    fn subcommand_required() {
+        let result = parse(&["depup"]);
+        assert!(result.is_err());
+    }
+}

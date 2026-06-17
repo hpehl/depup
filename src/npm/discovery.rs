@@ -34,6 +34,18 @@ pub struct NpmProject {
     pub pm_version: Option<String>,
 }
 
+impl NpmProject {
+    /// Returns the relative path to `package.json` from the given root, for use as a source identifier.
+    pub fn relative_source(&self, root: &Path) -> String {
+        self.path
+            .strip_prefix(root)
+            .unwrap_or(&self.path)
+            .join("package.json")
+            .display()
+            .to_string()
+    }
+}
+
 /// Discovers all npm ecosystem projects under the given root directory.
 /// Workspace members are excluded — only workspace roots are returned.
 pub fn discover(root: &Path) -> Vec<NpmProject> {

@@ -6,27 +6,16 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Stdio;
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
-use tokio::process::Command;
 
-use super::{OutdatedEntry, PackageManagerResolver};
+use super::{InstalledPackage, OutdatedEntry, PackageManagerResolver};
 
 /// Bun resolver implementation.
 pub struct Bun;
 
-#[derive(Debug, Deserialize)]
-struct OutdatedOutput {
-    #[serde(default)]
-    current: String,
-    #[serde(default)]
-    latest: String,
-}
-
 impl PackageManagerResolver for Bun {
-    async fn list_packages(&self, dir: &Path) -> Result<Vec<(String, String, bool)>> {
+    async fn list_packages(&self, dir: &Path) -> Result<Vec<InstalledPackage>> {
         let pkg_content = std::fs::read_to_string(dir.join("package.json"))
             .with_context(|| format!("Failed to read package.json in {}", dir.display()))?;
         let pkg: serde_json::Value = serde_json::from_str(&pkg_content)
@@ -37,14 +26,22 @@ impl PackageManagerResolver for Bun {
         if let Some(deps) = pkg.get("dependencies").and_then(|v| v.as_object()) {
             for (name, _) in deps {
                 let version = get_installed_version(dir, name).unwrap_or_default();
-                packages.push((name.clone(), version, false));
+                packages.push(InstalledPackage {
+                    name: name.clone(),
+                    version,
+                    is_dev: false,
+                });
             }
         }
 
         if let Some(deps) = pkg.get("devDependencies").and_then(|v| v.as_object()) {
             for (name, _) in deps {
                 let version = get_installed_version(dir, name).unwrap_or_default();
-                packages.push((name.clone(), version, true));
+                packages.push(InstalledPackage {
+                    name: name.clone(),
+                    version,
+                    is_dev: true,
+                });
             }
         }
 
@@ -52,52 +49,17 @@ impl PackageManagerResolver for Bun {
     }
 
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>> {
-        let output = Command::new("bun")
-            .args(["outdated", "--format", "json"])
-            .current_dir(dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .with_context(|| format!("Failed to run 'bun outdated' in {}", dir.display()))?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if stdout.trim().is_empty() {
-            return Ok(HashMap::new());
-        }
-
-        let packages: HashMap<String, OutdatedOutput> = serde_json::from_str(&stdout)
-            .with_context(|| format!("Failed to parse bun outdated JSON in {}", dir.display()))?;
-
-        Ok(packages
-            .into_iter()
-            .map(|(name, entry)| {
-                (
-                    name,
-                    OutdatedEntry {
-                        current: entry.current,
-                        latest: entry.latest,
-                    },
-                )
-            })
-            .collect())
+        Ok(super::run_pm_json::<HashMap<String, OutdatedEntry>>(
+            "bun",
+            &["outdated", "--format", "json"],
+            dir,
+        )
+        .await?
+        .unwrap_or_default())
     }
 
     async fn update_packages(&self, dir: &Path) -> Result<String> {
-        let output = Command::new("bun")
-            .args(["update"])
-            .current_dir(dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .with_context(|| format!("Failed to run 'bun update' in {}", dir.display()))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("bun update failed in {}: {}", dir.display(), stderr.trim());
-        }
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        super::run_pm_command("bun", &["update"], dir).await
     }
 }
 
@@ -177,19 +139,26 @@ mod tests {
     }
 
     #[test]
-    fn parse_outdated_output() {
+    fn parse_outdated_entry() {
         let json = r#"{"current":"4.18.2","latest":"5.0.0"}"#;
-        let entry: OutdatedOutput = serde_json::from_str(json).unwrap();
+        let entry: OutdatedEntry = serde_json::from_str(json).unwrap();
         assert_eq!(entry.current, "4.18.2");
         assert_eq!(entry.latest, "5.0.0");
     }
 
     #[test]
-    fn parse_outdated_output_as_map() {
+    fn parse_outdated_entry_as_map() {
         let json = r#"{"lodash":{"current":"4.17.21","latest":"5.0.0"}}"#;
-        let packages: HashMap<String, OutdatedOutput> = serde_json::from_str(json).unwrap();
+        let packages: HashMap<String, OutdatedEntry> = serde_json::from_str(json).unwrap();
         assert_eq!(packages.len(), 1);
         assert_eq!(packages["lodash"].current, "4.17.21");
         assert_eq!(packages["lodash"].latest, "5.0.0");
+    }
+
+    #[test]
+    fn parse_outdated_rejects_malformed_json() {
+        let result =
+            serde_json::from_str::<HashMap<String, OutdatedEntry>>("not json");
+        assert!(result.is_err());
     }
 }

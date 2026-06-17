@@ -8,7 +8,6 @@ mod command;
 mod constants;
 mod error;
 mod filter;
-mod json;
 mod maven;
 mod model;
 mod npm;

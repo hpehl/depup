@@ -137,15 +137,6 @@ mod tests {
         }
     }
 
-    fn make_vuln(id: &str, severity: Severity) -> Vulnerability {
-        Vulnerability {
-            id: id.into(),
-            aliases: Vec::new(),
-            summary: String::new(),
-            severity,
-            url: None,
-        }
-    }
 
     #[test]
     fn check_summary_with_mixed_results_does_not_panic() {
@@ -180,8 +171,8 @@ mod tests {
     fn audit_summary_with_vulnerabilities_does_not_panic() {
         let results = vec![
             make_audit_result(vec![
-                make_vuln("CVE-1", Severity::Critical),
-                make_vuln("CVE-2", Severity::Low),
+                Vulnerability::test("CVE-1", Severity::Critical),
+                Vulnerability::test("CVE-2", Severity::Low),
             ]),
             make_audit_result(Vec::new()),
         ];

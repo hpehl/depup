@@ -1,4 +1,4 @@
-use super::{CommandResult, Dependency, DependencyKind, Ecosystem};
+use super::Dependency;
 
 /// The outcome of checking a dependency version.
 #[derive(Debug, Clone)]
@@ -9,32 +9,12 @@ pub enum CheckStatus {
     Error { message: String },
 }
 
-// ------------------------------------------------------ command result
-
 /// Result of checking a single dependency against its registry.
 #[derive(Debug, Clone)]
 pub struct CheckResult {
     pub dep: Dependency,
     pub current_version: String,
     pub status: CheckStatus,
-}
-
-impl CommandResult for CheckResult {
-    fn ecosystem(&self) -> Ecosystem {
-        self.dep.ecosystem
-    }
-    fn kind(&self) -> DependencyKind {
-        self.dep.kind
-    }
-    fn artifact(&self) -> &str {
-        &self.dep.artifact
-    }
-    fn property(&self) -> Option<&str> {
-        self.dep.property.as_deref()
-    }
-    fn source(&self) -> &str {
-        &self.dep.source
-    }
 }
 
 impl CheckResult {
@@ -95,6 +75,7 @@ impl CheckResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{DependencyKind, Ecosystem};
 
     fn dep_id() -> Dependency {
         Dependency::new(

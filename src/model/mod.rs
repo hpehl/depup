@@ -92,7 +92,7 @@ impl Dependency {
 
 // ------------------------------------------------------ command result
 
-/// Common accessors shared by all result types (`VersionResult`, `UpdateResult`, `AuditResult`).
+/// Common accessors shared by all result types (`CheckResult`, `UpdateResult`, `AuditResult`).
 ///
 /// Used by the output layer to group, sort, and format results generically
 /// across subcommands.
@@ -106,6 +106,33 @@ pub trait CommandResult {
         self.property().is_some()
     }
 }
+
+/// Implements `CommandResult` by delegating to `self.$field`.
+macro_rules! impl_command_result {
+    ($type:ty, $field:ident) => {
+        impl CommandResult for $type {
+            fn ecosystem(&self) -> Ecosystem {
+                self.$field.ecosystem
+            }
+            fn kind(&self) -> DependencyKind {
+                self.$field.kind
+            }
+            fn artifact(&self) -> &str {
+                &self.$field.artifact
+            }
+            fn property(&self) -> Option<&str> {
+                self.$field.property.as_deref()
+            }
+            fn source(&self) -> &str {
+                &self.$field.source
+            }
+        }
+    };
+}
+
+impl_command_result!(CheckResult, dep);
+impl_command_result!(UpdateResult, dep);
+impl_command_result!(AuditResult, dep);
 
 // ------------------------------------------------------ test
 

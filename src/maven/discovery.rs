@@ -53,7 +53,8 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     inject_project_properties(&root_project, &mut properties);
 
     let mut child_pom_files = Vec::new();
-    collect_module_poms(root, &root_project, &mut child_pom_files)?;
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    collect_module_poms(root, &root_project, &mut child_pom_files, &canonical_root)?;
 
     let mut mappings = Vec::new();
     let mut repositories = Vec::new();
@@ -200,17 +201,25 @@ fn extract_mappings(
 }
 
 /// Recursively follows `<modules>` declarations to collect all child POM paths.
+/// Validates that module paths don't escape the project root (path traversal protection).
 fn collect_module_poms(
     parent_dir: &Path,
     project: &pom::Project,
     pom_files: &mut Vec<PathBuf>,
+    project_root: &Path,
 ) -> Result<()> {
     for module_name in &project.modules {
-        let module_pom = parent_dir.join(module_name).join("pom.xml");
+        let module_dir = parent_dir.join(module_name);
+        let module_pom = module_dir.join("pom.xml");
         if module_pom.exists() {
+            if let Ok(canonical) = module_pom.canonicalize() {
+                if !canonical.starts_with(project_root) {
+                    continue;
+                }
+            }
             pom_files.push(module_pom.clone());
             let module_project = pom::parse_pom(&module_pom)?;
-            collect_module_poms(&parent_dir.join(module_name), &module_project, pom_files)?;
+            collect_module_poms(&module_dir, &module_project, pom_files, project_root)?;
         }
     }
     Ok(())

@@ -17,6 +17,9 @@ use crate::maven::pm_versions::PmVersionsResolver;
 use crate::model::CheckResult;
 
 /// Trait for resolving tool version properties against their respective registries.
+///
+/// Uses `Pin<Box<dyn Future>>` instead of native async traits because this trait
+/// is used as `Arc<dyn ToolVersionResolver>` — dyn-dispatch requires object safety.
 pub trait ToolVersionResolver: Send + Sync {
     /// Returns the property name patterns this resolver handles.
     fn patterns(&self) -> &[&str];

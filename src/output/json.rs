@@ -9,22 +9,41 @@ use crate::model::{
     AuditResult, CheckResult, CheckStatus, CommandResult, UpdateResult, UpdateStatus, Vulnerability,
 };
 
+/// Common fields shared by all JSON output types.
+#[derive(Debug, Serialize)]
+struct JsonBase {
+    ecosystem: String,
+    artifact: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    property: Option<String>,
+    kind: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    source: String,
+}
+
+impl JsonBase {
+    fn from_result(r: &impl CommandResult) -> Self {
+        Self {
+            ecosystem: r.ecosystem().to_string().to_lowercase(),
+            artifact: r.artifact().to_string(),
+            property: r.property().map(ToString::to_string),
+            kind: r.kind().to_string().to_lowercase(),
+            source: r.source().to_string(),
+        }
+    }
+}
+
 /// Flat JSON representation of a single dependency check result.
 #[derive(Debug, Serialize)]
 pub struct JsonResult {
-    pub ecosystem: String,
-    pub property: String,
+    #[serde(flatten)]
+    base: JsonBase,
     pub current: String,
     pub latest: Option<String>,
     pub status: String,
-    pub kind: String,
     pub managed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub artifact: Option<String>,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub source: String,
 }
 
 impl From<&CheckResult> for JsonResult {
@@ -36,16 +55,12 @@ impl From<&CheckResult> for JsonResult {
             CheckStatus::Error { message } => ("error", Some(message.clone())),
         };
         Self {
-            ecosystem: r.ecosystem().to_string().to_lowercase(),
-            property: r.property().unwrap_or(r.artifact()).to_string(),
+            base: JsonBase::from_result(r),
             current: r.current_version.clone(),
             latest: r.latest_version().map(ToString::to_string),
             status: status.to_string(),
-            kind: r.kind().to_string().to_lowercase(),
             managed: r.has_property(),
             error,
-            artifact: Some(r.artifact().to_string()),
-            source: r.source().to_string(),
         }
     }
 }
@@ -53,19 +68,14 @@ impl From<&CheckResult> for JsonResult {
 /// Flat JSON representation of a single dependency update result.
 #[derive(Debug, Serialize)]
 pub struct UpdateJsonResult {
-    pub ecosystem: String,
-    pub property: String,
+    #[serde(flatten)]
+    base: JsonBase,
     pub old_version: String,
     pub new_version: String,
-    pub kind: String,
     pub managed: bool,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub artifact: Option<String>,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub source: String,
 }
 
 impl From<&UpdateResult> for UpdateJsonResult {
@@ -75,16 +85,12 @@ impl From<&UpdateResult> for UpdateJsonResult {
             UpdateStatus::Error { message } => ("error", Some(message.clone())),
         };
         Self {
-            ecosystem: r.ecosystem().to_string().to_lowercase(),
-            property: r.property().unwrap_or(r.artifact()).to_string(),
+            base: JsonBase::from_result(r),
             old_version: r.old_version.clone(),
             new_version: r.new_version.clone(),
-            kind: r.kind().to_string().to_lowercase(),
             managed: r.has_property(),
             status: status.to_string(),
             error,
-            artifact: Some(r.artifact().to_string()),
-            source: r.source().to_string(),
         }
     }
 }
@@ -92,16 +98,26 @@ impl From<&UpdateResult> for UpdateJsonResult {
 /// Flat JSON representation of a single dependency audit result.
 #[derive(Debug, Serialize)]
 pub struct AuditJsonResult {
-    pub ecosystem: String,
-    pub artifact: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub property: Option<String>,
+    #[serde(flatten)]
+    base: JsonBase,
     pub version: String,
-    pub kind: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub source: String,
     pub vulnerable: bool,
     pub vulnerabilities: Vec<VulnerabilityJson>,
+}
+
+impl From<&AuditResult> for AuditJsonResult {
+    fn from(r: &AuditResult) -> Self {
+        Self {
+            base: JsonBase::from_result(r),
+            version: r.version.clone(),
+            vulnerable: r.is_vulnerable(),
+            vulnerabilities: r
+                .vulnerabilities
+                .iter()
+                .map(VulnerabilityJson::from)
+                .collect(),
+        }
+    }
 }
 
 /// JSON representation of a single vulnerability.
@@ -115,25 +131,6 @@ pub struct VulnerabilityJson {
     pub severity: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
-}
-
-impl From<&AuditResult> for AuditJsonResult {
-    fn from(r: &AuditResult) -> Self {
-        Self {
-            ecosystem: r.ecosystem().to_string().to_lowercase(),
-            artifact: r.artifact().to_string(),
-            property: r.property().map(ToString::to_string),
-            version: r.version.clone(),
-            kind: r.kind().to_string().to_lowercase(),
-            source: r.source().to_string(),
-            vulnerable: r.is_vulnerable(),
-            vulnerabilities: r
-                .vulnerabilities
-                .iter()
-                .map(VulnerabilityJson::from)
-                .collect(),
-        }
-    }
 }
 
 impl From<&Vulnerability> for VulnerabilityJson {
@@ -151,16 +148,12 @@ impl From<&Vulnerability> for VulnerabilityJson {
 impl UpdateJsonResult {
     pub fn would_update(r: &CheckResult) -> Self {
         Self {
-            ecosystem: r.ecosystem().to_string().to_lowercase(),
-            property: r.property().unwrap_or(r.artifact()).to_string(),
+            base: JsonBase::from_result(r),
             old_version: r.current_version.clone(),
             new_version: r.latest_version().unwrap_or("").to_string(),
-            kind: r.kind().to_string().to_lowercase(),
             managed: r.has_property(),
             status: "would_update".to_string(),
             error: None,
-            artifact: Some(r.artifact().to_string()),
-            source: r.source().to_string(),
         }
     }
 }
@@ -285,6 +278,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
 
         assert!(parsed.get("error").is_none());
+        assert!(parsed.get("property").is_none());
         assert_eq!(parsed["artifact"], "g:a");
     }
 }

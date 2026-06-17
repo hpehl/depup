@@ -64,3 +64,92 @@ pub async fn update_project(
 
     results
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{CheckStatus, Dependency, Ecosystem};
+    use crate::npm::PackageManager;
+
+    fn outdated_check(
+        name: &str,
+        current: &str,
+        latest: &str,
+        kind: DependencyKind,
+    ) -> CheckResult {
+        CheckResult {
+            dep: Dependency::new(
+                Ecosystem::Npm,
+                kind,
+                name.into(),
+                None,
+                "package.json".into(),
+            ),
+            current_version: current.into(),
+            status: CheckStatus::Outdated {
+                latest: latest.into(),
+            },
+        }
+    }
+
+    #[test]
+    fn partitions_tool_versions_from_packages() {
+        let outdated = vec![
+            outdated_check("react", "18.0.0", "19.0.0", DependencyKind::NpmDep),
+            outdated_check("npm", "9.0.0", "10.0.0", DependencyKind::Tool),
+            outdated_check("lodash", "4.0.0", "5.0.0", DependencyKind::NpmDep),
+        ];
+        let (tools, packages): (Vec<_>, Vec<_>) = outdated
+            .iter()
+            .partition(|r| r.kind() == DependencyKind::Tool);
+        assert_eq!(tools.len(), 1);
+        assert_eq!(packages.len(), 2);
+    }
+
+    #[test]
+    fn tool_version_with_no_latest_produces_error() {
+        let project = NpmProject {
+            path: std::path::PathBuf::from("/tmp/test"),
+            name: "test".into(),
+            package_manager: PackageManager::Npm,
+            pm_version: None,
+        };
+
+        let check = CheckResult {
+            dep: Dependency::new(
+                Ecosystem::Npm,
+                DependencyKind::Tool,
+                "npm".into(),
+                None,
+                "package.json".into(),
+            ),
+            current_version: "9.0.0".into(),
+            status: CheckStatus::Outdated {
+                latest: String::new(),
+            },
+        };
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let results = rt.block_on(update_project(
+            &project,
+            std::path::Path::new("/tmp"),
+            &[check],
+        ));
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_error());
+    }
+
+    #[test]
+    fn empty_outdated_returns_empty_results() {
+        let project = NpmProject {
+            path: std::path::PathBuf::from("/tmp/test"),
+            name: "test".into(),
+            package_manager: PackageManager::Npm,
+            pm_version: None,
+        };
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let results = rt.block_on(update_project(&project, std::path::Path::new("/tmp"), &[]));
+        assert!(results.is_empty());
+    }
+}

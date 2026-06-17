@@ -149,7 +149,7 @@ pub(super) fn print_grouped<T: OutputLine>(items: &[T]) {
                 println!("  {}", style(kind_group_label(*kind)).dim().bold());
             }
             for item in group.iter().filter(|r| r.kind() == *kind) {
-                item.print_line();
+                println!("{}", item.format_line());
             }
         }
         println!();
