@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `sbom` subcommand to generate CycloneDX 1.5 JSON Bills of Materials with Package URL (PURL) identifiers for all discovered dependencies
+- Add composite GitHub Action (`action.yml`) for CI integration — installs depup, runs any subcommand, and posts Markdown reports to job summaries and PR comments
+- Add `comment` input to the GitHub Action for posting results as PR comments that update in place on re-runs
+
+### Changed
+
+- Use granular exit codes for CI pipelines: 0 = clean, 1 = outdated/errors (check/update), 2 = vulnerabilities found (audit), 3 = critical/high vulnerabilities (audit)
+
 ## [0.2.2] - 2026-06-17
 
 ### Added
