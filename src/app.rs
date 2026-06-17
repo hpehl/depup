@@ -125,64 +125,54 @@ fn common_filter_args(cmd: Command) -> Command {
     )
 }
 
-/// Kind filter arguments including --tools (used by check and update).
-fn kind_args_with_tools(cmd: Command) -> Command {
-    cmd.arg(
-        Arg::new("dependencies")
-            .long("dependencies")
-            .action(ArgAction::SetTrue)
-            .conflicts_with_all(["plugins", "dev-deps", "tools"])
-            .help("Only show dependencies"),
-    )
-    .arg(
-        Arg::new("plugins")
-            .long("plugins")
-            .action(ArgAction::SetTrue)
-            .conflicts_with_all(["dev-deps", "tools"])
-            .help("Only show plugins"),
-    )
-    .arg(
-        Arg::new("dev-deps")
-            .long("dev-deps")
-            .action(ArgAction::SetTrue)
-            .conflicts_with("tools")
-            .help("Only show dev dependencies"),
-    )
-    .arg(
-        Arg::new("tools")
-            .long("tools")
-            .visible_alias("other")
-            .action(ArgAction::SetTrue)
-            .help("Only show tool version checks (Node.js, package manager versions)"),
-    )
-}
+fn kind_args(cmd: Command, include_tools: bool) -> Command {
+    let mut deps_conflicts = vec!["plugins", "dev-deps"];
+    let mut plugins_conflicts: Vec<&str> = vec!["dev-deps"];
+    if include_tools {
+        deps_conflicts.push("tools");
+        plugins_conflicts.push("tools");
+    }
 
-/// Kind filter arguments without --tools (used by audit).
-fn kind_args_without_tools(cmd: Command) -> Command {
-    cmd.arg(
-        Arg::new("dependencies")
-            .long("dependencies")
-            .action(ArgAction::SetTrue)
-            .conflicts_with_all(["plugins", "dev-deps"])
-            .help("Only show dependencies"),
-    )
-    .arg(
-        Arg::new("plugins")
-            .long("plugins")
-            .action(ArgAction::SetTrue)
-            .conflicts_with("dev-deps")
-            .help("Only show plugins"),
-    )
-    .arg(
-        Arg::new("dev-deps")
-            .long("dev-deps")
-            .action(ArgAction::SetTrue)
-            .help("Only show dev dependencies"),
-    )
+    let mut cmd = cmd
+        .arg(
+            Arg::new("dependencies")
+                .long("dependencies")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(deps_conflicts)
+                .help("Only show dependencies"),
+        )
+        .arg(
+            Arg::new("plugins")
+                .long("plugins")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(plugins_conflicts)
+                .help("Only show plugins"),
+        )
+        .arg({
+            let mut arg = Arg::new("dev-deps")
+                .long("dev-deps")
+                .action(ArgAction::SetTrue)
+                .help("Only show dev dependencies");
+            if include_tools {
+                arg = arg.conflicts_with("tools");
+            }
+            arg
+        });
+
+    if include_tools {
+        cmd = cmd.arg(
+            Arg::new("tools")
+                .long("tools")
+                .visible_alias("other")
+                .action(ArgAction::SetTrue)
+                .help("Only show tool version checks (Node.js, package manager versions)"),
+        );
+    }
+    cmd
 }
 
 fn check_args(cmd: Command) -> Command {
-    kind_args_with_tools(common_filter_args(cmd)).arg(
+    kind_args(common_filter_args(cmd), true).arg(
         Arg::new("outdated")
             .long("outdated")
             .action(ArgAction::SetTrue)
@@ -191,7 +181,7 @@ fn check_args(cmd: Command) -> Command {
 }
 
 fn update_args(cmd: Command) -> Command {
-    kind_args_with_tools(common_filter_args(cmd)).arg(
+    kind_args(common_filter_args(cmd), true).arg(
         Arg::new("dry-run")
             .long("dry-run")
             .action(ArgAction::SetTrue)
@@ -200,7 +190,7 @@ fn update_args(cmd: Command) -> Command {
 }
 
 fn audit_args(cmd: Command) -> Command {
-    kind_args_without_tools(common_filter_args(cmd))
+    kind_args(common_filter_args(cmd), false)
         .arg(
             Arg::new("vulnerable")
                 .long("vulnerable")

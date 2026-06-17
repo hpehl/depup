@@ -5,6 +5,7 @@ use console::style;
 use crate::model::{DependencyKind, Ecosystem, Severity};
 
 use super::line::OutputLine;
+use super::symbols::HORIZ_LINE;
 
 pub(super) const ARTIFACT_WIDTH: usize = 40;
 pub(super) const VERSION_WIDTH: usize = 30;
@@ -103,7 +104,7 @@ pub(super) fn severity_style(severity: Severity) -> console::Style {
 
 pub(super) fn print_ecosystem_header(ecosystem: Ecosystem) {
     let label = ecosystem.to_string();
-    let line = "\u{2500}".repeat(3);
+    let line = HORIZ_LINE.repeat(3);
     println!(
         "{} {} {}",
         style(line.clone()).dim(),

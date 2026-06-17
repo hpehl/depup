@@ -21,6 +21,16 @@ fn try_get_flag(matches: &ArgMatches, name: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn flag_pair(matches: &ArgMatches, true_flag: &str, false_flag: &str) -> Option<bool> {
+    if try_get_flag(matches, true_flag) {
+        Some(true)
+    } else if try_get_flag(matches, false_flag) {
+        Some(false)
+    } else {
+        None
+    }
+}
+
 /// Which dependency kind(s) to include in the output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KindFilter {
@@ -66,20 +76,12 @@ impl Filter {
     /// Safely handles flags that may not be defined for all subcommands
     /// (e.g., `outdated` is only on `check`, not `update`).
     pub fn from_matches(matches: &ArgMatches) -> Self {
-        let managed = if try_get_flag(matches, "managed") {
-            Some(true)
-        } else if try_get_flag(matches, "unmanaged") {
-            Some(false)
-        } else {
-            None
-        };
+        let managed = flag_pair(matches, "managed", "unmanaged");
 
-        let ecosystem = if try_get_flag(matches, "maven") {
-            Some(Ecosystem::Maven)
-        } else if try_get_flag(matches, "npm") {
-            Some(Ecosystem::Npm)
-        } else {
-            None
+        let ecosystem = match flag_pair(matches, "maven", "npm") {
+            Some(true) => Some(Ecosystem::Maven),
+            Some(false) => Some(Ecosystem::Npm),
+            None => None,
         };
 
         let kind = if try_get_flag(matches, "dependencies") {

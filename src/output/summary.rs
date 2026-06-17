@@ -137,7 +137,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn check_summary_with_mixed_results_does_not_panic() {
         let results = vec![

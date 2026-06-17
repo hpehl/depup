@@ -34,6 +34,12 @@ pub fn apply_updates(
         inline: Vec<&'a CheckResult>,
     }
 
+    impl<'a> PomUpdates<'a> {
+        fn all_results(&self) -> impl Iterator<Item = &&'a CheckResult> {
+            self.properties.values().chain(self.inline.iter())
+        }
+    }
+
     let mut updates_by_pom: HashMap<String, PomUpdates> = HashMap::new();
 
     for result in outdated {
@@ -110,17 +116,7 @@ pub fn apply_updates(
 
         match fs::write(&pom_path, updated_xml) {
             Ok(()) => {
-                // Record successful updates
-                for check_result in pom_updates.properties.values() {
-                    update_results.push(UpdateResult::updated(
-                        check_result,
-                        check_result
-                            .latest_version()
-                            .expect("outdated result must have latest version")
-                            .to_string(),
-                    ));
-                }
-                for check_result in &pom_updates.inline {
+                for check_result in pom_updates.all_results() {
                     update_results.push(UpdateResult::updated(
                         check_result,
                         check_result
@@ -132,10 +128,7 @@ pub fn apply_updates(
             }
             Err(e) => {
                 let message = format!("Failed to write POM: {e}");
-                for check_result in pom_updates.properties.values() {
-                    update_results.push(UpdateResult::error(check_result, message.clone()));
-                }
-                for check_result in &pom_updates.inline {
+                for check_result in pom_updates.all_results() {
                     update_results.push(UpdateResult::error(check_result, message.clone()));
                 }
             }

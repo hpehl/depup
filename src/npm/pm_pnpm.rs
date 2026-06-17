@@ -29,12 +29,9 @@ struct ListEntry {
 
 impl PackageManagerResolver for Pnpm {
     async fn list_packages(&self, dir: &Path) -> Result<Vec<InstalledPackage>> {
-        let Some(entries) = super::run_pm_json::<Vec<ListOutput>>(
-            "pnpm",
-            &["list", "--json", "--depth", "0"],
-            dir,
-        )
-        .await?
+        let Some(entries) =
+            super::run_pm_json::<Vec<ListOutput>>("pnpm", &["list", "--json", "--depth", "0"], dir)
+                .await?
         else {
             return Ok(Vec::new());
         };
@@ -126,8 +123,7 @@ mod tests {
 
     #[test]
     fn parse_outdated_rejects_malformed_json() {
-        let result =
-            serde_json::from_str::<HashMap<String, OutdatedEntry>>("{{broken");
+        let result = serde_json::from_str::<HashMap<String, OutdatedEntry>>("{{broken");
         assert!(result.is_err());
     }
 }

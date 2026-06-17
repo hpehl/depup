@@ -42,6 +42,7 @@ impl MavenVersionResolver {
                 ArtifactKind::Dependency => r.kind == RepositoryKind::Standard,
                 ArtifactKind::Plugin => r.kind == RepositoryKind::Plugin,
             })
+            .filter(|r| r.url.starts_with("https://") || r.url.starts_with("http://"))
             .map(|r| r.url.as_str())
             .collect()
     }

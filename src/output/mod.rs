@@ -12,6 +12,7 @@ mod format;
 pub mod json;
 mod line;
 mod summary;
+pub mod symbols;
 
 pub use summary::{audit_summary, check_summary, update_summary};
 

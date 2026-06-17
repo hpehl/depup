@@ -19,6 +19,7 @@ use crate::constants::MAX_CONCURRENT_REQUESTS;
 use crate::model::{CheckResult, CommandResult, Ecosystem, UpdateResult};
 use crate::output;
 use crate::output::json::UpdateJsonResult;
+use crate::output::symbols::EM_DASH;
 use crate::progress;
 
 /// Returns `true` if the process should exit with code 1 (update errors occurred).
@@ -56,7 +57,7 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
         } else {
             println!();
             println!();
-            println!("{}", style("Dry run \u{2014} no changes made:").bold());
+            println!("{}", style(format!("Dry run {EM_DASH} no changes made:")).bold());
             let preview: Vec<UpdateResult> = outdated
                 .iter()
                 .map(|r| UpdateResult::updated(r, r.latest_version().unwrap_or("?").to_string()))
@@ -174,7 +175,7 @@ async fn run_npm_updates(
         let semaphore = Arc::clone(&semaphore);
         let bar = bar.clone();
         join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = semaphore.acquire().await.expect("semaphore closed unexpectedly");
             bar.set_message(format!("{} ({})", project.name, project.package_manager));
             let result =
                 crate::npm::updater::update_project(&project, &root, &project_results).await;

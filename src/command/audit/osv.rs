@@ -250,9 +250,7 @@ async fn query_batch(deps: &[&CheckResult]) -> Result<HashMap<String, Vec<String
     Ok(full_map)
 }
 
-async fn fetch_vulnerabilities(
-    ids: HashSet<String>,
-) -> (HashMap<String, Vulnerability>, usize) {
+async fn fetch_vulnerabilities(ids: HashSet<String>) -> (HashMap<String, Vulnerability>, usize) {
     let client = http_client();
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let failed = Arc::new(AtomicUsize::new(0));
@@ -263,7 +261,7 @@ async fn fetch_vulnerabilities(
         let semaphore = Arc::clone(&semaphore);
         let failed = Arc::clone(&failed);
         join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = semaphore.acquire().await.expect("semaphore closed unexpectedly");
             let response = client
                 .get(format!("{OSV_API_URL}/v1/vulns/{id}"))
                 .send()

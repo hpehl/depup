@@ -212,14 +212,28 @@ fn collect_module_poms(
         let module_dir = parent_dir.join(module_name);
         let module_pom = module_dir.join("pom.xml");
         if module_pom.exists() {
-            if let Ok(canonical) = module_pom.canonicalize() {
-                if !canonical.starts_with(project_root) {
-                    continue;
+            match module_pom.canonicalize() {
+                Ok(canonical) if canonical.starts_with(project_root) => {
+                    pom_files.push(module_pom.clone());
+                    let module_project = pom::parse_pom(&module_pom)?;
+                    collect_module_poms(
+                        &module_dir,
+                        &module_project,
+                        pom_files,
+                        project_root,
+                    )?;
+                }
+                Ok(_) => {
+                    eprintln!(
+                        "Warning: module '{module_name}' escapes project root, skipping"
+                    );
+                }
+                Err(_) => {
+                    eprintln!(
+                        "Warning: cannot resolve module path '{module_name}', skipping"
+                    );
                 }
             }
-            pom_files.push(module_pom.clone());
-            let module_project = pom::parse_pom(&module_pom)?;
-            collect_module_poms(&module_dir, &module_project, pom_files, project_root)?;
         }
     }
     Ok(())

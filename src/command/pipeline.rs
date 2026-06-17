@@ -205,7 +205,7 @@ fn spawn_npm_resolves(
         let root = root.to_path_buf();
         let bar = bar.clone();
         join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = semaphore.acquire().await.expect("semaphore closed unexpectedly");
             bar.set_message(format!("{} ({})", project.name, project.package_manager));
             let results = crate::npm::resolver::resolve_project(&project, &root)
                 .await

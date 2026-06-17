@@ -66,9 +66,20 @@ pub enum RepositoryKind {
     Plugin,
 }
 
+const MAX_POM_SIZE: u64 = 10 * 1024 * 1024;
+
 /// Reads and parses a POM file from disk.
 pub fn parse_pom(path: &Path) -> Result<Project> {
     let path_str = path.display().to_string();
+    let metadata = std::fs::metadata(path)
+        .map_err(|e| DepupError::pom_parse_failed(&path_str, &e.to_string()))?;
+    if metadata.len() > MAX_POM_SIZE {
+        return Err(DepupError::pom_parse_failed(
+            &path_str,
+            &format!("POM file too large: {} bytes (max {})", metadata.len(), MAX_POM_SIZE),
+        )
+        .into());
+    }
     let content = std::fs::read_to_string(path)
         .map_err(|e| DepupError::pom_parse_failed(&path_str, &e.to_string()))?;
     parse_pom_str(&content)

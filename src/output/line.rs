@@ -3,6 +3,7 @@ use console::style;
 use crate::model::{AuditResult, CheckResult, CheckStatus, CommandResult, UpdateResult};
 
 use super::format::{format_columns, severity_style, truncate_middle_pad};
+use super::symbols::{ARROW, CHECKMARK, CROSS};
 
 /// Subcommand-specific line rendering. Each result type provides its own
 /// version label and formatted output while sharing the common column layout.
@@ -19,78 +20,72 @@ impl OutputLine for CheckResult {
     fn format_line(&self) -> String {
         let (styled_artifact, version, source) = format_columns(self);
         match &self.status {
-            CheckStatus::UpToDate { .. } => {
-                format!(
-                    "  {} {}  {}  {}  {}",
-                    style("\u{2713}").green().bold(),
-                    styled_artifact,
-                    style(version).white(),
-                    style(source).dim(),
-                    style("up-to-date").green()
-                )
-            }
-            CheckStatus::Outdated { latest } => {
-                format!(
-                    "  {} {}  {}  {}  {}",
-                    style("\u{2192}").yellow().bold(),
-                    styled_artifact,
-                    style(version).white(),
-                    style(source).dim(),
-                    style(format!("\u{2192} {latest}")).yellow()
-                )
-            }
-            CheckStatus::Skipped => {
-                format!(
-                    "  {} {}  {}  {}  {}",
-                    style("-").dim().bold(),
-                    styled_artifact,
-                    style(version).dim(),
-                    style(source).dim(),
-                    style("skipped").dim()
-                )
-            }
-            CheckStatus::Error { message } => {
-                format!(
-                    "  {} {}  {}  {}  {}",
-                    style("\u{2717}").red().bold(),
-                    styled_artifact,
-                    style(version).white(),
-                    style(source).dim(),
-                    style(message).red()
-                )
-            }
+            CheckStatus::UpToDate { .. } => status_line(
+                CHECKMARK,
+                console::Style::new().green().bold(),
+                styled_artifact,
+                version,
+                source,
+                "up-to-date",
+                console::Style::new().green(),
+            ),
+            CheckStatus::Outdated { latest } => status_line(
+                ARROW,
+                console::Style::new().yellow().bold(),
+                styled_artifact,
+                version,
+                source,
+                &format!("{ARROW} {latest}"),
+                console::Style::new().yellow(),
+            ),
+            CheckStatus::Skipped => status_line(
+                "-",
+                console::Style::new().dim().bold(),
+                styled_artifact,
+                version,
+                source,
+                "skipped",
+                console::Style::new().dim(),
+            ),
+            CheckStatus::Error { message } => status_line(
+                CROSS,
+                console::Style::new().red().bold(),
+                styled_artifact,
+                version,
+                source,
+                message,
+                console::Style::new().red(),
+            ),
         }
     }
 }
 
 impl OutputLine for UpdateResult {
     fn version_value(&self) -> String {
-        format!("{} \u{2192} {}", self.old_version, self.new_version)
+        format!("{} {ARROW} {}", self.old_version, self.new_version)
     }
 
     fn format_line(&self) -> String {
         let (styled_artifact, version, source) = format_columns(self);
         match &self.status {
-            crate::model::UpdateStatus::Updated => {
-                format!(
-                    "  {} {}  {}  {}  {}",
-                    style("\u{2713}").green().bold(),
-                    styled_artifact,
-                    style(version).white(),
-                    style(source).dim(),
-                    style("updated").green()
-                )
-            }
-            crate::model::UpdateStatus::Error { message } => {
-                format!(
-                    "  {} {}  {}  {}  {}",
-                    style("\u{2717}").red().bold(),
-                    styled_artifact,
-                    style(version).white(),
-                    style(source).dim(),
-                    style(message).red()
-                )
-            }
+            crate::model::UpdateStatus::Updated => status_line(
+                CHECKMARK,
+                console::Style::new().green().bold(),
+                styled_artifact,
+                version,
+                source,
+                "updated",
+                console::Style::new().green(),
+            ),
+            crate::model::UpdateStatus::Error { message } => status_line(
+                CROSS,
+                console::Style::new().red().bold(),
+                styled_artifact,
+                version,
+                source,
+                message,
+                console::Style::new().red(),
+            ),
         }
     }
 }
@@ -103,13 +98,14 @@ impl OutputLine for AuditResult {
     fn format_line(&self) -> String {
         let (styled_artifact, version, source) = format_columns(self);
         if self.vulnerabilities.is_empty() {
-            return format!(
-                "  {} {}  {}  {}  {}",
-                style("\u{2713}").green().bold(),
+            return status_line(
+                CHECKMARK,
+                console::Style::new().green().bold(),
                 styled_artifact,
-                style(version).white(),
-                style(source).dim(),
-                style("no vulnerabilities").green()
+                version,
+                source,
+                "no vulnerabilities",
+                console::Style::new().green(),
             );
         }
 
@@ -123,7 +119,7 @@ impl OutputLine for AuditResult {
 
         let mut lines = vec![format!(
             "  {} {}  {}  {}  {}",
-            style("\u{2717}").red().bold(),
+            style(CROSS).red().bold(),
             styled_artifact,
             style(version).white(),
             style(source).dim(),
@@ -152,6 +148,25 @@ impl OutputLine for AuditResult {
 
         lines.join("\n")
     }
+}
+
+fn status_line(
+    symbol: &str,
+    symbol_style: console::Style,
+    styled_artifact: console::StyledObject<String>,
+    version: String,
+    source: String,
+    message: &str,
+    message_style: console::Style,
+) -> String {
+    format!(
+        "  {} {}  {}  {}  {}",
+        symbol_style.apply_to(symbol),
+        styled_artifact,
+        style(version).white(),
+        style(source).dim(),
+        message_style.apply_to(message)
+    )
 }
 
 #[cfg(test)]

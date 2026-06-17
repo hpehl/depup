@@ -142,7 +142,7 @@ pub async fn resolve(
         let root = root.clone();
 
         join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = semaphore.acquire().await.expect("semaphore closed unexpectedly");
             bar.set_message(label);
             let result = match task {
                 ResolveTask::Maven {

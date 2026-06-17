@@ -157,8 +157,7 @@ mod tests {
 
     #[test]
     fn parse_outdated_rejects_malformed_json() {
-        let result =
-            serde_json::from_str::<HashMap<String, OutdatedEntry>>("not json");
+        let result = serde_json::from_str::<HashMap<String, OutdatedEntry>>("not json");
         assert!(result.is_err());
     }
 }
