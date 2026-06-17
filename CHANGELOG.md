@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-17
+
 ### Added
 
 - Add `sbom` subcommand to generate CycloneDX 1.5 JSON Bills of Materials with Package URL (PURL) identifiers for all discovered dependencies
@@ -113,7 +115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hpehl/depup/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/hpehl/depup/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/hpehl/depup/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/hpehl/depup/compare/v0.1.0...v0.2.0
