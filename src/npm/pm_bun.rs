@@ -16,7 +16,8 @@ pub struct Bun;
 
 impl PackageManagerResolver for Bun {
     async fn list_packages(&self, dir: &Path) -> Result<Vec<InstalledPackage>> {
-        let pkg_content = std::fs::read_to_string(dir.join("package.json"))
+        let pkg_content = tokio::fs::read_to_string(dir.join("package.json"))
+            .await
             .with_context(|| format!("Failed to read package.json in {}", dir.display()))?;
         let pkg: serde_json::Value = serde_json::from_str(&pkg_content)
             .with_context(|| format!("Failed to parse package.json in {}", dir.display()))?;
@@ -25,23 +26,25 @@ impl PackageManagerResolver for Bun {
 
         if let Some(deps) = pkg.get("dependencies").and_then(|v| v.as_object()) {
             for (name, _) in deps {
-                let version = get_installed_version(dir, name).unwrap_or_default();
-                packages.push(InstalledPackage {
-                    name: name.clone(),
-                    version,
-                    is_dev: false,
-                });
+                if let Some(version) = get_installed_version(dir, name) {
+                    packages.push(InstalledPackage {
+                        name: name.clone(),
+                        version,
+                        is_dev: false,
+                    });
+                }
             }
         }
 
         if let Some(deps) = pkg.get("devDependencies").and_then(|v| v.as_object()) {
             for (name, _) in deps {
-                let version = get_installed_version(dir, name).unwrap_or_default();
-                packages.push(InstalledPackage {
-                    name: name.clone(),
-                    version,
-                    is_dev: true,
-                });
+                if let Some(version) = get_installed_version(dir, name) {
+                    packages.push(InstalledPackage {
+                        name: name.clone(),
+                        version,
+                        is_dev: true,
+                    });
+                }
             }
         }
 

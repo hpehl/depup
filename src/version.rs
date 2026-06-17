@@ -131,6 +131,7 @@ fn is_pre_release_qualifier(lower: &str) -> bool {
 }
 
 /// Finds the highest version from a list of version strings.
+#[must_use]
 pub fn find_latest(versions: &[String]) -> Option<String> {
     let mut parsed: Vec<_> = versions.iter().filter_map(|v| Version::parse(v)).collect();
     parsed.sort();
@@ -142,6 +143,7 @@ pub fn find_latest(versions: &[String]) -> Option<String> {
 /// Falls back to string inequality when either version cannot be parsed.
 /// This is intentionally conservative: unparseable versions are treated as
 /// "different means outdated", which is the safer default for alerting users.
+#[must_use]
 pub fn is_newer(current: &str, latest: &str) -> bool {
     match (Version::parse(current), Version::parse(latest)) {
         (Some(c), Some(l)) => l > c,

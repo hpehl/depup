@@ -18,7 +18,7 @@ pub use update::{UpdateResult, UpdateStatus};
 // ------------------------------------------------------ ecosystem
 
 /// Supported dependency ecosystems.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Ecosystem {
     Maven,

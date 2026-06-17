@@ -177,6 +177,7 @@ async fn run_npm_updates(
         let semaphore = Arc::clone(&semaphore);
         let bar = bar.clone();
         join_set.spawn(async move {
+            // SAFETY: Semaphore is Arc-wrapped and outlives all spawned tasks
             let _permit = semaphore
                 .acquire()
                 .await

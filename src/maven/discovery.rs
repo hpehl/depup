@@ -53,7 +53,14 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     inject_project_properties(&root_project, &mut properties);
 
     let mut child_pom_files = Vec::new();
-    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let canonical_root = root.canonicalize().unwrap_or_else(|e| {
+        eprintln!(
+            "Warning: failed to canonicalize project root '{}' ({}), using as-is",
+            root.display(),
+            e
+        );
+        root.to_path_buf()
+    });
     collect_module_poms(root, &root_project, &mut child_pom_files, &canonical_root)?;
 
     let mut mappings = Vec::new();
@@ -240,10 +247,15 @@ fn extract_property_reference(version: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-/// Resolves chained `${...}` property references up to 10 levels deep.
+const MAX_PROPERTY_RESOLUTION_DEPTH: usize = 10;
+
+/// Resolves chained `${...}` property references up to a fixed depth.
 fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
+    if !value.contains("${") {
+        return value.to_string();
+    }
     let mut current = value.to_string();
-    for _ in 0..10 {
+    for _ in 0..MAX_PROPERTY_RESOLUTION_DEPTH {
         match extract_property_reference(&current) {
             Some(prop_name) => match properties.get(&prop_name) {
                 Some(resolved) => current.clone_from(resolved),
@@ -252,6 +264,10 @@ fn resolve_value(value: &str, properties: &HashMap<String, String>) -> String {
             None => return current,
         }
     }
+    eprintln!(
+        "Warning: property resolution depth limit ({}) reached for '{}'",
+        MAX_PROPERTY_RESOLUTION_DEPTH, value
+    );
     current
 }
 

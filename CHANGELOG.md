@@ -10,12 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `--vulnerable` flag to the `audit` subcommand to show only dependencies with known vulnerabilities
+- Add POM file size limit (10 MB) to reject oversized files before parsing
+- Add `#[must_use]` annotations on `find_latest()` and `is_newer()` version functions
 
 ### Changed
 
 - Add labeled progress bars across all subcommands with consistent two-phase reporting: "Collecting" for dependency discovery, plus "Updating" or "Auditing" for the action phase
 - Extract shared `progress::phase_bar()` helper with label alignment, `▰▱` bar characters, and json-aware hiding
 - Keep progress bars visible after completion with a "done" message instead of clearing them
+- Replace stringly-typed OSV dependency keys with structured `DepKey` type for type-safe vulnerability lookups
+- Add `anyhow::Context` to OSV HTTP calls for clearer error messages on network failures
+- Log warnings when OSV vulnerability detail fetches fail instead of silently counting errors
+- Canonicalize directory paths before running npm package manager commands to prevent path traversal
+- Use `tokio::fs::read_to_string` in bun resolver instead of blocking `std::fs` in async context
+- Skip packages with no installed version in bun resolver instead of reporting empty version strings
+- Extract shared `skip_element()` helper in POM writer to eliminate duplicated XML element skipping logic
+- Narrow `pub(crate)` visibility to `pub(super)` for POM writer internals
+- Extract `MAX_PROPERTY_RESOLUTION_DEPTH` constant and log a warning when the depth limit is reached
+- Add early return in `resolve_value()` for plain strings that don't contain `${`
+- Log warning on failed canonicalization of project root and on malformed `package.json` files
 
 ### Removed
 

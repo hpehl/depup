@@ -15,7 +15,7 @@ pub use properties::update_properties;
 use crate::error::DepupError;
 
 /// Represents a single text replacement in XML content.
-pub(crate) struct Replacement {
+pub(super) struct Replacement {
     pub start: usize,
     pub end: usize,
     pub new_value: String,
@@ -24,7 +24,7 @@ pub(crate) struct Replacement {
 /// Applies multiple replacements to XML content while preserving formatting.
 ///
 /// Replacements are sorted by start position and applied in order, with no overlaps allowed.
-pub(crate) fn apply_replacements(xml: &str, mut replacements: Vec<Replacement>) -> String {
+pub(super) fn apply_replacements(xml: &str, mut replacements: Vec<Replacement>) -> String {
     if replacements.is_empty() {
         return xml.to_string();
     }
@@ -41,11 +41,38 @@ pub(crate) fn apply_replacements(xml: &str, mut replacements: Vec<Replacement>) 
 }
 
 /// Strips namespace prefix from an XML element name.
-pub(crate) fn local_name(name: quick_xml::name::QName) -> String {
+pub(super) fn local_name(name: quick_xml::name::QName) -> String {
     String::from_utf8_lossy(name.local_name().as_ref()).to_string()
 }
 
 /// Creates a POM parse error.
-pub(crate) fn parse_error(message: &str) -> anyhow::Error {
+pub(super) fn parse_error(message: &str) -> anyhow::Error {
     DepupError::pom_parse_failed("POM XML", message).into()
+}
+
+/// Skips to the closing tag of the current element, tracking nested depth.
+/// Returns an error on unexpected EOF or XML parse errors.
+pub(super) fn skip_element(
+    reader: &mut quick_xml::Reader<&[u8]>,
+    element_name: &str,
+) -> anyhow::Result<()> {
+    let mut depth: u32 = 1;
+    loop {
+        match reader.read_event() {
+            Ok(quick_xml::events::Event::Start(_)) => depth += 1,
+            Ok(quick_xml::events::Event::End(_)) => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(());
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => {
+                return Err(parse_error(&format!(
+                    "Unexpected EOF while skipping element '{element_name}'"
+                )));
+            }
+            Err(e) => return Err(parse_error(&format!("XML parse error: {e}"))),
+            _ => {}
+        }
+    }
 }

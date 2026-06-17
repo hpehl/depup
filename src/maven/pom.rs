@@ -649,4 +649,21 @@ mod tests {
         assert_eq!(project.artifact_id.as_deref(), Some("parent"));
         assert_eq!(project.version.as_deref(), Some("1.0.0"));
     }
+
+    #[test]
+    fn parse_malformed_xml_fails() {
+        assert!(parse_pom_str("not xml at all &&&").is_err());
+    }
+
+    #[test]
+    fn parse_pom_rejects_oversized_file() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let pom_path = tmp.path().join("pom.xml");
+        let content = "x".repeat((MAX_POM_SIZE + 1) as usize);
+        std::fs::write(&pom_path, content).unwrap();
+        let result = parse_pom(&pom_path);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("too large"), "Expected 'too large' in: {msg}");
+    }
 }

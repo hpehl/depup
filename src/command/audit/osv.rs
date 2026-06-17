@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
@@ -158,7 +158,7 @@ pub async fn audit(results: &[CheckResult], bar: &ProgressBar) -> Result<Vec<Aud
     let audit_results = auditable
         .iter()
         .map(|r| {
-            let key = dep_key(r);
+            let key = DepKey::from_result(r);
             let vulns = vuln_map
                 .get(&key)
                 .map(|ids| {
@@ -179,8 +179,27 @@ pub async fn audit(results: &[CheckResult], bar: &ProgressBar) -> Result<Vec<Aud
 // Internals
 // ---------------------------------------------------------------------------
 
-fn dep_key(r: &CheckResult) -> String {
-    format!("{}:{}:{}", r.ecosystem(), r.artifact(), r.current_version)
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+struct DepKey {
+    ecosystem: Ecosystem,
+    artifact: String,
+    version: String,
+}
+
+impl DepKey {
+    fn from_result(r: &CheckResult) -> Self {
+        Self {
+            ecosystem: r.ecosystem(),
+            artifact: r.artifact().to_string(),
+            version: r.current_version.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for DepKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}:{}", self.ecosystem, self.artifact, self.version)
+    }
 }
 
 fn osv_ecosystem(ecosystem: Ecosystem) -> &'static str {
@@ -190,15 +209,15 @@ fn osv_ecosystem(ecosystem: Ecosystem) -> &'static str {
     }
 }
 
-async fn query_batch(deps: &[&CheckResult]) -> Result<HashMap<String, Vec<String>>> {
+async fn query_batch(deps: &[&CheckResult]) -> Result<HashMap<DepKey, Vec<String>>> {
     let client = http_client();
-    let mut result_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut result_map: HashMap<DepKey, Vec<String>> = HashMap::new();
 
     // Build query list, deduplicating by (ecosystem, artifact, version)
     let mut seen = HashSet::new();
-    let mut queries: Vec<(String, OsvQuery)> = Vec::new();
+    let mut queries: Vec<(DepKey, OsvQuery)> = Vec::new();
     for dep in deps {
-        let key = dep_key(dep);
+        let key = DepKey::from_result(dep);
         if seen.insert(key.clone()) {
             queries.push((
                 key,
@@ -223,10 +242,13 @@ async fn query_batch(deps: &[&CheckResult]) -> Result<HashMap<String, Vec<String
             .post(format!("{OSV_API_URL}/v1/querybatch"))
             .json(&request)
             .send()
-            .await?
-            .error_for_status()?
+            .await
+            .context("Failed to send OSV batch query")?
+            .error_for_status()
+            .context("OSV batch query returned error status")?
             .json::<OsvBatchResponse>()
-            .await?;
+            .await
+            .context("Failed to parse OSV batch response")?;
 
         for (i, query_result) in response.results.iter().enumerate() {
             if let Some((key, _)) = chunk.get(i) {
@@ -239,9 +261,9 @@ async fn query_batch(deps: &[&CheckResult]) -> Result<HashMap<String, Vec<String
     }
 
     // Map back to all deps (including duplicates)
-    let mut full_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut full_map: HashMap<DepKey, Vec<String>> = HashMap::new();
     for dep in deps {
-        let key = dep_key(dep);
+        let key = DepKey::from_result(dep);
         if let Some(ids) = result_map.get(&key) {
             full_map.insert(key, ids.clone());
         }
@@ -261,6 +283,7 @@ async fn fetch_vulnerabilities(ids: HashSet<String>) -> (HashMap<String, Vulnera
         let semaphore = Arc::clone(&semaphore);
         let failed = Arc::clone(&failed);
         join_set.spawn(async move {
+            // SAFETY: Semaphore is Arc-wrapped and outlives all spawned tasks
             let _permit = semaphore
                 .acquire()
                 .await
@@ -274,12 +297,14 @@ async fn fetch_vulnerabilities(ids: HashSet<String>) -> (HashMap<String, Vulnera
             match response {
                 Ok(resp) => match resp.json::<OsvVulnerability>().await {
                     Ok(osv) => Some((id, convert_vulnerability(osv))),
-                    Err(_) => {
+                    Err(e) => {
+                        eprintln!("Warning: failed to parse vulnerability {id}: {e}");
                         failed.fetch_add(1, Ordering::Relaxed);
                         None
                     }
                 },
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("Warning: failed to fetch vulnerability {id}: {e}");
                     failed.fetch_add(1, Ordering::Relaxed);
                     None
                 }
@@ -466,7 +491,7 @@ mod tests {
             "5.12.0".into(),
             true,
         );
-        assert_eq!(dep_key(&r), "Maven:org.junit:junit:5.10.0");
+        assert_eq!(DepKey::from_result(&r).to_string(), "Maven:org.junit:junit:5.10.0");
     }
 
     #[test]
@@ -484,7 +509,7 @@ mod tests {
             "2.0.0".into(),
             true,
         );
-        assert_eq!(dep_key(&r), "npm:lodash:1.0.0");
+        assert_eq!(DepKey::from_result(&r).to_string(), "npm:lodash:1.0.0");
     }
 
     #[test]

@@ -6,7 +6,7 @@ use anyhow::Result;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
-use super::{Replacement, apply_replacements, local_name, parse_error};
+use super::{Replacement, apply_replacements, local_name, parse_error, skip_element};
 
 /// Updates property values in a POM XML string while preserving formatting.
 ///
@@ -43,7 +43,7 @@ fn find_property_replacements(
                 {
                     if let Some(new_value) = updates.get(&name) {
                         let start_pos = start_pos_after_tag;
-                        let mut depth = 1;
+                        let mut depth: u32 = 1;
                         loop {
                             let pos_before_inner = reader.buffer_position() as usize;
                             match reader.read_event() {
@@ -76,26 +76,8 @@ fn find_property_replacements(
                             }
                         }
                     } else {
-                        let mut depth = 1;
-                        loop {
-                            match reader.read_event() {
-                                Ok(Event::Start(_)) => depth += 1,
-                                Ok(Event::End(_)) => {
-                                    depth -= 1;
-                                    if depth == 0 {
-                                        path_stack.pop();
-                                        break;
-                                    }
-                                }
-                                Ok(Event::Eof) => {
-                                    return Err(parse_error("Unexpected EOF"));
-                                }
-                                Err(e) => {
-                                    return Err(parse_error(&format!("XML parse error: {}", e)));
-                                }
-                                _ => {}
-                            }
-                        }
+                        skip_element(&mut reader, &name)?;
+                        path_stack.pop();
                     }
                 }
             }

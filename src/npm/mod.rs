@@ -132,9 +132,12 @@ pub(crate) async fn outdated_json(
 
 /// Runs a package manager command and returns stdout, or errors on non-zero exit.
 pub(crate) async fn run_pm_command(pm_name: &str, args: &[&str], dir: &Path) -> Result<String> {
+    let safe_dir = dir
+        .canonicalize()
+        .with_context(|| format!("Invalid directory path: {}", dir.display()))?;
     let output = Command::new(pm_name)
         .args(args)
-        .current_dir(dir)
+        .current_dir(&safe_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -170,9 +173,12 @@ pub(crate) async fn run_pm_json<T: DeserializeOwned>(
     args: &[&str],
     dir: &Path,
 ) -> Result<Option<T>> {
+    let safe_dir = dir
+        .canonicalize()
+        .with_context(|| format!("Invalid directory path: {}", dir.display()))?;
     let output = Command::new(pm_name)
         .args(args)
-        .current_dir(dir)
+        .current_dir(&safe_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -205,10 +211,15 @@ pub(crate) async fn run_pm_json<T: DeserializeOwned>(
 /// Reads `devDependencies` keys from `package.json` to classify dev vs. prod deps.
 /// Used by npm and yarn resolvers that don't distinguish dev deps in their `list` output.
 pub(super) fn read_dev_dependency_names(dir: &Path) -> HashSet<String> {
-    let Ok(content) = std::fs::read_to_string(dir.join("package.json")) else {
+    let path = dir.join("package.json");
+    let Ok(content) = std::fs::read_to_string(&path) else {
         return HashSet::new();
     };
     let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) else {
+        eprintln!(
+            "Warning: failed to parse {}",
+            path.display()
+        );
         return HashSet::new();
     };
     pkg.get("devDependencies")
