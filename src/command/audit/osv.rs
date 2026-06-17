@@ -261,7 +261,10 @@ async fn fetch_vulnerabilities(ids: HashSet<String>) -> (HashMap<String, Vulnera
         let semaphore = Arc::clone(&semaphore);
         let failed = Arc::clone(&failed);
         join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.expect("semaphore closed unexpectedly");
+            let _permit = semaphore
+                .acquire()
+                .await
+                .expect("semaphore closed unexpectedly");
             let response = client
                 .get(format!("{OSV_API_URL}/v1/vulns/{id}"))
                 .send()

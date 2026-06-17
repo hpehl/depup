@@ -216,22 +216,13 @@ fn collect_module_poms(
                 Ok(canonical) if canonical.starts_with(project_root) => {
                     pom_files.push(module_pom.clone());
                     let module_project = pom::parse_pom(&module_pom)?;
-                    collect_module_poms(
-                        &module_dir,
-                        &module_project,
-                        pom_files,
-                        project_root,
-                    )?;
+                    collect_module_poms(&module_dir, &module_project, pom_files, project_root)?;
                 }
                 Ok(_) => {
-                    eprintln!(
-                        "Warning: module '{module_name}' escapes project root, skipping"
-                    );
+                    eprintln!("Warning: module '{module_name}' escapes project root, skipping");
                 }
                 Err(_) => {
-                    eprintln!(
-                        "Warning: cannot resolve module path '{module_name}', skipping"
-                    );
+                    eprintln!("Warning: cannot resolve module path '{module_name}', skipping");
                 }
             }
         }

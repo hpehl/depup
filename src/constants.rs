@@ -14,6 +14,7 @@ pub const NPM_REGISTRY_URL: &str = "https://registry.npmjs.org";
 
 /// Semaphore limit for concurrent HTTP requests and subprocess spawns.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10;
+const _: () = assert!(MAX_CONCURRENT_REQUESTS > 0);
 
 /// HTTP request timeout in seconds.
 pub const HTTP_TIMEOUT_SECS: u64 = 30;
@@ -22,6 +23,7 @@ static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+        .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .expect("Failed to create HTTP client")
 });

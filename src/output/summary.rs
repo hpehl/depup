@@ -6,6 +6,11 @@ use crate::model::{
 
 use super::format::print_kind_legend;
 
+fn print_legend(results: &[impl CommandResult]) {
+    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind()).collect();
+    print_kind_legend(&kinds);
+}
+
 pub fn check_summary(results: &[CheckResult]) {
     let total = results.len();
     let outdated = results.iter().filter(|r| r.is_outdated()).count();
@@ -28,8 +33,7 @@ pub fn check_summary(results: &[CheckResult]) {
         print!(", {}", style(format!("{errors} errors")).red());
     }
 
-    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind()).collect();
-    print_kind_legend(&kinds);
+    print_legend(results);
 }
 
 pub fn update_summary(results: &[UpdateResult]) {
@@ -41,8 +45,7 @@ pub fn update_summary(results: &[UpdateResult]) {
         print!(", {}", style(format!("{errors} errors")).red());
     }
 
-    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind()).collect();
-    print_kind_legend(&kinds);
+    print_legend(results);
 }
 
 pub fn audit_summary(results: &[AuditResult]) {
@@ -85,8 +88,7 @@ pub fn audit_summary(results: &[AuditResult]) {
         }
     }
 
-    let kinds: Vec<DependencyKind> = results.iter().map(|r| r.kind()).collect();
-    print_kind_legend(&kinds);
+    print_legend(results);
 }
 
 #[cfg(test)]

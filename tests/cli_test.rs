@@ -12,6 +12,11 @@ fn depup() -> Command {
     Command::new(env!("CARGO_BIN_EXE_depup"))
 }
 
+fn parse_json_output(output: &std::process::Output) -> Vec<serde_json::Value> {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(&stdout).expect("Invalid JSON output")
+}
+
 #[test]
 fn json_output_returns_array() {
     let output = depup()
@@ -21,9 +26,7 @@ fn json_output_returns_array() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
     assert_eq!(results.len(), 2);
 }
 
@@ -44,9 +47,7 @@ fn outdated_filter_excludes_current() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert_eq!(
@@ -66,9 +67,7 @@ fn missing_pom_returns_json_error() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
     assert!(results.is_empty());
 }
 
@@ -92,9 +91,7 @@ fn json_output_includes_artifact() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert!(
@@ -116,9 +113,7 @@ fn update_dry_run_shows_would_update() {
 
     assert!(output.status.success());
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert_eq!(
@@ -208,9 +203,7 @@ fn update_maven_only_flag() {
         .expect("Failed to run depup");
 
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert_eq!(result["ecosystem"].as_str().unwrap(), "maven");
@@ -261,9 +254,7 @@ fn update_dry_run_json_has_structured_fields() {
 
     assert!(output.status.success());
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     assert!(!results.is_empty());
     for result in &results {
@@ -291,9 +282,7 @@ fn update_managed_filter() {
 
     assert!(output.status.success());
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert!(
@@ -316,9 +305,7 @@ fn update_dependencies_filter() {
 
     assert!(output.status.success());
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert_eq!(
@@ -338,9 +325,7 @@ fn json_output_includes_ecosystem() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert_eq!(
@@ -362,9 +347,7 @@ fn stable_alias_works() {
         .expect("Failed to run depup");
 
     assert!(output.status.success() || !output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
     for result in &results {
         assert_ne!(
             result["status"].as_str().unwrap(),
@@ -383,9 +366,7 @@ fn json_output_includes_managed_field() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert!(
@@ -444,9 +425,7 @@ fn maven_filter_only_maven_results() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert_eq!(
@@ -467,9 +446,7 @@ fn managed_filter_only_managed() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert!(
@@ -489,9 +466,7 @@ fn unmanaged_filter_only_unmanaged() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert!(
@@ -512,9 +487,7 @@ fn include_filter_check() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         let artifact = result["artifact"].as_str().unwrap();
@@ -536,9 +509,7 @@ fn exclude_filter_check() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         let artifact = result["artifact"].as_str().unwrap();
@@ -563,9 +534,7 @@ fn include_filter_update_dry_run() {
 
     assert!(output.status.success());
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         let artifact = result["artifact"].as_str().unwrap();
@@ -633,9 +602,7 @@ fn audit_json_output_has_correct_structure() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert!(result.get("ecosystem").is_some(), "missing ecosystem field");
@@ -669,9 +636,7 @@ fn audit_vulnerable_flag_returns_only_vulnerable() {
         .expect("Failed to run depup");
 
     assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     for result in &results {
         assert_eq!(
@@ -701,9 +666,7 @@ fn npm_check_json_returns_npm_results() {
         .output()
         .expect("Failed to run depup");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<serde_json::Value> =
-        serde_json::from_str(&stdout).expect("Invalid JSON output");
+    let results = parse_json_output(&output);
 
     assert!(!results.is_empty(), "should find npm packages");
     for result in &results {

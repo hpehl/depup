@@ -39,11 +39,10 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
         .collect();
 
     if outdated.is_empty() {
-        if setup.json {
-            println!("[]");
-        } else {
-            println!("{}", style("All dependencies are up to date.").green());
-        }
+        super::pipeline::print_empty(
+            setup.json,
+            &format!("{}", style("All dependencies are up to date.").green()),
+        );
         return Ok(false);
     }
 
@@ -57,7 +56,10 @@ pub async fn update(matches: &ArgMatches) -> Result<bool> {
         } else {
             println!();
             println!();
-            println!("{}", style(format!("Dry run {EM_DASH} no changes made:")).bold());
+            println!(
+                "{}",
+                style(format!("Dry run {EM_DASH} no changes made:")).bold()
+            );
             let preview: Vec<UpdateResult> = outdated
                 .iter()
                 .map(|r| UpdateResult::updated(r, r.latest_version().unwrap_or("?").to_string()))
@@ -175,7 +177,10 @@ async fn run_npm_updates(
         let semaphore = Arc::clone(&semaphore);
         let bar = bar.clone();
         join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.expect("semaphore closed unexpectedly");
+            let _permit = semaphore
+                .acquire()
+                .await
+                .expect("semaphore closed unexpectedly");
             bar.set_message(format!("{} ({})", project.name, project.package_manager));
             let result =
                 crate::npm::updater::update_project(&project, &root, &project_results).await;

@@ -12,7 +12,7 @@ pub mod discovery;
 mod pm_bun;
 mod pm_npm;
 mod pm_pnpm;
-pub mod pm_version_check;
+pub(crate) mod pm_version_check;
 mod pm_yarn;
 pub mod resolver;
 pub mod updater;
@@ -43,6 +43,41 @@ impl PackageManager {
             Self::Pnpm => "pnpm",
             Self::Yarn => "yarn",
             Self::Bun => "bun",
+        }
+    }
+
+    /// Runs `list_packages` and `outdated_packages` concurrently for this PM.
+    pub(crate) async fn run_queries(
+        self,
+        dir: &Path,
+    ) -> Result<(Vec<InstalledPackage>, HashMap<String, OutdatedEntry>)> {
+        match self {
+            Self::Npm => tokio::try_join!(
+                pm_npm::Npm.list_packages(dir),
+                pm_npm::Npm.outdated_packages(dir)
+            ),
+            Self::Pnpm => tokio::try_join!(
+                pm_pnpm::Pnpm.list_packages(dir),
+                pm_pnpm::Pnpm.outdated_packages(dir)
+            ),
+            Self::Yarn => tokio::try_join!(
+                pm_yarn::Yarn.list_packages(dir),
+                pm_yarn::Yarn.outdated_packages(dir)
+            ),
+            Self::Bun => tokio::try_join!(
+                pm_bun::Bun.list_packages(dir),
+                pm_bun::Bun.outdated_packages(dir)
+            ),
+        }
+    }
+
+    /// Runs the PM's native update command.
+    pub(crate) async fn update(self, dir: &Path) -> Result<String> {
+        match self {
+            Self::Npm => pm_npm::Npm.update_packages(dir).await,
+            Self::Pnpm => pm_pnpm::Pnpm.update_packages(dir).await,
+            Self::Yarn => pm_yarn::Yarn.update_packages(dir).await,
+            Self::Bun => pm_bun::Bun.update_packages(dir).await,
         }
     }
 }
@@ -80,6 +115,19 @@ pub trait PackageManagerResolver {
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>>;
     /// Runs the package manager's native update command, returning stdout.
     async fn update_packages(&self, dir: &Path) -> Result<String>;
+}
+
+/// Runs a PM's `outdated` command and parses the JSON result into an `OutdatedEntry` map.
+pub(crate) async fn outdated_json(
+    pm_name: &str,
+    args: &[&str],
+    dir: &Path,
+) -> Result<HashMap<String, OutdatedEntry>> {
+    Ok(
+        run_pm_json::<HashMap<String, OutdatedEntry>>(pm_name, args, dir)
+            .await?
+            .unwrap_or_default(),
+    )
 }
 
 /// Runs a package manager command and returns stdout, or errors on non-zero exit.

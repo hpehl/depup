@@ -71,6 +71,15 @@ pub struct ResolveConfig<'a> {
     pub json: bool,
 }
 
+/// Prints an empty-result message: `[]` for JSON mode, a human-readable message otherwise.
+pub fn print_empty(json: bool, message: &str) {
+    if json {
+        println!("[]");
+    } else {
+        println!("{message}");
+    }
+}
+
 /// Results from the shared version resolution pipeline.
 pub struct PipelineResult {
     pub results: Vec<CheckResult>,
@@ -205,7 +214,10 @@ fn spawn_npm_resolves(
         let root = root.to_path_buf();
         let bar = bar.clone();
         join_set.spawn(async move {
-            let _permit = semaphore.acquire().await.expect("semaphore closed unexpectedly");
+            let _permit = semaphore
+                .acquire()
+                .await
+                .expect("semaphore closed unexpectedly");
             bar.set_message(format!("{} ({})", project.name, project.package_manager));
             let results = crate::npm::resolver::resolve_project(&project, &root)
                 .await

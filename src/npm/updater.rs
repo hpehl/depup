@@ -6,7 +6,6 @@ use std::path::Path;
 
 use super::discovery::NpmProject;
 use super::pm_version_check;
-use super::{PackageManager, PackageManagerResolver, pm_bun, pm_npm, pm_pnpm, pm_yarn};
 use crate::model::{CheckResult, CommandResult, DependencyKind, UpdateResult};
 
 /// Runs the native update command for a single npm project and maps the
@@ -24,12 +23,7 @@ pub async fn update_project(
 
     // Update regular package dependencies via the PM's native update command
     if !package_deps.is_empty() {
-        let result = match project.package_manager {
-            PackageManager::Npm => pm_npm::Npm.update_packages(&project.path).await,
-            PackageManager::Pnpm => pm_pnpm::Pnpm.update_packages(&project.path).await,
-            PackageManager::Yarn => pm_yarn::Yarn.update_packages(&project.path).await,
-            PackageManager::Bun => pm_bun::Bun.update_packages(&project.path).await,
-        };
+        let result = project.package_manager.update(&project.path).await;
 
         match result {
             Ok(_) => {

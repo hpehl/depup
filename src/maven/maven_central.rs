@@ -43,6 +43,11 @@ impl MavenVersionResolver {
                 ArtifactKind::Plugin => r.kind == RepositoryKind::Plugin,
             })
             .filter(|r| r.url.starts_with("https://") || r.url.starts_with("http://"))
+            .inspect(|r| {
+                if r.url.starts_with("http://") {
+                    eprintln!("Warning: repository '{}' uses HTTP (not HTTPS)", r.url);
+                }
+            })
             .map(|r| r.url.as_str())
             .collect()
     }
@@ -201,11 +206,11 @@ async fn fetch_versions(
         .await
         .map_err(|e| DepupError::http_request_failed(&url, &e.to_string()))?;
 
-    Ok(parse_metadata_versions(&body))
+    parse_metadata_versions(&body)
 }
 
 /// Parses `<version>` elements from a `maven-metadata.xml` response.
-fn parse_metadata_versions(xml: &str) -> Vec<String> {
+fn parse_metadata_versions(xml: &str) -> Result<Vec<String>> {
     let mut reader = Reader::from_str(xml);
     let mut versions = Vec::new();
     let mut path_stack: Vec<String> = Vec::new();
@@ -239,12 +244,19 @@ fn parse_metadata_versions(xml: &str) -> Vec<String> {
                     text_buf.push_str(&unescaped);
                 }
             }
-            Ok(Event::Eof) | Err(_) => break,
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                return Err(DepupError::http_request_failed(
+                    "maven-metadata.xml",
+                    &format!("XML parse error: {e}"),
+                )
+                .into());
+            }
             _ => {}
         }
     }
 
-    versions
+    Ok(versions)
 }
 
 /// Filters out snapshots (always) and pre-releases (when `releases_only` is true).
@@ -287,7 +299,7 @@ mod tests {
   </versioning>
 </metadata>"#;
 
-        let versions = parse_metadata_versions(xml);
+        let versions = parse_metadata_versions(xml).unwrap();
         assert_eq!(versions, vec!["1.0.0", "1.1.0", "2.0.0"]);
     }
 
@@ -304,7 +316,7 @@ mod tests {
   </versioning>
 </metadata>"#;
 
-        let versions = parse_metadata_versions(xml);
+        let versions = parse_metadata_versions(xml).unwrap();
         assert_eq!(
             versions,
             vec!["1.0.0", "1.1.0-SNAPSHOT", "2.0.0-alpha1", "2.0.0.Final"]
@@ -314,7 +326,7 @@ mod tests {
     #[test]
     fn parse_empty_metadata() {
         let xml = r#"<metadata><versioning><versions></versions></versioning></metadata>"#;
-        let versions = parse_metadata_versions(xml);
+        let versions = parse_metadata_versions(xml).unwrap();
         assert!(versions.is_empty());
     }
 

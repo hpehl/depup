@@ -76,7 +76,11 @@ pub fn parse_pom(path: &Path) -> Result<Project> {
     if metadata.len() > MAX_POM_SIZE {
         return Err(DepupError::pom_parse_failed(
             &path_str,
-            &format!("POM file too large: {} bytes (max {})", metadata.len(), MAX_POM_SIZE),
+            &format!(
+                "POM file too large: {} bytes (max {})",
+                metadata.len(),
+                MAX_POM_SIZE
+            ),
         )
         .into());
     }

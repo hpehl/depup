@@ -10,32 +10,15 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use super::pm_version_check;
-use super::{PackageManager, PackageManagerResolver, pm_bun, pm_npm, pm_pnpm, pm_yarn};
 use crate::model::{CheckResult, CommandResult, Dependency, DependencyKind, Ecosystem};
 use crate::version;
-
-/// Runs `list_packages` and `outdated_packages` concurrently for any resolver.
-async fn run_queries(
-    resolver: &impl PackageManagerResolver,
-    dir: &Path,
-) -> Result<(
-    Vec<super::InstalledPackage>,
-    std::collections::HashMap<String, super::OutdatedEntry>,
-)> {
-    tokio::try_join!(resolver.list_packages(dir), resolver.outdated_packages(dir))
-}
 
 /// Resolves versions for a single npm project.
 /// Dispatches to the detected package manager and merges installed + outdated data.
 pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<CheckResult>> {
     let source = project.relative_source(root);
 
-    let (installed, outdated) = match project.package_manager {
-        PackageManager::Npm => run_queries(&pm_npm::Npm, &project.path).await?,
-        PackageManager::Pnpm => run_queries(&pm_pnpm::Pnpm, &project.path).await?,
-        PackageManager::Yarn => run_queries(&pm_yarn::Yarn, &project.path).await?,
-        PackageManager::Bun => run_queries(&pm_bun::Bun, &project.path).await?,
-    };
+    let (installed, outdated) = project.package_manager.run_queries(&project.path).await?;
 
     let mut results: Vec<CheckResult> = installed
         .into_iter()

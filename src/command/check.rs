@@ -24,11 +24,7 @@ pub async fn check(matches: &ArgMatches) -> Result<bool> {
     let all_results = pipeline.results;
 
     if all_results.is_empty() {
-        if setup.json {
-            println!("[]");
-        } else {
-            println!("No supported project found.");
-        }
+        super::pipeline::print_empty(setup.json, "No supported project found.");
         return Ok(false);
     }
 

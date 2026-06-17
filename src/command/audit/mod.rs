@@ -36,11 +36,7 @@ pub async fn audit(matches: &ArgMatches) -> Result<bool> {
         .collect();
 
     if auditable.is_empty() {
-        if setup.json {
-            println!("[]");
-        } else {
-            println!("No dependencies to audit.");
-        }
+        crate::command::pipeline::print_empty(setup.json, "No dependencies to audit.");
         return Ok(false);
     }
 

@@ -84,17 +84,15 @@ impl Filter {
             None => None,
         };
 
-        let kind = if try_get_flag(matches, "dependencies") {
-            Some(KindFilter::Dependencies)
-        } else if try_get_flag(matches, "plugins") {
-            Some(KindFilter::Plugins)
-        } else if try_get_flag(matches, "dev-deps") {
-            Some(KindFilter::DevDeps)
-        } else if try_get_flag(matches, "tools") {
-            Some(KindFilter::Tools)
-        } else {
-            None
-        };
+        let kind = [
+            ("dependencies", KindFilter::Dependencies),
+            ("plugins", KindFilter::Plugins),
+            ("dev-deps", KindFilter::DevDeps),
+            ("tools", KindFilter::Tools),
+        ]
+        .into_iter()
+        .find(|(flag, _)| try_get_flag(matches, flag))
+        .map(|(_, k)| k);
 
         let severity = matches
             .try_get_one::<String>("severity")

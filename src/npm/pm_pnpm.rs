@@ -57,13 +57,7 @@ impl PackageManagerResolver for Pnpm {
     }
 
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>> {
-        Ok(super::run_pm_json::<HashMap<String, OutdatedEntry>>(
-            "pnpm",
-            &["outdated", "--format", "json"],
-            dir,
-        )
-        .await?
-        .unwrap_or_default())
+        super::outdated_json("pnpm", &["outdated", "--format", "json"], dir).await
     }
 
     async fn update_packages(&self, dir: &Path) -> Result<String> {
