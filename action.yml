@@ -1,5 +1,5 @@
 name: 'depup'
-description: 'Check dependency versions and audit vulnerabilities across Maven and npm ecosystems'
+description: 'Create PRs for outdated dependencies that dependabot cannot handle'
 author: 'Harald Pehl'
 
 branding:
@@ -7,38 +7,43 @@ branding:
   color: 'blue'
 
 inputs:
-  command:
-    description: 'Subcommand to run (check, audit)'
-    required: false
-    default: 'check'
   path:
     description: 'Path to the project root'
     required: false
     default: '.'
-  args:
-    description: 'Additional CLI arguments (e.g., --outdated, --severity critical)'
-    required: false
-    default: ''
   version:
-    description: 'depup version to install (e.g., 0.2.2). Defaults to latest release.'
+    description: 'depup version to install (e.g., 0.3.0). Defaults to latest release.'
     required: false
     default: 'latest'
-  comment:
-    description: 'Post results as a PR comment (only works on pull_request events)'
+  stable:
+    description: 'Exclude pre-release versions (alpha, beta, RC, milestone)'
     required: false
     default: 'false'
+  include:
+    description: 'Only include Maven artifacts matching glob patterns (comma-separated, e.g., "org.junit:*,org.apache:*"). Exclude takes precedence over include.'
+    required: false
+    default: ''
+  exclude:
+    description: 'Exclude Maven artifacts matching glob patterns (comma-separated, e.g., "*:guava"). Takes precedence over include.'
+    required: false
+    default: ''
   token:
-    description: 'GitHub token for posting PR comments'
+    description: 'GitHub token for creating PRs and branches'
     required: false
     default: ${{ github.token }}
+  base-branch:
+    description: 'Branch to create PRs against (defaults to repository default branch)'
+    required: false
+    default: ''
+  labels:
+    description: 'Comma-separated PR labels (must already exist in the repo)'
+    required: false
+    default: 'dependencies'
 
 outputs:
   exit-code:
-    description: 'Exit code from depup (0=clean, 1=outdated, 2=vulns, 3=critical/high vulns)'
-    value: ${{ steps.run.outputs.exit-code }}
-  json:
-    description: 'Path to the raw JSON output file'
-    value: ${{ steps.run.outputs.json }}
+    description: 'Exit code (0=no outdated deps, 1=outdated deps found)'
+    value: ${{ steps.create-prs.outputs.exit-code }}
 
 runs:
   using: 'composite'
@@ -50,7 +55,6 @@ runs:
       run: |
         set -euo pipefail
 
-        # Determine OS and architecture
         case "$RUNNER_OS" in
           Linux)  TARGET="x86_64-unknown-linux-gnu" ;;
           macOS)
@@ -62,14 +66,12 @@ runs:
           *) echo "::error::Unsupported runner OS: $RUNNER_OS"; exit 1 ;;
         esac
 
-        # Resolve version
         if [ "$DEPUP_VERSION" = "latest" ]; then
           DEPUP_VERSION=$(gh release view --repo hpehl/depup --json tagName -q '.tagName')
         elif [[ ! "$DEPUP_VERSION" =~ ^v ]]; then
           DEPUP_VERSION="v${DEPUP_VERSION}"
         fi
 
-        # Download and extract
         URL="https://github.com/hpehl/depup/releases/download/${DEPUP_VERSION}/depup-${TARGET}.tar.gz"
         echo "::group::Installing depup ${DEPUP_VERSION} for ${TARGET}"
         curl -fsSL "$URL" | tar xz -C /usr/local/bin
@@ -77,64 +79,16 @@ runs:
         echo "::endgroup::"
         echo "Installed depup ${DEPUP_VERSION}"
 
-    - name: Run depup
-      id: run
+    - name: Create PRs for outdated dependencies
+      id: create-prs
       shell: bash
       env:
-        DEPUP_COMMAND: ${{ inputs.command }}
         DEPUP_PATH: ${{ inputs.path }}
-        DEPUP_ARGS: ${{ inputs.args }}
-      run: |
-        set -uo pipefail
-
-        OUTPUT_FILE="${RUNNER_TEMP}/depup-output.json"
-        echo "json=${OUTPUT_FILE}" >> "$GITHUB_OUTPUT"
-
-        # Run depup with --json and capture exit code
-        set +e
-        depup ${DEPUP_COMMAND} --json ${DEPUP_ARGS} "${DEPUP_PATH}" > "$OUTPUT_FILE" 2>&1
-        EXIT_CODE=$?
-        set -e
-        echo "exit-code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
-
-    - name: Generate report
-      shell: bash
-      env:
-        DEPUP_COMMAND: ${{ inputs.command }}
-      run: |
-        set -euo pipefail
-        REPORT_FILE="${RUNNER_TEMP}/depup-report.md"
-        bash "${{ github.action_path }}/action-scripts/format-report.sh" \
-          "${{ steps.run.outputs.json }}" \
-          "${DEPUP_COMMAND}" \
-          "${{ steps.run.outputs.exit-code }}" \
-          > "$REPORT_FILE"
-        cat "$REPORT_FILE" >> "$GITHUB_STEP_SUMMARY"
-
-    - name: Post PR comment
-      if: inputs.comment == 'true' && github.event_name == 'pull_request'
-      shell: bash
-      env:
+        DEPUP_STABLE: ${{ inputs.stable }}
+        DEPUP_INCLUDE: ${{ inputs.include }}
+        DEPUP_EXCLUDE: ${{ inputs.exclude }}
+        DEPUP_BASE_BRANCH: ${{ inputs.base-branch }}
+        DEPUP_LABELS: ${{ inputs.labels }}
         GH_TOKEN: ${{ inputs.token }}
       run: |
-        set -euo pipefail
-        REPORT_FILE="${RUNNER_TEMP}/depup-report.md"
-        PR_NUMBER="${{ github.event.pull_request.number }}"
-
-        # Check if a previous depup comment exists (identified by the marker)
-        MARKER="<!-- depup-report -->"
-        BODY="$(printf '%s\n%s' "$MARKER" "$(cat "$REPORT_FILE")")"
-
-        EXISTING_COMMENT_ID=$(gh api \
-          "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-          --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" \
-          2>/dev/null | head -1)
-
-        if [ -n "$EXISTING_COMMENT_ID" ]; then
-          gh api \
-            --method PATCH \
-            "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
-            -f body="$BODY"
-        else
-          gh pr comment "$PR_NUMBER" --body "$BODY"
-        fi
+        bash "${{ github.action_path }}/action-scripts/create-prs.sh"
