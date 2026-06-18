@@ -403,16 +403,25 @@ fn maven_npm_conflict() {
 }
 
 #[test]
-fn kind_filter_conflict() {
+fn kind_filters_combinable() {
     let output = depup()
         .arg("check")
+        .arg("--json")
         .arg("--dependencies")
         .arg("--plugins")
         .arg(&fixture_dir("multi-module"))
         .output()
         .expect("Failed to run depup");
 
-    assert!(!output.status.success());
+    assert!(output.status.success() || output.status.code() == Some(1));
+    let results = parse_json_output(&output);
+    for r in &results {
+        let kind = r["kind"].as_str().unwrap();
+        assert!(
+            kind == "dependency" || kind == "plugin",
+            "unexpected kind: {kind}"
+        );
+    }
 }
 
 #[test]

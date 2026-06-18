@@ -61,10 +61,6 @@ pub fn build_app() -> Command {
             audit_args(Command::new("audit")).about("Audit dependencies for known vulnerabilities"),
         )
         .subcommand(
-            sbom_args(Command::new("sbom"))
-                .about("Generate a CycloneDX 1.5 SBOM (Software Bill of Materials)"),
-        )
-        .subcommand(
             Command::new("completions")
                 .about("Generate and install shell completions")
                 .arg(
@@ -137,38 +133,25 @@ fn common_filter_args(cmd: Command) -> Command {
 }
 
 fn kind_args(cmd: Command, include_tools: bool) -> Command {
-    let mut deps_conflicts = vec!["plugins", "dev-deps"];
-    let mut plugins_conflicts: Vec<&str> = vec!["dev-deps"];
-    if include_tools {
-        deps_conflicts.push("tools");
-        plugins_conflicts.push("tools");
-    }
-
     let mut cmd = cmd
         .arg(
             Arg::new("dependencies")
                 .long("dependencies")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all(deps_conflicts)
-                .help("Only show dependencies"),
+                .help("Only show dependencies (combinable with other kind flags)"),
         )
         .arg(
             Arg::new("plugins")
                 .long("plugins")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all(plugins_conflicts)
-                .help("Only show plugins"),
+                .help("Only show plugins (combinable with other kind flags)"),
         )
-        .arg({
-            let mut arg = Arg::new("dev-deps")
+        .arg(
+            Arg::new("dev-deps")
                 .long("dev-deps")
                 .action(ArgAction::SetTrue)
-                .help("Only show dev dependencies");
-            if include_tools {
-                arg = arg.conflicts_with("tools");
-            }
-            arg
-        });
+                .help("Only show dev dependencies (combinable with other kind flags)"),
+        );
 
     if include_tools {
         cmd = cmd.arg(
@@ -176,7 +159,7 @@ fn kind_args(cmd: Command, include_tools: bool) -> Command {
                 .long("tools")
                 .visible_alias("other")
                 .action(ArgAction::SetTrue)
-                .help("Only show tool version checks (Node.js, package manager versions)"),
+                .help("Only show tool version checks (combinable with other kind flags)"),
         );
     }
     cmd
@@ -197,16 +180,6 @@ fn update_args(cmd: Command) -> Command {
             .long("dry-run")
             .action(ArgAction::SetTrue)
             .help("Show what would be updated without making changes"),
-    )
-}
-
-fn sbom_args(cmd: Command) -> Command {
-    kind_args(common_filter_args(cmd), false).arg(
-        Arg::new("output")
-            .short('o')
-            .long("output")
-            .value_name("FILE")
-            .help("Write SBOM to file instead of stdout"),
     )
 }
 
@@ -267,10 +240,11 @@ mod tests {
     }
 
     #[test]
-    fn kind_filter_conflicts_rejected() {
-        assert!(parse(&["depup", "check", "--dependencies", "--plugins"]).is_err());
-        assert!(parse(&["depup", "check", "--dependencies", "--tools"]).is_err());
-        assert!(parse(&["depup", "check", "--plugins", "--dev-deps"]).is_err());
+    fn kind_filters_combinable() {
+        assert!(parse(&["depup", "check", "--dependencies", "--plugins"]).is_ok());
+        assert!(parse(&["depup", "check", "--dependencies", "--tools"]).is_ok());
+        assert!(parse(&["depup", "check", "--plugins", "--dev-deps"]).is_ok());
+        assert!(parse(&["depup", "check", "--dependencies", "--plugins", "--tools"]).is_ok());
     }
 
     #[test]

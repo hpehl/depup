@@ -63,7 +63,7 @@ pub struct Filter {
     pub stable: bool,
     pub managed: Option<bool>,
     pub ecosystem: Option<Ecosystem>,
-    pub kind: Option<KindFilter>,
+    pub kinds: Vec<KindFilter>,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
     pub vulnerable: bool,
@@ -84,15 +84,16 @@ impl Filter {
             None => None,
         };
 
-        let kind = [
+        let kinds: Vec<KindFilter> = [
             ("dependencies", KindFilter::Dependencies),
             ("plugins", KindFilter::Plugins),
             ("dev-deps", KindFilter::DevDeps),
             ("tools", KindFilter::Tools),
         ]
         .into_iter()
-        .find(|(flag, _)| try_get_flag(matches, flag))
-        .map(|(_, k)| k);
+        .filter(|(flag, _)| try_get_flag(matches, flag))
+        .map(|(_, k)| k)
+        .collect();
 
         let severity = matches
             .try_get_one::<String>("severity")
@@ -119,7 +120,7 @@ impl Filter {
             stable: try_get_flag(matches, "stable"),
             managed,
             ecosystem,
-            kind,
+            kinds,
             include,
             exclude,
             vulnerable: try_get_flag(matches, "vulnerable"),
@@ -154,8 +155,8 @@ impl Filter {
         {
             return false;
         }
-        if let Some(kind) = self.kind
-            && !kind.matches(result.kind())
+        if !self.kinds.is_empty()
+            && !self.kinds.iter().any(|k| k.matches(result.kind()))
         {
             return false;
         }
@@ -359,7 +360,7 @@ mod tests {
     #[test]
     fn kind_filter_dependencies() {
         let f = Filter {
-            kind: Some(KindFilter::Dependencies),
+            kinds: vec![KindFilter::Dependencies],
             ..Filter::default()
         };
         assert!(f.matches(&maven_dep(true)));
@@ -372,7 +373,7 @@ mod tests {
     #[test]
     fn kind_filter_plugins() {
         let f = Filter {
-            kind: Some(KindFilter::Plugins),
+            kinds: vec![KindFilter::Plugins],
             ..Filter::default()
         };
         assert!(f.matches(&maven_plugin()));
@@ -383,7 +384,7 @@ mod tests {
     #[test]
     fn kind_filter_dev_deps() {
         let f = Filter {
-            kind: Some(KindFilter::DevDeps),
+            kinds: vec![KindFilter::DevDeps],
             ..Filter::default()
         };
         assert!(f.matches(&npm_dev_dep()));
@@ -394,7 +395,7 @@ mod tests {
     #[test]
     fn kind_filter_tool_versions() {
         let f = Filter {
-            kind: Some(KindFilter::Tools),
+            kinds: vec![KindFilter::Tools],
             ..Filter::default()
         };
         assert!(f.matches(&tool_version_result()));
@@ -403,10 +404,54 @@ mod tests {
     }
 
     #[test]
+    fn multiple_kind_filters_combine_as_or() {
+        let f = Filter {
+            kinds: vec![KindFilter::Dependencies, KindFilter::Plugins],
+            ..Filter::default()
+        };
+        assert!(f.matches(&maven_dep(true)));
+        assert!(f.matches(&maven_plugin()));
+        assert!(f.matches(&npm_dep()));
+        assert!(!f.matches(&npm_dev_dep()));
+        assert!(!f.matches(&tool_version_result()));
+    }
+
+    #[test]
+    fn all_kind_filters_match_everything() {
+        let f = Filter {
+            kinds: vec![
+                KindFilter::Dependencies,
+                KindFilter::Plugins,
+                KindFilter::DevDeps,
+                KindFilter::Tools,
+            ],
+            ..Filter::default()
+        };
+        assert!(f.matches(&maven_dep(true)));
+        assert!(f.matches(&maven_plugin()));
+        assert!(f.matches(&npm_dep()));
+        assert!(f.matches(&npm_dev_dep()));
+        assert!(f.matches(&tool_version_result()));
+    }
+
+    #[test]
+    fn kind_filters_with_ecosystem_filter() {
+        let f = Filter {
+            ecosystem: Some(Ecosystem::Maven),
+            kinds: vec![KindFilter::Dependencies, KindFilter::Tools],
+            ..Filter::default()
+        };
+        assert!(f.matches(&maven_dep(true)));
+        assert!(f.matches(&tool_version_result()));
+        assert!(!f.matches(&maven_plugin()));
+        assert!(!f.matches(&npm_dep()));
+    }
+
+    #[test]
     fn composable_filters() {
         let f = Filter {
             ecosystem: Some(Ecosystem::Maven),
-            kind: Some(KindFilter::Dependencies),
+            kinds: vec![KindFilter::Dependencies],
             managed: Some(true),
             outdated: true,
             stable: false,
