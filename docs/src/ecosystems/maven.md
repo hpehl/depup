@@ -70,6 +70,18 @@ When running `depup update`, version numbers in POM files are rewritten in place
 
 The updater is surgical: it only changes the version text, leaving the rest of the XML structure untouched.
 
+## Comparison with Dependabot
+
+GitHub's Dependabot can update Maven dependencies with inline versions and simple property-based versions (e.g., `<jackson.version>2.15.0</jackson.version>`). However, it fails when properties rely on more complex patterns:
+
+- **Chained property references** — a property whose value is another `${...}` reference
+- **Cross-module resolution** — properties defined in a parent POM but referenced in child modules
+- **Non-standard property names** — properties that don't follow the `<artifactId>.version` convention
+- **Tool version properties** — properties like `version.node` or `version.npm` that reference non-Maven registries
+- **Custom repositories** — artifacts hosted outside Maven Central
+
+`depup` handles all of these cases. It resolves chained properties up to 10 levels deep, walks the full module tree, supports arbitrary property names, queries custom repositories, and resolves tool versions against their native registries.
+
 ## Requirements
 
 - Network access to Maven Central (`repo1.maven.org`)

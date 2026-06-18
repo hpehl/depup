@@ -4,9 +4,9 @@
 
 ## Why This Action?
 
-Dependabot is great for standard `package.json` dependencies and Maven dependencies with inline versions. However, it cannot handle:
+Dependabot handles standard `package.json` dependencies, Maven dependencies with inline versions, and simple property-based versions (e.g., `<jackson.version>2.15.0</jackson.version>`). However, it cannot handle:
 
-- **Maven property-based versions** — `<properties>` entries like `version.junit` that drive multiple dependencies across modules
+- **Complex Maven property patterns** — chained property references, cross-module resolution (properties defined in a parent POM but used in child modules), or non-standard property naming conventions
 - **Tool version properties** — Node.js, npm, pnpm, yarn versions managed in Maven POMs (e.g., `version.node`)
 - **Custom Maven repositories** — artifacts hosted on private or non-Central repositories
 - **npm `packageManager` field** — the `"packageManager": "pnpm@9.15.0"` field in `package.json`
