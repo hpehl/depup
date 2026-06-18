@@ -6,5 +6,6 @@
 .claude/
 .idea/
 .vscode/
+/docs/book
 /target
 node_modules/

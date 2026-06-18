@@ -1,0 +1,12 @@
+[book]
+title = "depup"
+description = "Check and update dependency versions across multiple ecosystems"
+authors = ["Harald Pehl"]
+language = "en"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/hpehl/depup"
+edit-url-template = "https://github.com/hpehl/depup/edit/main/docs/src/{path}"
