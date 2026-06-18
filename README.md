@@ -338,9 +338,20 @@ jobs:
 
 | Output | Description |
 |--------|-------------|
-| `exit-code` | 0=no outdated deps, 1=outdated deps found |
+| `exit-code` | Action exit code: 0=no outdated deps, 1=outdated deps found |
 
 ### How it works
+
+The action loops over 6 dependency categories, creating one PR per category when outdated dependencies are found:
+
+| Category | Branch Name |
+|----------|-------------|
+| Maven managed dependencies | `depup/maven-managed-dependencies` |
+| Maven unmanaged dependencies | `depup/maven-unmanaged-dependencies` |
+| Maven managed plugins | `depup/maven-managed-plugins` |
+| Maven unmanaged plugins | `depup/maven-unmanaged-plugins` |
+| Maven tool versions | `depup/maven-tools` |
+| npm packageManager versions | `depup/npm-tools` |
 
 For each category:
 
