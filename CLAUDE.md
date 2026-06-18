@@ -24,8 +24,6 @@ cargo run -- check --json /path           # check with JSON output
 cargo run -- check --outdated /path       # only show outdated dependencies
 cargo run -- update /path                 # update outdated dependencies
 cargo run -- audit /path                  # audit for known vulnerabilities
-cargo run -- sbom /path                   # generate CycloneDX 1.5 SBOM
-cargo run -- sbom -o bom.json /path       # write SBOM to file
 cargo run -- completions                  # generate shell completions
 cargo clippy                              # lint
 cargo fmt                                 # format
@@ -33,15 +31,15 @@ cargo fmt                                 # format
 
 ## Architecture
 
-The check pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking. The update pipeline reuses the check pipeline to identify outdated dependencies, then applies updates: **Check → Filter Outdated → Update → Report**. The audit pipeline reuses the check pipeline to collect dependency versions, then queries OSV.dev for known vulnerabilities: **Check → Filter → OSV Batch Query → Fetch Details → Report**. The sbom pipeline reuses the check pipeline for discovery, then builds a CycloneDX 1.5 JSON Bill of Materials: **Check → Filter → Build BOM → Output**. Check, update, and audit use labeled progress bars via `progress::phase_bar()`: check has one phase ("Collecting"), while update ("Collecting" + "Updating") and audit ("Collecting" + "Auditing") have two.
+The check pipeline flows: **Discovery → Check → Comparison → Output**, with ecosystem-specific discovery and checking. The update pipeline reuses the check pipeline to identify outdated dependencies, then applies updates: **Check → Filter Outdated → Update → Report**. The audit pipeline reuses the check pipeline to collect dependency versions, then queries OSV.dev for known vulnerabilities: **Check → Filter → OSV Batch Query → Fetch Details → Report**. Check, update, and audit use labeled progress bars via `progress::phase_bar()`: check has one phase ("Collecting"), while update ("Collecting" + "Updating") and audit ("Collecting" + "Auditing") have two.
 
 Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or update errors, 2 = vulnerabilities found, 3 = critical/high vulnerabilities found.
 
 ### CLI Layer
 
-- **`app.rs`** — Defines the clap `Command` tree using the builder API (not derive macros). Subcommands: `check`, `update`, `audit`, `sbom`, `completions`. Global `--json` flag. Styled help text. Separated from `main.rs` so the completion system can build the command tree independently.
+- **`app.rs`** — Defines the clap `Command` tree using the builder API (not derive macros). Subcommands: `check`, `update`, `audit`, `completions`. Global `--json` flag. Styled help text. Separated from `main.rs` so the completion system can build the command tree independently.
 
-- **`main.rs`** — Entry point. Wires `CompleteEnv` for dynamic shell completions, dispatches subcommands (`check`, `update`, `audit`, `sbom`, `completions`), handles top-level error reporting with JSON error envelope support. Returns granular exit codes (0/1/2/3) for CI integration.
+- **`main.rs`** — Entry point. Wires `CompleteEnv` for dynamic shell completions, dispatches subcommands (`check`, `update`, `audit`, `completions`), handles top-level error reporting with JSON error envelope support. Returns granular exit codes (0/1/2/3) for CI integration.
 
 - **`constants.rs`** — Static values: Maven Central URL, Node.js dist URL, npm registry URL, concurrency limits, HTTP timeout, shared HTTP client factory.
 
@@ -60,8 +58,6 @@ Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or upda
 - **`audit/`** — Audit subcommand module:
   - **`mod.rs`** — Orchestrates the audit subcommand. Calls `pipeline::resolve_versions()` to discover dependencies with versions, filters out tool versions (they aren't registry packages with OSV vulnerability advisories), queries OSV.dev via `osv::audit()`, applies severity and `--vulnerable` filters, outputs results as table or JSON. Same output style as check/update: progress bar, grouped table, summary line, timing. Exit code 2 when vulnerabilities are found, 3 for critical/high.
   - **`osv.rs`** — OSV.dev API client for vulnerability auditing. Queries the batch endpoint (`POST /v1/querybatch`) with dependency coordinates and versions, fetches full vulnerability details from individual endpoints (`GET /v1/vulns/{id}`). Maps `Ecosystem::Maven` to OSV's `"Maven"` and `Ecosystem::Npm` to `"npm"`. Deduplicates queries and vuln IDs. Extracts severity from CVSS scores or ecosystem/database-specific labels. Skips tool versions.
-
-- **`sbom.rs`** — Orchestrates the sbom subcommand. Calls `pipeline::resolve_versions()`, filters out tool versions, builds a CycloneDX 1.5 BOM via `sbom::build_bom()`, writes to stdout or file (`--output`).
 
 - **`completions.rs`** — Shell completion generation and installation. Supports bash, zsh, fish, elvish, powershell.
 
@@ -108,15 +104,11 @@ Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or upda
 
 - **`updater.rs`** — Orchestrates npm updates by delegating to each project's package manager native update command (`npm update`, `pnpm update`, `yarn upgrade`, `bun update`).
 
-### SBOM (`src/sbom.rs`)
-
-- **`sbom.rs`** — CycloneDX 1.5 BOM generation. `build_bom()` converts `CheckResult` values into a `Bom` struct with `Metadata` (tool info, timestamp) and `Component` entries (type, group, name, version, PURL). PURL generation follows the Package URL spec: Maven → `pkg:maven/groupId/artifactId@version`, npm → `pkg:npm/package@version` (with `%40` encoding for scoped packages). Timestamp generated without external crate via Howard Hinnant's civil-from-days algorithm. All types derive `Serialize`.
-
 ### GitHub Action (`action.yml`)
 
 - **`action.yml`** — Composite GitHub Action. Installs depup from GitHub Releases, runs the requested subcommand with `--json`, and generates a Markdown report as a GitHub Actions job summary. Outputs: `exit-code` and `json` (path to raw output file).
 
-- **`action-scripts/format-report.sh`** — Formats depup JSON output as Markdown tables for job summaries. Handles check (outdated table), audit (vulnerability table), and sbom (component count) output formats.
+- **`action-scripts/format-report.sh`** — Formats depup JSON output as Markdown tables for job summaries. Handles check (outdated table) and audit (vulnerability table) output formats.
 
 ### Shared Layer
 

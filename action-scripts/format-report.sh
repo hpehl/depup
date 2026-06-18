@@ -70,18 +70,6 @@ case "$COMMAND" in
     format_audit
     ;;
 
-  sbom)
-    echo "## :package: depup sbom"
-    echo ""
-    # SBOM output is a single object, not an array
-    if jq -e '.components' "$JSON_FILE" > /dev/null 2>&1; then
-      COMP_COUNT=$(jq '.components | length' "$JSON_FILE")
-      echo "Generated CycloneDX 1.5 SBOM with **${COMP_COUNT}** components."
-    else
-      echo "SBOM generated. See the artifact for the full output."
-    fi
-    ;;
-
   *)
     echo "## depup ${COMMAND}"
     echo ""

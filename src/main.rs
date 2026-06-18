@@ -13,7 +13,6 @@ mod model;
 mod npm;
 mod output;
 mod progress;
-mod sbom;
 mod version;
 
 use anyhow::Result;
@@ -59,7 +58,6 @@ async fn run() -> Result<u8> {
         Some(("check", m)) => command::check::check(m).await,
         Some(("update", m)) => command::update::update(m).await,
         Some(("audit", m)) => command::audit::audit(m).await,
-        Some(("sbom", m)) => command::sbom::sbom(m).await,
         Some(("completions", m)) => command::completions::completions(m).map(|()| 0),
         _ => unreachable!("subcommand_required is set"),
     }

@@ -154,34 +154,6 @@ The audit subcommand queries [OSV.dev](https://osv.dev/) for known vulnerabiliti
 
 The exit code is `0` when no vulnerabilities are found, `2` when vulnerabilities are detected, or `3` when critical or high severity vulnerabilities are found (see [Exit Codes](#exit-codes)).
 
-### SBOM
-
-```bash
-# Generate a CycloneDX 1.5 SBOM to stdout
-depup sbom
-
-# Generate SBOM for a specific project
-depup sbom /path/to/project
-
-# Write SBOM to a file
-depup sbom -o bom.json
-
-# Filter by ecosystem
-depup sbom --maven
-depup sbom --npm
-
-# Filter by kind
-depup sbom --dependencies
-depup sbom --plugins
-depup sbom --dev-deps
-
-# Filter by artifact name (glob wildcards)
-depup sbom --include 'org.wildfly:*'
-depup sbom --exclude '*:guava'
-```
-
-The sbom subcommand generates a [CycloneDX](https://cyclonedx.org/) 1.5 JSON Bill of Materials from all discovered dependencies. Output includes [Package URL](https://github.com/package-url/purl-spec) (PURL) identifiers for each component. Tool versions (Node.js, package manager versions) are excluded.
-
 ### Completions
 
 ```bash
@@ -202,7 +174,6 @@ depup completions fish
 | `check` | Check dependencies for newer versions |
 | `update` | Update outdated dependencies in place |
 | `audit` | Audit dependencies for known vulnerabilities via [OSV.dev](https://osv.dev/) |
-| `sbom` | Generate a CycloneDX 1.5 SBOM (Software Bill of Materials) |
 | `completions` | Generate and install shell completions |
 
 ## Ecosystems
@@ -345,19 +316,11 @@ jobs:
         run: exit 1
 ```
 
-### Generate an SBOM
-
-```yaml
-      - uses: hpehl/depup@v0
-        with:
-          command: sbom
-```
-
 ### Inputs
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `command` | `check` | Subcommand to run: `check`, `audit`, or `sbom` |
+| `command` | `check` | Subcommand to run: `check` or `audit` |
 | `path` | `.` | Path to the project root |
 | `args` | | Additional CLI arguments (e.g., `--outdated`, `--maven`, `--severity critical`) |
 | `version` | `latest` | depup version to install (e.g., `0.3.0`) |

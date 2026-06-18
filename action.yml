@@ -1,5 +1,5 @@
 name: 'depup'
-description: 'Check dependency versions, audit vulnerabilities, or generate SBOMs across Maven and npm ecosystems'
+description: 'Check dependency versions and audit vulnerabilities across Maven and npm ecosystems'
 author: 'Harald Pehl'
 
 branding:
@@ -8,7 +8,7 @@ branding:
 
 inputs:
   command:
-    description: 'Subcommand to run (check, audit, sbom)'
+    description: 'Subcommand to run (check, audit)'
     required: false
     default: 'check'
   path:
