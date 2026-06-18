@@ -106,9 +106,11 @@ Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or upda
 
 ### GitHub Action (`action.yml`)
 
-- **`action.yml`** — Composite GitHub Action. Installs depup from GitHub Releases, runs the requested subcommand with `--json`, and generates a Markdown report as a GitHub Actions job summary. Outputs: `exit-code` and `json` (path to raw output file).
+- **`action.yml`** — Composite GitHub Action for creating automatic pull requests for outdated dependencies. Loops over 6 dependency categories (Maven managed/unmanaged deps, Maven managed/unmanaged plugins, Maven tools, npm tools). For each category: checks for outdated deps, skips if no updates or existing PR exists, creates a branch, runs `depup update`, commits changes, and creates a PR. Inputs: `path`, `version`, `stable`, `include`, `exclude`, `token`, `base-branch`, `labels`. Output: `exit-code` (0=no outdated deps, 1=outdated deps found).
 
-- **`action-scripts/format-report.sh`** — Formats depup JSON output as Markdown tables for job summaries. Handles check (outdated table) and audit (vulnerability table) output formats.
+- **`action-scripts/create-prs.sh`** — Main orchestration script. Loops over categories, builds category-specific flags, runs check+update, creates branches, commits, pushes, and creates PRs via `gh pr create`. Skips categories with no changes or existing open PRs.
+
+- **`action-scripts/build-pr-body.sh`** — PR body generator. Takes check JSON output and category label, generates a Markdown table with artifact names, current versions, and latest versions, plus a footer linking to depup.
 
 ### Shared Layer
 

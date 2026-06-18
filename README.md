@@ -272,77 +272,88 @@ esac
 
 ## GitHub Action
 
-`depup` includes a composite GitHub Action for CI integration. It installs `depup` from GitHub Releases, runs the requested subcommand with `--json`, and posts a Markdown report to the GitHub Actions job summary.
+`depup` includes a composite GitHub Action that automatically creates pull requests for outdated dependencies. This complements GitHub's Dependabot by handling what Dependabot cannot:
 
-### Check for outdated dependencies on every PR
+- **Maven property-based versions** — `<properties>` entries like `version.junit` that drive multiple dependencies
+- **Tool version properties** — Node.js, npm, pnpm, yarn versions managed in Maven POMs
+- **Custom Maven repositories** — artifacts not on Maven Central
+- **npm `packageManager` field** — the `"packageManager": "pnpm@9.15.0"` field in `package.json`
+
+The action creates one PR per dependency category (6 categories: Maven managed/unmanaged deps, Maven managed/unmanaged plugins, Maven tools, npm tools). It skips categories with no outdated dependencies or existing open PRs.
+
+### Minimal example
+
+Check everything weekly and create PRs for all categories:
 
 ```yaml
-# .github/workflows/depup.yml
-name: Dependency Check
+name: depup
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday at 6am
+  workflow_dispatch:
 
-on: [pull_request]
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  check:
+  update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: hpehl/depup@v0
-        with:
-          command: check
-          args: '--outdated'
-          comment: 'true'
+      - uses: actions/checkout@v4
+      - uses: hpehl/depup@v1
 ```
 
-When `comment` is `true` and the workflow runs on a `pull_request` event, the report is posted as a PR comment in addition to the job summary. Re-runs update the existing comment in place instead of creating new ones.
-
-### Audit with severity gating
-
-The action always succeeds so the report is generated, but you can check the exit code in a subsequent step to fail the build selectively:
+### Only stable versions, exclude test libraries
 
 ```yaml
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: hpehl/depup@v0
-        id: audit
-        with:
-          command: audit
-          args: '--severity high'
-      - name: Fail on critical/high vulnerabilities
-        if: steps.audit.outputs.exit-code == '3'
-        run: exit 1
+- uses: hpehl/depup@v1
+  with:
+    stable: true
+    exclude: 'org.junit:*,org.mockito:*'
+```
+
+### Only specific artifacts
+
+```yaml
+- uses: hpehl/depup@v1
+  with:
+    include: 'org.wildfly:*,org.jboss:*'
 ```
 
 ### Inputs
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `command` | `check` | Subcommand to run: `check` or `audit` |
 | `path` | `.` | Path to the project root |
-| `args` | | Additional CLI arguments (e.g., `--outdated`, `--maven`, `--severity critical`) |
-| `version` | `latest` | depup version to install (e.g., `0.3.0`) |
-| `comment` | `false` | Post results as a PR comment (only on `pull_request` events) |
-| `token` | `github.token` | GitHub token for PR comment posting |
+| `version` | `latest` | depup version to install (e.g., `0.4.0`) |
+| `stable` | `false` | Exclude pre-release versions (alpha, beta, RC, milestone) |
+| `include` | | Only include Maven artifacts matching glob patterns (comma-separated). Exclude takes precedence over include. |
+| `exclude` | | Exclude Maven artifacts matching glob patterns (comma-separated). Takes precedence over include. |
+| `token` | `github.token` | GitHub token for creating PRs and branches |
+| `base-branch` | | Branch to create PRs against (defaults to repository default branch) |
+| `labels` | `dependencies` | Comma-separated PR labels (must already exist in the repo) |
 
 ### Outputs
 
 | Output | Description |
 |--------|-------------|
-| `exit-code` | The depup exit code (`0`/`1`/`2`/`3` — see [Exit Codes](#exit-codes)) |
-| `json` | Path to the raw JSON output file for use in subsequent steps |
+| `exit-code` | 0=no outdated deps, 1=outdated deps found |
 
 ### How it works
 
-1. Downloads the `depup` binary for the runner's OS and architecture from GitHub Releases
-2. Runs `depup <command> --json <args> <path>` and captures the output and exit code
-3. Formats the JSON output as a Markdown table using `jq` and writes it to `$GITHUB_STEP_SUMMARY`
+For each category:
 
-### Limitations
+1. **Check** — run `depup check --json --outdated` with category-specific flags
+2. **Skip if empty** — if no outdated dependencies in this category, move to next
+3. **Skip if PR exists** — check for open PRs on the category's branch, skip if found
+4. **Create branch** — `git checkout -b depup/<category>` from base branch
+5. **Update** — run `depup update` to edit files in the working tree
+6. **Commit & push** — commit changes and push to origin
+7. **Create PR** — `gh pr create` with title, body, and labels
+8. **Reset** — return to base branch and delete local branch
 
-- The format script requires bash and `jq`, so it works on `ubuntu-latest` and `macos-latest` but not `windows-latest`.
+PR titles follow the format `chore(deps): bump <category-label>`. PR bodies contain a table with artifact names, current versions, and latest versions. PRs are identifiable by the `depup/` branch prefix and the `dependencies` label (or custom labels specified in the `labels` input).
 
 ## Requirements
 
