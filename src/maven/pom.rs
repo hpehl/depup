@@ -71,8 +71,11 @@ const MAX_POM_SIZE: u64 = 10 * 1024 * 1024;
 /// Reads and parses a POM file from disk.
 pub fn parse_pom(path: &Path) -> Result<Project> {
     let path_str = path.display().to_string();
-    let metadata = std::fs::metadata(path)
+    let metadata = std::fs::symlink_metadata(path)
         .map_err(|e| DepupError::pom_parse_failed(&path_str, &e.to_string()))?;
+    if metadata.is_symlink() {
+        return Err(DepupError::pom_parse_failed(&path_str, "Symlinks not allowed").into());
+    }
     if metadata.len() > MAX_POM_SIZE {
         return Err(DepupError::pom_parse_failed(
             &path_str,

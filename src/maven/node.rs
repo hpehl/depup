@@ -11,7 +11,6 @@ use anyhow::Result;
 use serde::Deserialize;
 
 use crate::constants::{self, NODEJS_DIST_URL};
-use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionResolver;
 use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
@@ -27,7 +26,6 @@ const NODE_PATTERNS: &[&str] = &[
 
 /// Resolves Node.js version properties against the Node.js distribution index.
 pub struct NodeResolver {
-    client: reqwest::Client,
     releases_only: bool,
 }
 
@@ -66,7 +64,6 @@ fn tool_id(source: &str) -> Dependency {
 impl NodeResolver {
     pub fn new(stable: bool) -> Self {
         Self {
-            client: constants::http_client(),
             releases_only: stable,
         }
     }
@@ -79,25 +76,7 @@ impl NodeResolver {
         let id = tool_id(source);
         let current = property.current_value.clone();
 
-        let resp = self
-            .client
-            .get(NODEJS_DIST_URL)
-            .send()
-            .await
-            .map_err(|e| DepupError::http_request_failed(NODEJS_DIST_URL, &e.to_string()))?;
-
-        if !resp.status().is_success() {
-            return Err(DepupError::http_request_failed(
-                NODEJS_DIST_URL,
-                &format!("HTTP {}", resp.status()),
-            )
-            .into());
-        }
-
-        let releases: Vec<NodeRelease> = resp
-            .json()
-            .await
-            .map_err(|e| DepupError::http_request_failed(NODEJS_DIST_URL, &e.to_string()))?;
+        let releases: Vec<NodeRelease> = constants::fetch_json(NODEJS_DIST_URL).await?;
 
         let versions: Vec<String> = releases
             .iter()

@@ -13,45 +13,35 @@ else
   BASE_BRANCH=$(gh repo view --json defaultBranchRef -q '.defaultBranchRef.name')
 fi
 
-# Build user filter flags from action inputs
-build_user_flags() {
-  local flags=""
-  if [ "${DEPUP_STABLE:-false}" = "true" ]; then
-    flags="$flags --stable"
-  fi
-  if [ -n "${DEPUP_INCLUDE:-}" ]; then
-    IFS=',' read -ra patterns <<< "$DEPUP_INCLUDE"
-    for p in "${patterns[@]}"; do
-      p=$(echo "$p" | xargs)  # trim whitespace
-      [ -n "$p" ] && flags="$flags --include $p"
-    done
-  fi
-  if [ -n "${DEPUP_EXCLUDE:-}" ]; then
-    IFS=',' read -ra patterns <<< "$DEPUP_EXCLUDE"
-    for p in "${patterns[@]}"; do
-      p=$(echo "$p" | xargs)
-      [ -n "$p" ] && flags="$flags --exclude $p"
-    done
-  fi
-  echo "$flags"
-}
+# Build user filter flags from action inputs (as array for proper quoting)
+USER_FLAGS=()
+if [ "${DEPUP_STABLE:-false}" = "true" ]; then
+  USER_FLAGS+=(--stable)
+fi
+if [ -n "${DEPUP_INCLUDE:-}" ]; then
+  IFS=',' read -ra patterns <<< "$DEPUP_INCLUDE"
+  for p in "${patterns[@]}"; do
+    p=$(echo "$p" | xargs)
+    [ -n "$p" ] && USER_FLAGS+=(--include "$p")
+  done
+fi
+if [ -n "${DEPUP_EXCLUDE:-}" ]; then
+  IFS=',' read -ra patterns <<< "$DEPUP_EXCLUDE"
+  for p in "${patterns[@]}"; do
+    p=$(echo "$p" | xargs)
+    [ -n "$p" ] && USER_FLAGS+=(--exclude "$p")
+  done
+fi
 
-USER_FLAGS=$(build_user_flags)
-
-# Build label flags for gh pr create
-build_label_flags() {
-  local flags=""
-  if [ -n "${DEPUP_LABELS:-}" ]; then
-    IFS=',' read -ra labels <<< "$DEPUP_LABELS"
-    for l in "${labels[@]}"; do
-      l=$(echo "$l" | xargs)
-      [ -n "$l" ] && flags="$flags --label $l"
-    done
-  fi
-  echo "$flags"
-}
-
-LABEL_FLAGS=$(build_label_flags)
+# Build label flags for gh pr create (as array)
+LABEL_FLAGS=()
+if [ -n "${DEPUP_LABELS:-}" ]; then
+  IFS=',' read -ra labels <<< "$DEPUP_LABELS"
+  for l in "${labels[@]}"; do
+    l=$(echo "$l" | xargs)
+    [ -n "$l" ] && LABEL_FLAGS+=(--label "$l")
+  done
+fi
 
 # Category definitions: "branch_suffix|category_flags|pr_label"
 CATEGORIES=(
@@ -69,16 +59,19 @@ PRS_SKIPPED=0
 CATEGORIES_EMPTY=0
 
 for entry in "${CATEGORIES[@]}"; do
-  IFS='|' read -r BRANCH_SUFFIX CATEGORY_FLAGS PR_LABEL <<< "$entry"
+  IFS='|' read -r BRANCH_SUFFIX CATEGORY_FLAGS_STR PR_LABEL <<< "$entry"
   BRANCH="depup/${BRANCH_SUFFIX}"
   TITLE="chore(deps): bump ${PR_LABEL}"
+
+  # Split category flags string into array
+  read -ra CATEGORY_FLAGS <<< "$CATEGORY_FLAGS_STR"
 
   echo "::group::Category: ${PR_LABEL}"
 
   # Step 1: Check for outdated deps in this category
   CHECK_OUTPUT=$(mktemp)
   set +e
-  depup check --json --outdated ${CATEGORY_FLAGS} ${USER_FLAGS} "${DEPUP_PATH}" > "$CHECK_OUTPUT" 2>&1
+  depup check --json --outdated "${CATEGORY_FLAGS[@]}" "${USER_FLAGS[@]}" "${DEPUP_PATH}" > "$CHECK_OUTPUT" 2>&1
   CHECK_EXIT=$?
   set -e
 
@@ -118,7 +111,7 @@ for entry in "${CATEGORIES[@]}"; do
 
   # Step 4: Run depup update with the same category + user flags
   set +e
-  depup update ${CATEGORY_FLAGS} ${USER_FLAGS} "${DEPUP_PATH}" 2>&1
+  depup update "${CATEGORY_FLAGS[@]}" "${USER_FLAGS[@]}" "${DEPUP_PATH}" 2>&1
   UPDATE_EXIT=$?
   set -e
 
@@ -154,7 +147,7 @@ for entry in "${CATEGORIES[@]}"; do
     --head "$BRANCH" \
     --title "$TITLE" \
     --body "$PR_BODY" \
-    $LABEL_FLAGS
+    "${LABEL_FLAGS[@]}"
 
   PRS_CREATED=$((PRS_CREATED + 1))
 

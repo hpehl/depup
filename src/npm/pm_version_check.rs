@@ -10,7 +10,6 @@ use anyhow::Result;
 
 use super::discovery::NpmProject;
 use crate::constants::{self, NPM_REGISTRY_URL};
-use crate::error::DepupError;
 use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
 use crate::version;
 
@@ -32,35 +31,10 @@ async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> CheckRes
     );
 
     let url = format!("{NPM_REGISTRY_URL}/{pm_name}");
-    let client = constants::http_client();
-
-    let resp = match client.get(&url).send().await {
-        Ok(r) => r,
-        Err(e) => {
-            return CheckResult::error(
-                id,
-                current.to_string(),
-                DepupError::http_request_failed(&url, &e.to_string()).to_string(),
-            );
-        }
-    };
-
-    if !resp.status().is_success() {
-        return CheckResult::error(
-            id,
-            current.to_string(),
-            DepupError::http_request_failed(&url, &format!("HTTP {}", resp.status())).to_string(),
-        );
-    }
-
-    let body: serde_json::Value = match resp.json().await {
+    let body: serde_json::Value = match constants::fetch_json(&url).await {
         Ok(v) => v,
         Err(e) => {
-            return CheckResult::error(
-                id,
-                current.to_string(),
-                DepupError::http_request_failed(&url, &e.to_string()).to_string(),
-            );
+            return CheckResult::error(id, current.to_string(), e.to_string());
         }
     };
 

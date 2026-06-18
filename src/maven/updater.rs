@@ -10,35 +10,24 @@ use indicatif::ProgressBar;
 use crate::maven::pom_writer::{self, InlineVersionUpdate};
 use crate::model::{CheckResult, CommandResult, UpdateResult};
 
+struct PomUpdates<'a> {
+    properties: HashMap<String, &'a CheckResult>,
+    inline: Vec<&'a CheckResult>,
+}
+
+impl<'a> PomUpdates<'a> {
+    fn all_results(&self) -> impl Iterator<Item = &&'a CheckResult> {
+        self.properties.values().chain(self.inline.iter())
+    }
+}
+
 /// Applies updates to POM files for all outdated Maven check results.
-///
-/// Updates both managed properties (those with `${...}` references) and
-/// inline versions. A single POM may receive both types of updates.
-///
-/// # Arguments
-/// * `root` - Root directory of the Maven project
-/// * `outdated` - Pre-filtered outdated Maven check results
-///
-/// # Returns
-/// A vector of `UpdateResult` entries — one per updated dependency.
 pub fn apply_updates(
     root: &Path,
     outdated: &[CheckResult],
     bar: &ProgressBar,
 ) -> Result<Vec<UpdateResult>> {
     let mut update_results = Vec::new();
-
-    // Group ALL updates (managed + inline) by POM path
-    struct PomUpdates<'a> {
-        properties: HashMap<String, &'a CheckResult>,
-        inline: Vec<&'a CheckResult>,
-    }
-
-    impl<'a> PomUpdates<'a> {
-        fn all_results(&self) -> impl Iterator<Item = &&'a CheckResult> {
-            self.properties.values().chain(self.inline.iter())
-        }
-    }
 
     let mut updates_by_pom: HashMap<String, PomUpdates> = HashMap::new();
 

@@ -20,23 +20,7 @@ pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<Ch
 
     let (installed, outdated) = project.package_manager.run_queries(&project.path).await?;
 
-    let mut results: Vec<CheckResult> = installed
-        .into_iter()
-        .map(|pkg| {
-            let kind = if pkg.is_dev {
-                DependencyKind::NpmDevDep
-            } else {
-                DependencyKind::NpmDep
-            };
-            let id = Dependency::new(Ecosystem::Npm, kind, pkg.name.clone(), None, source.clone());
-            if let Some(entry) = outdated.get(&id.artifact) {
-                let is_outdated = version::is_newer(&entry.current, &entry.latest);
-                CheckResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)
-            } else {
-                CheckResult::checked(id, pkg.version.clone(), pkg.version, false)
-            }
-        })
-        .collect();
+    let mut results = merge_results(installed, &outdated, &source);
 
     if let Some(pm_result) = pm_version_check::check_pm_version(project, &source).await {
         results.push(pm_result);
@@ -44,6 +28,36 @@ pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<Ch
 
     results.sort_by(|a, b| a.artifact().cmp(b.artifact()));
     Ok(results)
+}
+
+fn merge_results(
+    installed: Vec<super::InstalledPackage>,
+    outdated: &std::collections::HashMap<String, super::OutdatedEntry>,
+    source: &str,
+) -> Vec<CheckResult> {
+    installed
+        .into_iter()
+        .map(|pkg| {
+            let kind = if pkg.is_dev {
+                DependencyKind::NpmDevDep
+            } else {
+                DependencyKind::NpmDep
+            };
+            let id = Dependency::new(
+                Ecosystem::Npm,
+                kind,
+                pkg.name.clone(),
+                None,
+                source.to_string(),
+            );
+            if let Some(entry) = outdated.get(&id.artifact) {
+                let is_outdated = version::is_newer(&entry.current, &entry.latest);
+                CheckResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)
+            } else {
+                CheckResult::checked(id, pkg.version.clone(), pkg.version, false)
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -76,31 +90,7 @@ mod tests {
             },
         );
 
-        let source = "package.json".to_string();
-        let results: Vec<CheckResult> = installed
-            .into_iter()
-            .map(|pkg| {
-                let kind = if pkg.is_dev {
-                    DependencyKind::NpmDevDep
-                } else {
-                    DependencyKind::NpmDep
-                };
-                let id =
-                    Dependency::new(Ecosystem::Npm, kind, pkg.name.clone(), None, source.clone());
-                if let Some(entry) = outdated.get(&id.artifact) {
-                    let is_outdated = version::is_newer(&entry.current, &entry.latest);
-                    CheckResult::checked(
-                        id,
-                        entry.current.clone(),
-                        entry.latest.clone(),
-                        is_outdated,
-                    )
-                } else {
-                    CheckResult::checked(id, pkg.version.clone(), pkg.version, false)
-                }
-            })
-            .collect();
-
+        let results = merge_results(installed, &outdated, "package.json");
         assert_eq!(results.len(), 3);
 
         let react = results.iter().find(|r| r.artifact() == "react").unwrap();
@@ -121,26 +111,8 @@ mod tests {
     fn empty_installed_returns_empty() {
         let installed: Vec<super::super::InstalledPackage> = Vec::new();
         let outdated: HashMap<String, super::super::OutdatedEntry> = HashMap::new();
-        let source = "package.json".to_string();
 
-        let results: Vec<CheckResult> = installed
-            .into_iter()
-            .map(|pkg| {
-                let kind = if pkg.is_dev {
-                    DependencyKind::NpmDevDep
-                } else {
-                    DependencyKind::NpmDep
-                };
-                let id =
-                    Dependency::new(Ecosystem::Npm, kind, pkg.name.clone(), None, source.clone());
-                if let Some(entry) = outdated.get(&id.artifact) {
-                    CheckResult::checked(id, entry.current.clone(), entry.latest.clone(), true)
-                } else {
-                    CheckResult::checked(id, pkg.version.clone(), pkg.version, false)
-                }
-            })
-            .collect();
-
+        let results = merge_results(installed, &outdated, "package.json");
         assert!(results.is_empty());
     }
 
@@ -150,22 +122,9 @@ mod tests {
             make_installed("react", "18.0.0", false),
             make_installed("jest", "29.0.0", true),
         ];
-        let source = "package.json".to_string();
+        let outdated: HashMap<String, super::super::OutdatedEntry> = HashMap::new();
 
-        let results: Vec<CheckResult> = installed
-            .into_iter()
-            .map(|pkg| {
-                let kind = if pkg.is_dev {
-                    DependencyKind::NpmDevDep
-                } else {
-                    DependencyKind::NpmDep
-                };
-                let id =
-                    Dependency::new(Ecosystem::Npm, kind, pkg.name.clone(), None, source.clone());
-                CheckResult::checked(id, pkg.version.clone(), pkg.version, false)
-            })
-            .collect();
-
+        let results = merge_results(installed, &outdated, "package.json");
         assert_eq!(results[0].kind(), DependencyKind::NpmDep);
         assert_eq!(results[1].kind(), DependencyKind::NpmDevDep);
     }

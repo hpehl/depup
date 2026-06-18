@@ -3,6 +3,8 @@
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use crate::error::DepupError;
+
 /// Maven Central base URL for fetching `maven-metadata.xml`.
 pub const MAVEN_CENTRAL_URL: &str = "https://repo1.maven.org/maven2";
 
@@ -19,6 +21,9 @@ const _: () = assert!(MAX_CONCURRENT_REQUESTS > 0);
 /// HTTP request timeout in seconds.
 pub const HTTP_TIMEOUT_SECS: u64 = 30;
 
+/// Maximum HTTP response body size (10 MB).
+pub const MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
+
 static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .user_agent(format!("depup/{}", env!("CARGO_PKG_VERSION")))
@@ -32,4 +37,43 @@ static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 /// Maven Central returns 403 without a proper User-Agent header.
 pub fn http_client() -> reqwest::Client {
     HTTP_CLIENT.clone()
+}
+
+/// Fetches JSON from a URL, enforcing a response size limit.
+pub async fn fetch_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, DepupError> {
+    let resp = http_client()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| DepupError::http_request_failed(url, &e.to_string()))?;
+
+    if !resp.status().is_success() {
+        return Err(DepupError::http_request_failed(
+            url,
+            &format!("HTTP {}", resp.status()),
+        ));
+    }
+
+    if let Some(len) = resp.content_length() {
+        if len as usize > MAX_RESPONSE_BYTES {
+            return Err(DepupError::http_request_failed(
+                url,
+                &format!("Response too large: {len} bytes"),
+            ));
+        }
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| DepupError::http_request_failed(url, &e.to_string()))?;
+
+    if bytes.len() > MAX_RESPONSE_BYTES {
+        return Err(DepupError::http_request_failed(
+            url,
+            &format!("Response too large: {} bytes", bytes.len()),
+        ));
+    }
+
+    serde_json::from_slice(&bytes).map_err(|e| DepupError::http_request_failed(url, &e.to_string()))
 }

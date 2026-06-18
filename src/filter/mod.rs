@@ -155,9 +155,7 @@ impl Filter {
         {
             return false;
         }
-        if !self.kinds.is_empty()
-            && !self.kinds.iter().any(|k| k.matches(result.kind()))
-        {
+        if !self.kinds.is_empty() && !self.kinds.iter().any(|k| k.matches(result.kind())) {
             return false;
         }
         if !self.include.is_empty()

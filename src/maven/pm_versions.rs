@@ -9,7 +9,6 @@ use std::pin::Pin;
 use anyhow::Result;
 
 use crate::constants::{self, NPM_REGISTRY_URL};
-use crate::error::DepupError;
 use crate::maven::discovery::VersionProperty;
 use crate::maven::tool::ToolVersionResolver;
 use crate::model::{CheckResult, Dependency, DependencyKind, Ecosystem};
@@ -33,15 +32,11 @@ pm_tools![
 ];
 
 /// Resolves package manager version properties against the npm registry.
-pub struct PmVersionsResolver {
-    client: reqwest::Client,
-}
+pub struct PmVersionsResolver;
 
 impl PmVersionsResolver {
     pub fn new() -> Self {
-        Self {
-            client: constants::http_client(),
-        }
+        Self
     }
 
     /// Maps a property name to its npm package name (e.g., `version.pnpm` → `pnpm`).
@@ -82,24 +77,7 @@ impl PmVersionsResolver {
         let current = property.current_value.clone();
 
         let url = format!("{NPM_REGISTRY_URL}/{package}");
-
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| DepupError::http_request_failed(&url, &e.to_string()))?;
-
-        if !resp.status().is_success() {
-            return Err(
-                DepupError::http_request_failed(&url, &format!("HTTP {}", resp.status())).into(),
-            );
-        }
-
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| DepupError::http_request_failed(&url, &e.to_string()))?;
+        let body: serde_json::Value = constants::fetch_json(&url).await?;
 
         let latest = body["dist-tags"]["latest"]
             .as_str()
