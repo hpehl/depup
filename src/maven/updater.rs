@@ -326,4 +326,64 @@ mod tests {
         assert!(updated_xml.contains("<version>33.4.0-jre</version>"));
         assert!(updated_xml.contains("<version>${version.junit}</version>"));
     }
+
+    #[test]
+    fn updates_property_in_root_pom_when_dependency_in_child() {
+        let temp = TempDir::new().unwrap();
+        let root_pom = temp.path().join("pom.xml");
+        let child_dir = temp.path().join("child");
+        fs::create_dir(&child_dir).unwrap();
+        let child_pom = child_dir.join("pom.xml");
+
+        let root_xml = r#"<project>
+    <properties>
+        <version.lib>1.0.0</version.lib>
+    </properties>
+    <modules>
+        <module>child</module>
+    </modules>
+</project>"#;
+
+        let child_xml = r#"<project>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>some-lib</artifactId>
+                <version>${version.lib}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>"#;
+
+        fs::write(&root_pom, root_xml).unwrap();
+        fs::write(&child_pom, child_xml).unwrap();
+
+        // source points to root pom.xml (where the property is defined)
+        let results = vec![outdated_result(
+            "com.example:some-lib",
+            Some("version.lib"),
+            "1.0.0",
+            "2.0.0",
+            "pom.xml",
+        )];
+
+        let updated = apply_updates(temp.path(), &results, &ProgressBar::hidden()).unwrap();
+
+        assert_eq!(updated.len(), 1);
+        assert!(!updated[0].is_error());
+        assert_eq!(updated[0].new_version, "2.0.0");
+
+        // Root POM should be updated
+        let updated_root = fs::read_to_string(&root_pom).unwrap();
+        assert!(
+            updated_root.contains("<version.lib>2.0.0</version.lib>"),
+            "Root POM should have updated property, got: {}",
+            updated_root
+        );
+
+        // Child POM should be unchanged
+        let unchanged_child = fs::read_to_string(&child_pom).unwrap();
+        assert_eq!(unchanged_child, child_xml);
+    }
 }

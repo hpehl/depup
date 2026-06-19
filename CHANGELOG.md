@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.1] - 2026-06-19
 
+### Fixed
+
+- Set `GH_TOKEN` in the install step of the GitHub Action so `gh release view` can resolve the latest version
+- Fix Maven updater writing to the wrong POM when a version property is defined in the root POM but referenced in a child POM
+
 ## [1.1.0] - 2026-06-19
 
 ### Added

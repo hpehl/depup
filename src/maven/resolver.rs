@@ -47,9 +47,10 @@ impl ResolveTask {
         match self {
             Self::Maven { mapping, .. } => {
                 let source = mapping
-                    .referenced_in
+                    .property
+                    .source
                     .strip_prefix(root)
-                    .unwrap_or(&mapping.referenced_in)
+                    .unwrap_or(&mapping.property.source)
                     .display()
                     .to_string();
                 let artifact = format!("{}:{}", mapping.group_id, mapping.artifact_id);
@@ -160,9 +161,10 @@ pub async fn resolve(
                     ref resolver,
                 } => {
                     let source = mapping
-                        .referenced_in
+                        .property
+                        .source
                         .strip_prefix(&root)
-                        .unwrap_or(&mapping.referenced_in)
+                        .unwrap_or(&mapping.property.source)
                         .display()
                         .to_string();
                     resolver

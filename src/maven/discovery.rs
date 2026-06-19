@@ -29,7 +29,6 @@ pub struct ArtifactMapping {
     pub group_id: String,
     pub artifact_id: String,
     pub kind: ArtifactKind,
-    pub referenced_in: PathBuf,
     pub has_version_property: bool,
 }
 
@@ -68,13 +67,19 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     let mut mappings = Vec::new();
     let mut repositories = Vec::new();
 
-    extract_mappings(&root_project, &root_pom_path, &properties, &mut mappings);
-    repositories.extend(root_project.repositories.clone());
-
     let mut property_sources: HashMap<String, PathBuf> = HashMap::new();
     for name in properties.keys() {
         property_sources.insert(name.clone(), root_pom_path.clone());
     }
+
+    extract_mappings(
+        &root_project,
+        &root_pom_path,
+        &properties,
+        &property_sources,
+        &mut mappings,
+    );
+    repositories.extend(root_project.repositories.clone());
 
     for pom_path in &child_pom_files {
         let project = pom::parse_pom(pom_path)
@@ -90,7 +95,13 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
 
         let mut child_properties = properties.clone();
         inject_project_properties_with_fallback(&project, &root_project, &mut child_properties);
-        extract_mappings(&project, pom_path, &child_properties, &mut mappings);
+        extract_mappings(
+            &project,
+            pom_path,
+            &child_properties,
+            &property_sources,
+            &mut mappings,
+        );
         repositories.extend(project.repositories);
     }
 
@@ -182,6 +193,7 @@ fn extract_mappings(
     project: &pom::Project,
     pom_path: &Path,
     properties: &HashMap<String, String>,
+    property_sources: &HashMap<String, PathBuf>,
     mappings: &mut Vec<ArtifactMapping>,
 ) {
     for (artifact, kind) in &project.artifacts {
@@ -216,16 +228,24 @@ fn extract_mappings(
         let group_id = resolve_value(group_id, properties);
         let artifact_id = resolve_value(artifact_id, properties);
 
+        let source = if has_version_property {
+            property_sources
+                .get(&prop_name)
+                .cloned()
+                .unwrap_or_else(|| pom_path.to_path_buf())
+        } else {
+            pom_path.to_path_buf()
+        };
+
         mappings.push(ArtifactMapping {
             property: VersionProperty {
                 name: prop_name,
                 current_value,
-                source: pom_path.to_path_buf(),
+                source,
             },
             group_id,
             artifact_id,
             kind: *kind,
-            referenced_in: pom_path.to_path_buf(),
             has_version_property,
         });
     }
@@ -518,7 +538,6 @@ mod tests {
             group_id: group.to_string(),
             artifact_id: artifact.to_string(),
             kind: pom::ArtifactKind::Dependency,
-            referenced_in: PathBuf::from("pom.xml"),
             has_version_property: !name.contains(':'),
         };
 
@@ -569,8 +588,14 @@ mod tests {
         let mut properties = HashMap::new();
         properties.insert("version.junit".to_string(), "5.10.0".to_string());
 
+        let mut property_sources = HashMap::new();
+        property_sources.insert(
+            "version.junit".to_string(),
+            PathBuf::from("pom.xml"),
+        );
+
         let mut mappings = Vec::new();
-        extract_mappings(&project, Path::new("pom.xml"), &properties, &mut mappings);
+        extract_mappings(&project, Path::new("pom.xml"), &properties, &property_sources, &mut mappings);
 
         assert_eq!(mappings.len(), 2);
 
@@ -714,5 +739,36 @@ mod tests {
         assert_eq!(guava.property.current_value, "33.0.0-jre");
         assert_eq!(guava.group_id, "com.google.guava");
         assert_eq!(guava.artifact_id, "guava");
+    }
+
+    #[test]
+    fn cross_pom_property_source_points_to_defining_pom() {
+        let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("cross-pom-property");
+
+        let result = discover(&fixture_dir).unwrap();
+
+        let lib = result
+            .mappings
+            .iter()
+            .find(|m| m.property.name == "version.lib")
+            .expect("Expected mapping for version.lib");
+        assert_eq!(lib.property.current_value, "1.0.0");
+        assert_eq!(lib.group_id, "com.example");
+        assert_eq!(lib.artifact_id, "some-lib");
+
+        // Property is defined in root pom.xml, not child/pom.xml
+        assert!(
+            lib.property.source.ends_with("pom.xml"),
+            "Expected root pom.xml, got: {}",
+            lib.property.source.display()
+        );
+        assert!(
+            !lib.property.source.ends_with("child/pom.xml"),
+            "Source should NOT point to child/pom.xml, got: {}",
+            lib.property.source.display()
+        );
     }
 }
