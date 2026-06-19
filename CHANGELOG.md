@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.1] - 2026-06-19
-
 ### Fixed
 
 - Set `GH_TOKEN` in the install step of the GitHub Action so `gh release view` can resolve the latest version
