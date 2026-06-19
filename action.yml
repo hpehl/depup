@@ -52,6 +52,7 @@ runs:
       shell: bash
       env:
         DEPUP_VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.token }}
       run: |
         set -euo pipefail
 
