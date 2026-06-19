@@ -80,6 +80,12 @@ runs:
         echo "::endgroup::"
         echo "Installed depup ${DEPUP_VERSION}"
 
+    - name: Configure git identity
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
     - name: Create PRs for outdated dependencies
       id: create-prs
       shell: bash
