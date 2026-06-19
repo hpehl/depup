@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-19
+
 ### Added
 
 - Discover version properties defined in child POMs, not just the root POM
@@ -139,7 +141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/hpehl/depup/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hpehl/depup/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/hpehl/depup/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/hpehl/depup/compare/v0.2.1...v0.2.2
