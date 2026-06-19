@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-06-19
+
 ### Fixed
 
 - Check npm `packageManager` tool versions even when the package manager binary is not installed (e.g. in CI)
@@ -159,7 +161,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.1.4...HEAD
+[1.1.4]: https://github.com/hpehl/depup/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/hpehl/depup/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/hpehl/depup/compare/v1.1.1...v1.1.2
 [1.1.0]: https://github.com/hpehl/depup/compare/v1.0.0...v1.1.0
