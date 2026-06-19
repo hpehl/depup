@@ -78,11 +78,13 @@ impl ResolveTask {
                     .unwrap_or(&property.source)
                     .display()
                     .to_string();
+                // Carry the property name so the Maven updater can rewrite
+                // the correct `<properties>` entry on update.
                 let id = Dependency::new(
                     Ecosystem::Maven,
                     DependencyKind::Tool,
                     property.name.clone(),
-                    None,
+                    Some(property.name.clone()),
                     source,
                 );
                 (id, property.current_value.clone())
@@ -255,6 +257,7 @@ mod tests {
         let (id, current) = task.error_id(&root);
         assert_eq!(id.kind, DependencyKind::Tool);
         assert_eq!(id.artifact, "version.node");
+        assert_eq!(id.property, Some("version.node".to_string()));
         assert_eq!(current, "20.0.0");
     }
 }

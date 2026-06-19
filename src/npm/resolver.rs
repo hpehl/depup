@@ -18,9 +18,13 @@ use crate::version;
 pub async fn resolve_project(project: &NpmProject, root: &Path) -> Result<Vec<CheckResult>> {
     let source = project.relative_source(root);
 
-    let (installed, outdated) = project.package_manager.run_queries(&project.path).await?;
-
-    let mut results = merge_results(installed, &outdated, &source);
+    // Tolerate missing PM binary: package queries need the CLI tool, but
+    // the packageManager version check only needs HTTP.  When the binary is
+    // absent (e.g. in CI), we still want tool-version results.
+    let mut results = match project.package_manager.run_queries(&project.path).await {
+        Ok((installed, outdated)) => merge_results(installed, &outdated, &source),
+        Err(_) => Vec::new(),
+    };
 
     if let Some(pm_result) = pm_version_check::check_pm_version(project, &source).await {
         results.push(pm_result);

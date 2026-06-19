@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Check npm `packageManager` tool versions even when the package manager binary is not installed (e.g. in CI)
+- Include Maven property name in tool version results so the updater can rewrite `<properties>` entries for tools like Node.js and package managers
+
 ## [1.1.3] - 2026-06-19
 
 ### Fixed

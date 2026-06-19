@@ -57,7 +57,7 @@ impl PmVersionsResolver {
                 Ecosystem::Maven,
                 DependencyKind::Tool,
                 property.name.clone(),
-                None,
+                Some(property.name.clone()),
                 source.to_string(),
             );
             return Ok(CheckResult::error(
@@ -67,11 +67,13 @@ impl PmVersionsResolver {
             ));
         };
 
+        // Carry the property name so the Maven updater knows which
+        // `<properties>` entry to rewrite.
         let id = Dependency::new(
             Ecosystem::Maven,
             DependencyKind::Tool,
             package.to_string(),
-            None,
+            Some(property.name.clone()),
             source.to_string(),
         );
         let current = property.current_value.clone();

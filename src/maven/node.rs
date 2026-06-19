@@ -51,12 +51,14 @@ impl LtsField {
     }
 }
 
-fn tool_id(source: &str) -> Dependency {
+/// The property name is carried so the Maven updater knows which
+/// `<properties>` entry to rewrite.
+fn tool_id(property_name: &str, source: &str) -> Dependency {
     Dependency::new(
         Ecosystem::Maven,
         DependencyKind::Tool,
         "nodejs.org".to_string(),
-        None,
+        Some(property_name.to_string()),
         source.to_string(),
     )
 }
@@ -73,7 +75,7 @@ impl NodeResolver {
         property: &VersionProperty,
         source: &str,
     ) -> Result<CheckResult> {
-        let id = tool_id(source);
+        let id = tool_id(&property.name, source);
         let current = property.current_value.clone();
 
         let releases: Vec<NodeRelease> = constants::fetch_json(NODEJS_DIST_URL).await?;
@@ -166,11 +168,11 @@ mod tests {
 
     #[test]
     fn tool_id_returns_correct_dependency() {
-        let dep = tool_id("pom.xml");
+        let dep = tool_id("version.node", "pom.xml");
         assert_eq!(dep.ecosystem, Ecosystem::Maven);
         assert_eq!(dep.kind, DependencyKind::Tool);
         assert_eq!(dep.artifact, "nodejs.org");
-        assert!(dep.property.is_none());
+        assert_eq!(dep.property, Some("version.node".to_string()));
         assert_eq!(dep.source, "pom.xml");
     }
 
