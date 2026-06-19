@@ -65,7 +65,7 @@ Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or upda
 
 - **`pom.rs`** — Parses POM XML using quick-xml's event-based reader (not serde). This is intentional: serde can't handle `<properties>` blocks with arbitrary child element names as a `HashMap<String, String>`. Handles XML namespaces.
 
-- **`discovery.rs`** — Walks the module tree starting from root `pom.xml`, follows `<modules>` declarations recursively. For each artifact, extracts the version — either any `${...}` property reference (skipping `${project.*}`) or a plain inline version number. Maps property references back to values in the root POM's `<properties>` (supports chained resolution up to 10 levels). Also collects `<repositories>` and `<pluginRepositories>` from all POMs, deduplicates by URL.
+- **`discovery.rs`** — Walks the module tree starting from root `pom.xml`, follows `<modules>` declarations recursively. For each artifact, extracts the version — either any `${...}` property reference (skipping `${project.*}`) or a plain inline version number. Maps property references back to values in `<properties>` blocks across all POMs (root and child), with root properties taking precedence on conflict. Supports chained resolution up to 10 levels. Also collects `<repositories>` and `<pluginRepositories>` from all POMs, deduplicates by URL.
 
 - **`maven_central.rs`** — `MavenVersionResolver`: resolves artifact versions via `maven-metadata.xml`. Tries Maven Central first; if not found, queries custom repositories in parallel. Matches `RepositoryKind::Standard` repos to dependencies and `RepositoryKind::Plugin` repos to plugins. Filters pre-release versions by default.
 

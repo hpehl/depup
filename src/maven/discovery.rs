@@ -3,8 +3,9 @@
 //! Walks the module tree starting from the root `pom.xml`, follows `<modules>`
 //! declarations recursively, and maps each artifact's version — either any
 //! `${...}` property reference or a plain inline version — back to the
-//! resolved value from the root POM's `<properties>`. Skips `${project.*}`
-//! built-ins. Also collects repositories declared across all POMs.
+//! resolved value from `<properties>` in the root or child POMs. Root properties
+//! take precedence on conflict. Skips `${project.*}` built-ins. Also collects
+//! repositories declared across all POMs.
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
