@@ -273,11 +273,11 @@ fn local_name(e: &quick_xml::events::BytesStart) -> String {
 }
 
 fn is_in_properties(stack: &[String]) -> bool {
-    stack.len() >= 2 && stack[1] == "properties"
+    stack.iter().any(|s| s == "properties")
 }
 
 fn is_module_element(stack: &[String]) -> bool {
-    stack.len() == 3 && stack[1] == "modules" && stack[2] == "module"
+    stack.last().map(String::as_str) == Some("module") && stack.iter().any(|s| s == "modules")
 }
 
 fn is_dependency_element(stack: &[String]) -> bool {
@@ -651,6 +651,72 @@ mod tests {
         assert_eq!(project.group_id.as_deref(), Some("org.example"));
         assert_eq!(project.artifact_id.as_deref(), Some("parent"));
         assert_eq!(project.version.as_deref(), Some("1.0.0"));
+    }
+
+    #[test]
+    fn parse_profile_modules_and_properties() {
+        let xml = r#"<project>
+    <modules>
+        <module>core</module>
+    </modules>
+    <profiles>
+        <profile>
+            <id>extras</id>
+            <modules>
+                <module>extra-a</module>
+                <module>extra-b</module>
+            </modules>
+            <properties>
+                <quarkus.version>3.36.2</quarkus.version>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-core</artifactId>
+                    <version>${quarkus.version}</version>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.quarkus</groupId>
+                        <artifactId>quarkus-maven-plugin</artifactId>
+                        <version>${quarkus.version}</version>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>"#;
+
+        let project = parse_pom_str(xml).unwrap();
+
+        assert_eq!(project.modules, vec!["core", "extra-a", "extra-b"]);
+
+        assert_eq!(
+            project
+                .properties
+                .get("quarkus.version")
+                .map(String::as_str),
+            Some("3.36.2")
+        );
+
+        assert!(
+            project
+                .artifacts
+                .iter()
+                .any(|(a, k)| a.artifact_id.as_deref() == Some("quarkus-core")
+                    && *k == ArtifactKind::Dependency)
+        );
+        assert!(
+            project
+                .artifacts
+                .iter()
+                .any(
+                    |(a, k)| a.artifact_id.as_deref() == Some("quarkus-maven-plugin")
+                        && *k == ArtifactKind::Plugin
+                )
+        );
     }
 
     #[test]

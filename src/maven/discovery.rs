@@ -653,6 +653,41 @@ mod tests {
     }
 
     #[test]
+    fn discover_profile_module_properties() {
+        let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("profile-modules");
+
+        let result = discover(&fixture_dir).unwrap();
+
+        let names: Vec<&str> = result
+            .mappings
+            .iter()
+            .map(|m| m.property.name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"quarkus.platform.version"),
+            "Expected 'quarkus.platform.version' from profile module, got: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"version.junit"),
+            "Expected root 'version.junit', got: {:?}",
+            names
+        );
+
+        let quarkus = result
+            .mappings
+            .iter()
+            .find(|m| m.property.name == "quarkus.platform.version")
+            .unwrap();
+        assert_eq!(quarkus.property.current_value, "3.36.2");
+        assert_eq!(quarkus.group_id, "io.quarkus.platform");
+        assert_eq!(quarkus.artifact_id, "quarkus-bom");
+    }
+
+    #[test]
     fn discover_plain_versions_fixture() {
         let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
