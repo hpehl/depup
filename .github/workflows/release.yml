@@ -65,6 +65,19 @@ jobs:
           bin: depup
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
+  update-action-tag:
+    if: github.repository_owner == 'hpehl'
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Update major version tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MAJOR=$(echo "${GITHUB_REF_NAME}" | grep -oE '^v[0-9]+')
+          git tag -f "${MAJOR}" "${GITHUB_REF_NAME}"
+          git push origin "${MAJOR}" --force
   update-formula:
     if: github.repository_owner == 'hpehl'
     needs: upload-assets
