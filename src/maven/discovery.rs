@@ -627,9 +627,9 @@ mod tests {
 
         // The child property's source should point to the child POM
         assert!(
-            quarkus.referenced_in.ends_with("child/pom.xml"),
+            quarkus.property.source.ends_with("child/pom.xml"),
             "Expected child/pom.xml, got: {}",
-            quarkus.referenced_in.display()
+            quarkus.property.source.display()
         );
     }
 
