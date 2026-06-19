@@ -12,7 +12,7 @@ The check pipeline flows: **Discovery → Resolution → Comparison → Output**
 2. **Extract versions** — for every `<dependency>` and `<plugin>`, extracts the version:
    - `${...}` property references (any name except `${project.*}`)
    - Plain inline version numbers
-3. **Resolve properties** — resolves property values from the root POM's `<properties>` block, supporting chained references up to 10 levels
+3. **Resolve properties** — resolves property values from `<properties>` blocks across all POMs (root and child, root wins on conflict), supporting chained references up to 10 levels
 4. **Query upstream** — fetches `maven-metadata.xml` from Maven Central for the latest version of each artifact
 5. **Fallback to custom repos** — if not found on Maven Central, queries all `<repositories>` and `<pluginRepositories>` defined in the POMs in parallel
 6. **Compare** — compares versions using Maven-aware ordering (handles `.Final`, `-SP1`, and other qualifiers)

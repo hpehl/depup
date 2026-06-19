@@ -15,7 +15,7 @@ Any `${...}` property used as a version in a `<dependency>` or `<plugin>` block 
 
 The only exclusion is `${project.*}` properties, which are Maven built-ins.
 
-Property values are resolved from the root POM's `<properties>` block. Chained references (a property referencing another property) are supported up to 10 levels deep.
+Property values are resolved from `<properties>` blocks across all POMs (root and child). Root POM properties take precedence when both define the same property name. Chained references (a property referencing another property) are supported up to 10 levels deep.
 
 ### Plain Inline Versions
 
@@ -42,7 +42,7 @@ Version properties in Maven POMs that reference tool versions are discovered and
 
 ## Multi-Module Projects
 
-`depup` parses the root `pom.xml` and recursively follows `<modules>` declarations to discover all modules. Properties defined in the root POM are available to all child modules.
+`depup` parses the root `pom.xml` and recursively follows `<modules>` declarations to discover all modules. Properties defined in any POM (root or child) are discovered and checked. Root POM properties take precedence when both root and child define the same property name.
 
 This is a key advantage over Maven's built-in `versions:display-property-updates`, which fails when properties are defined in a parent POM but referenced in child POMs.
 
