@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-06-19
+
 ### Fixed
 
 - Force-push depup branches in GitHub Action to prevent push failures when a previous run left a stale remote branch
@@ -171,7 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.1.5...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.1.6...HEAD
+[1.1.6]: https://github.com/hpehl/depup/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/hpehl/depup/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/hpehl/depup/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/hpehl/depup/compare/v1.1.2...v1.1.3
