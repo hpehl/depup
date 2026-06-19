@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Configure git identity in the GitHub Action before commit/push to prevent authentication failures
+
 ## [1.1.2] - 2026-06-19
 
 ### Fixed
