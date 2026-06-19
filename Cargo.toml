@@ -1,6 +1,6 @@
 [package]
 name = "depup-cli"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2024"
 description = "Check dependency versions across Maven and npm ecosystems"
 license = "Apache-2.0"
