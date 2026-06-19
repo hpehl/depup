@@ -120,6 +120,7 @@ impl ToolVersionResolver for PmVersionsResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn patterns_match_pm_tools() {
@@ -174,6 +175,7 @@ mod tests {
         let prop = VersionProperty {
             name: "version.pnpm".to_string(),
             current_value: "9.0.0".to_string(),
+            source: PathBuf::from("pom.xml"),
         };
         assert_eq!(resolver.label(&prop), "pnpm");
     }
@@ -184,6 +186,7 @@ mod tests {
         let prop = VersionProperty {
             name: "version.unknown-tool".to_string(),
             current_value: "1.0.0".to_string(),
+            source: PathBuf::from("pom.xml"),
         };
         assert_eq!(resolver.label(&prop), "unknown");
     }

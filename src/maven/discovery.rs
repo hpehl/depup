@@ -18,6 +18,7 @@ use crate::maven::pom::{self, ArtifactKind, Repository};
 pub struct VersionProperty {
     pub name: String,
     pub current_value: String,
+    pub source: PathBuf,
 }
 
 /// Maps a Maven artifact to its version property and source POM location.
@@ -69,9 +70,23 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
     extract_mappings(&root_project, &root_pom_path, &properties, &mut mappings);
     repositories.extend(root_project.repositories.clone());
 
+    let mut property_sources: HashMap<String, PathBuf> = HashMap::new();
+    for name in properties.keys() {
+        property_sources.insert(name.clone(), root_pom_path.clone());
+    }
+
     for pom_path in &child_pom_files {
         let project = pom::parse_pom(pom_path)
             .with_context(|| format!("Failed to parse {}", pom_path.display()))?;
+
+        // Merge child properties into the global map (root wins on conflict)
+        for (name, value) in &project.properties {
+            if !properties.contains_key(name) {
+                properties.insert(name.clone(), value.clone());
+                property_sources.insert(name.clone(), pom_path.clone());
+            }
+        }
+
         let mut child_properties = properties.clone();
         inject_project_properties_with_fallback(&project, &root_project, &mut child_properties);
         extract_mappings(&project, pom_path, &child_properties, &mut mappings);
@@ -92,9 +107,16 @@ pub fn discover(root: &Path) -> Result<DiscoveryResult> {
         .iter()
         .filter(|(name, _)| !matched_names.contains(name.as_str()))
         .filter(|(name, _)| !name.starts_with("project."))
-        .map(|(name, value)| VersionProperty {
-            name: name.clone(),
-            current_value: resolve_value(value, &properties),
+        .map(|(name, value)| {
+            let source = property_sources
+                .get(name.as_str())
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from("pom.xml"));
+            VersionProperty {
+                name: name.clone(),
+                current_value: resolve_value(value, &properties),
+                source,
+            }
         })
         .collect();
 
@@ -197,6 +219,7 @@ fn extract_mappings(
             property: VersionProperty {
                 name: prop_name,
                 current_value,
+                source: pom_path.to_path_buf(),
             },
             group_id,
             artifact_id,
@@ -489,6 +512,7 @@ mod tests {
             property: VersionProperty {
                 name: name.to_string(),
                 current_value: "1.0.0".to_string(),
+                source: PathBuf::from("pom.xml"),
             },
             group_id: group.to_string(),
             artifact_id: artifact.to_string(),
@@ -562,6 +586,68 @@ mod tests {
             .find(|m| m.artifact_id == "junit-jupiter")
             .expect("junit mapping should exist");
         assert_eq!(junit.property.name, "version.junit");
+        assert_eq!(junit.property.current_value, "5.10.0");
+    }
+
+    #[test]
+    fn discover_child_pom_properties() {
+        let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("child-properties");
+
+        let result = discover(&fixture_dir).unwrap();
+
+        // Should find both the root property (version.junit) and the child property (quarkus.platform.version)
+        let names: Vec<&str> = result
+            .mappings
+            .iter()
+            .map(|m| m.property.name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"quarkus.platform.version"),
+            "Expected child property 'quarkus.platform.version' in mappings, got: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"version.junit"),
+            "Expected root property 'version.junit' in mappings, got: {:?}",
+            names
+        );
+
+        // The child property should resolve to the value defined in the child POM
+        let quarkus = result
+            .mappings
+            .iter()
+            .find(|m| m.property.name == "quarkus.platform.version")
+            .unwrap();
+        assert_eq!(quarkus.property.current_value, "3.36.2");
+        assert_eq!(quarkus.group_id, "io.quarkus.platform");
+        assert_eq!(quarkus.artifact_id, "quarkus-bom");
+
+        // The child property's source should point to the child POM
+        assert!(
+            quarkus.referenced_in.ends_with("child/pom.xml"),
+            "Expected child/pom.xml, got: {}",
+            quarkus.referenced_in.display()
+        );
+    }
+
+    #[test]
+    fn root_property_wins_over_child_on_conflict() {
+        let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("child-properties");
+
+        let result = discover(&fixture_dir).unwrap();
+
+        // version.junit is defined in root — it should keep the root value
+        let junit = result
+            .mappings
+            .iter()
+            .find(|m| m.property.name == "version.junit")
+            .unwrap();
         assert_eq!(junit.property.current_value, "5.10.0");
     }
 

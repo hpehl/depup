@@ -71,12 +71,18 @@ impl ResolveTask {
                 (id, mapping.property.current_value.clone())
             }
             Self::Tool { property, .. } => {
+                let source = property
+                    .source
+                    .strip_prefix(root)
+                    .unwrap_or(&property.source)
+                    .display()
+                    .to_string();
                 let id = Dependency::new(
                     Ecosystem::Maven,
                     DependencyKind::Tool,
                     property.name.clone(),
                     None,
-                    "pom.xml".into(),
+                    source,
                 );
                 (id, property.current_value.clone())
             }
@@ -170,13 +176,21 @@ pub async fn resolve(
                 ResolveTask::Tool {
                     ref property,
                     ref resolver,
-                } => resolver
-                    .resolve(property, "pom.xml")
-                    .await
-                    .unwrap_or_else(|e| {
-                        let (id, current) = task.error_id(&root);
-                        CheckResult::error(id, current, e.to_string())
-                    }),
+                } => {
+                    let source = property
+                        .source
+                        .strip_prefix(&root)
+                        .unwrap_or(&property.source)
+                        .display()
+                        .to_string();
+                    resolver
+                        .resolve(property, &source)
+                        .await
+                        .unwrap_or_else(|e| {
+                            let (id, current) = task.error_id(&root);
+                            CheckResult::error(id, current, e.to_string())
+                        })
+                }
             };
             bar.inc(1);
             result
@@ -231,6 +245,7 @@ mod tests {
         let property = VersionProperty {
             name: "version.node".to_string(),
             current_value: "20.0.0".to_string(),
+            source: PathBuf::from("pom.xml"),
         };
         let resolver = Arc::new(crate::maven::node::NodeResolver::new(false));
         let task = ResolveTask::Tool { property, resolver };

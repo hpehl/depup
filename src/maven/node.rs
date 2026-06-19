@@ -132,6 +132,7 @@ impl ToolVersionResolver for NodeResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn patterns_match_node() {
@@ -188,6 +189,7 @@ mod tests {
         let prop = VersionProperty {
             name: "version.node".to_string(),
             current_value: "20.0.0".to_string(),
+            source: PathBuf::from("pom.xml"),
         };
         assert_eq!(resolver.label(&prop), "nodejs.org");
     }
