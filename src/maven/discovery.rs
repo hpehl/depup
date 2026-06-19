@@ -589,13 +589,16 @@ mod tests {
         properties.insert("version.junit".to_string(), "5.10.0".to_string());
 
         let mut property_sources = HashMap::new();
-        property_sources.insert(
-            "version.junit".to_string(),
-            PathBuf::from("pom.xml"),
-        );
+        property_sources.insert("version.junit".to_string(), PathBuf::from("pom.xml"));
 
         let mut mappings = Vec::new();
-        extract_mappings(&project, Path::new("pom.xml"), &properties, &property_sources, &mut mappings);
+        extract_mappings(
+            &project,
+            Path::new("pom.xml"),
+            &properties,
+            &property_sources,
+            &mut mappings,
+        );
 
         assert_eq!(mappings.len(), 2);
 
