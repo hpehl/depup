@@ -17,10 +17,10 @@ fi
 
 echo "Bumps outdated ${CATEGORY_LABEL}."
 echo ""
-echo "| Artifact | Current | Latest |"
-echo "|----------|---------|--------|"
+echo "| Artifact | Current | Latest | Source |"
+echo "|----------|---------|--------|--------|"
 
-jq -r '.[] | "| `\(.artifact)` | \(.current) | \(.latest) |"' "$JSON_FILE"
+jq -r '.[] | "| `\(.artifact)` | \(.current) | \(.latest) | \(.source // "") |"' "$JSON_FILE"
 
 echo ""
 echo "---"
