@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Force-push depup branches in GitHub Action to prevent push failures when a previous run left a stale remote branch
+
 ## [1.1.5] - 2026-06-19
 
 ### Changed

@@ -140,7 +140,7 @@ for entry in "${CATEGORIES[@]}"; do
   # Step 7: Commit, push, create PR
   git add -A
   git commit -m "$TITLE"
-  git push -u origin "$BRANCH"
+  git push --force -u origin "$BRANCH"
 
   gh pr create \
     --base "$BASE_BRANCH" \
