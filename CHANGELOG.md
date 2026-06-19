@@ -7,9 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add composite GitHub Action for automatic dependency update PRs — loops over 6 categories (Maven managed/unmanaged deps, Maven managed/unmanaged plugins, Maven tools, npm tools), creates one PR per category with a Markdown table of outdated artifacts
+- Add mdBook documentation site deployed to GitHub Pages at [hpehl.github.io/depup](https://hpehl.github.io/depup)
+
+### Changed
+
+- Allow multiple kind filters combined with OR — `--dependencies --plugins` now shows both kinds at once, while all other filters still combine with AND
+- Rewrite `action.yml` from generic check/audit runner to single-purpose auto-PR workflow with new inputs (`stable`, `include`, `exclude`, `base-branch`, `labels`)
+- Extract shared `fetch_json` helper with 10 MB response size limit, removing HTTP boilerplate from Maven and npm resolvers
+- Add symlink protection to POM file reads
+
 ### Removed
 
 - Remove `sbom` subcommand (CycloneDX SBOM generation)
+- Remove `command`, `args`, and `comment` inputs from the GitHub Action
 
 ## [0.3.0] - 2026-06-17
 
