@@ -106,7 +106,7 @@ Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or upda
 
 ### GitHub Action (`action.yml`)
 
-- **`action.yml`** — Composite GitHub Action for creating automatic pull requests for outdated dependencies. Loops over 6 dependency categories (Maven managed/unmanaged deps, Maven managed/unmanaged plugins, Maven tools, npm tools). For each category: checks for outdated deps, skips if no updates or existing PR exists, creates a branch, runs `depup update`, commits changes, and creates a PR. Inputs: `path`, `version`, `stable`, `include`, `exclude`, `token`, `base-branch`, `labels`. Output: `exit-code` (0=no outdated deps, 1=outdated deps found).
+- **`action.yml`** — Composite GitHub Action for creating automatic pull requests for outdated dependencies. Loops over 8 dependency categories (Maven managed/unmanaged deps, Maven managed/unmanaged plugins, Maven tools, npm tools, npm dependencies, npm dev dependencies). For each category: checks for outdated deps, skips if no updates or existing PR exists, creates a branch, runs `depup update`, commits changes, and creates a PR. Inputs: `path`, `version`, `stable`, `include`, `exclude`, `token`, `base-branch`, `labels`. Output: `exit-code` (0=no outdated deps, 1=outdated deps found).
 
   Categories and their flag mappings:
 

@@ -1,6 +1,6 @@
 # Categories
 
-The action processes 6 dependency categories, creating one PR per category when outdated dependencies are found. This separation keeps PRs focused and makes review easier.
+The action processes 8 dependency categories, creating one PR per category when outdated dependencies are found. This separation keeps PRs focused and makes review easier.
 
 ## Category Table
 

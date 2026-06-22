@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
 ```
 
 For npm projects, the package manager must be installed on the runner before the depup action. For example, with pnpm:
@@ -77,7 +77,7 @@ steps:
   - uses: actions/setup-node@v4
     with:
       node-version: '22'
-  - uses: hpehl/depup@v1
+  - uses: hpehl/depup@v2
 ```
 
 See the [GitHub Action documentation](https://hpehl.github.io/depup/github-action/overview.html) for setup, inputs, and examples.

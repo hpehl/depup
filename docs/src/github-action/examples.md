@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
 ```
 
 ## Stable Versions Only, Exclude Test Libraries
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
         with:
           stable: true
           exclude: 'org.junit:*,org.mockito:*'
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
         with:
           include: 'org.wildfly:*,org.jboss:*'
 ```
@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
         with:
           base-branch: 'develop'
           labels: 'dependencies,automated'
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
 ```
 
 ## Monorepo — Scan a Subdirectory
@@ -139,7 +139,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
         with:
           path: 'services/backend'
 ```
@@ -164,7 +164,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
         with:
           token: ${{ secrets.DEPUP_PAT }}
 ```
@@ -188,7 +188,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
         id: depup
         with:
           stable: true

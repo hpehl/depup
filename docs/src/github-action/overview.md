@@ -15,7 +15,7 @@ The `depup` action fills these gaps by running the same check and update pipelin
 
 ## How It Works
 
-The action loops over 6 dependency categories. For each category:
+The action loops over 8 dependency categories. For each category:
 
 1. **Check** — runs `depup check --json --outdated` with category-specific flags
 2. **Skip if empty** — moves to the next category if no outdated dependencies
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hpehl/depup@v1
+      - uses: hpehl/depup@v2
 ```
 
 For complete setup instructions, see [Setup](setup.md).
