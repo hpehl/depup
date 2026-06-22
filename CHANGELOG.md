@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-22
+
 ### Added
 
 - Add npm dependency and dev dependency categories to the GitHub Action — creates separate PRs for outdated npm packages, requires the package manager to be installed on the runner via `actions/setup-node` or similar
@@ -181,7 +183,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.1.6...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/hpehl/depup/compare/v1.1.6...v1.2.0
 [1.1.6]: https://github.com/hpehl/depup/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/hpehl/depup/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/hpehl/depup/compare/v1.1.3...v1.1.4
