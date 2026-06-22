@@ -119,7 +119,7 @@ Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or upda
   | Maven tools | `--maven --tools` | `depup/maven-tools` |
   | npm tools | `--npm --tools` | `depup/npm-tools` |
   | npm dependencies | `--npm --dependencies` | `depup/npm-dependencies` |
-  | npm dev dependencies | `--npm --dev-deps` | `depup/npm-dev-dependencies` |
+  | npm dev dependencies | `--npm --dev-dependencies` | `depup/npm-dev-dependencies` |
 
 - **`action-scripts/create-prs.sh`** — Main orchestration script. Loops over categories, builds category-specific flags, runs check+update, creates branches, commits, pushes, and creates PRs via `gh pr create`. Skips categories with no changes or existing open PRs.
 
@@ -127,7 +127,7 @@ Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or upda
 
 ### Shared Layer
 
-- **`filter/`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-deps`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, `--include`/`--exclude` glob patterns, `--vulnerable` and `--severity` (audit only). Wildcards use `*` only (no regex).
+- **`filter/`** — Post-check result filtering based on CLI flags. Composable filters: ecosystem (`--maven`/`--npm`), kind (`--dependencies`/`--plugins`/`--dev-dependencies`/`--tools`), `--outdated`, `--stable`, `--managed`/`--unmanaged`, `--include`/`--exclude` glob patterns, `--vulnerable` and `--severity` (audit only). Wildcards use `*` only (no regex).
   - **`mod.rs`** — `Filter` struct (derives `Default`), `KindFilter` enum, `Filter::from_matches()` constructor, `Filter::matches()` predicate.
   - **`glob.rs`** — `glob_matches()` function for `*`-wildcard pattern matching against artifact names.
 

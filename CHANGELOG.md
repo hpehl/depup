@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add short options for common CLI flags: `-d` (dependencies), `-p` (plugins), `-D` (dev dependencies), `-t` (tools), `-m` (maven), `-n` (npm), `-s` (stable), `-M` (managed), `-U` (unmanaged), `-o` (outdated), `-v` (vulnerable)
+
+### Changed
+
+- Rename `--dev-deps` to `--dev-dependencies` for consistent naming with `--dependencies` (`--dev-deps` remains as a hidden alias for backward compatibility)
+
 ## [1.2.0] - 2026-06-22
 
 ### Added
@@ -154,7 +162,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Queries both Maven and npm ecosystems using the OSV batch API
   - Fetches full vulnerability details including CVE aliases, severity (CVSS-based), summaries, and advisory URLs
   - `--severity` filter to show only vulnerabilities at or above a threshold (critical, high, medium, low)
-  - Supports all check filters: `--maven`/`--npm`, `--dependencies`/`--plugins`/`--dev-deps`, `--managed`/`--unmanaged`, `--include`/`--exclude`
+  - Supports all check filters: `--maven`/`--npm`, `--dependencies`/`--plugins`/`--dev-dependencies`, `--managed`/`--unmanaged`, `--include`/`--exclude`
   - Structured JSON output with vulnerability details
   - Grouped table output with severity-colored labels, summary line, and timing
   - Exit code 1 when vulnerabilities are found

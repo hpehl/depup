@@ -36,7 +36,7 @@ depup update --npm
 # Filter by kind
 depup update --dependencies
 depup update --plugins
-depup update --dev-deps
+depup update --dev-dependencies
 depup update --tools
 
 # Filter by version property (Maven only)

@@ -42,7 +42,7 @@ depup audit --npm
 # Filter by kind
 depup audit --dependencies
 depup audit --plugins
-depup audit --dev-deps
+depup audit --dev-dependencies
 
 # Filter by version property (Maven only)
 depup audit --managed

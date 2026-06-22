@@ -99,6 +99,7 @@ fn common_filter_args(cmd: Command) -> Command {
     )
     .arg(
         Arg::new("stable")
+            .short('s')
             .long("stable")
             .visible_alias("releases-only")
             .action(ArgAction::SetTrue)
@@ -106,6 +107,7 @@ fn common_filter_args(cmd: Command) -> Command {
     )
     .arg(
         Arg::new("managed")
+            .short('M')
             .long("managed")
             .action(ArgAction::SetTrue)
             .conflicts_with("unmanaged")
@@ -113,12 +115,14 @@ fn common_filter_args(cmd: Command) -> Command {
     )
     .arg(
         Arg::new("unmanaged")
+            .short('U')
             .long("unmanaged")
             .action(ArgAction::SetTrue)
             .help("Only show dependencies without a version property (Maven only)"),
     )
     .arg(
         Arg::new("maven")
+            .short('m')
             .long("maven")
             .action(ArgAction::SetTrue)
             .conflicts_with("npm")
@@ -126,6 +130,7 @@ fn common_filter_args(cmd: Command) -> Command {
     )
     .arg(
         Arg::new("npm")
+            .short('n')
             .long("npm")
             .action(ArgAction::SetTrue)
             .help("Only show npm ecosystem results"),
@@ -136,19 +141,23 @@ fn kind_args(cmd: Command, include_tools: bool) -> Command {
     let mut cmd = cmd
         .arg(
             Arg::new("dependencies")
+                .short('d')
                 .long("dependencies")
                 .action(ArgAction::SetTrue)
                 .help("Only show dependencies (combinable with other kind flags)"),
         )
         .arg(
             Arg::new("plugins")
+                .short('p')
                 .long("plugins")
                 .action(ArgAction::SetTrue)
                 .help("Only show plugins (combinable with other kind flags)"),
         )
         .arg(
-            Arg::new("dev-deps")
-                .long("dev-deps")
+            Arg::new("dev-dependencies")
+                .short('D')
+                .long("dev-dependencies")
+                .alias("dev-deps")
                 .action(ArgAction::SetTrue)
                 .help("Only show dev dependencies (combinable with other kind flags)"),
         );
@@ -156,6 +165,7 @@ fn kind_args(cmd: Command, include_tools: bool) -> Command {
     if include_tools {
         cmd = cmd.arg(
             Arg::new("tools")
+                .short('t')
                 .long("tools")
                 .visible_alias("other")
                 .action(ArgAction::SetTrue)
@@ -168,6 +178,7 @@ fn kind_args(cmd: Command, include_tools: bool) -> Command {
 fn check_args(cmd: Command) -> Command {
     kind_args(common_filter_args(cmd), true).arg(
         Arg::new("outdated")
+            .short('o')
             .long("outdated")
             .action(ArgAction::SetTrue)
             .help("Only show outdated dependencies"),
@@ -187,6 +198,7 @@ fn audit_args(cmd: Command) -> Command {
     kind_args(common_filter_args(cmd), false)
         .arg(
             Arg::new("vulnerable")
+                .short('v')
                 .long("vulnerable")
                 .action(ArgAction::SetTrue)
                 .help("Only show dependencies with known vulnerabilities"),
@@ -243,7 +255,7 @@ mod tests {
     fn kind_filters_combinable() {
         assert!(parse(&["depup", "check", "--dependencies", "--plugins"]).is_ok());
         assert!(parse(&["depup", "check", "--dependencies", "--tools"]).is_ok());
-        assert!(parse(&["depup", "check", "--plugins", "--dev-deps"]).is_ok());
+        assert!(parse(&["depup", "check", "--plugins", "--dev-dependencies"]).is_ok());
         assert!(parse(&["depup", "check", "--dependencies", "--plugins", "--tools"]).is_ok());
     }
 

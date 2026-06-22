@@ -13,7 +13,7 @@ The action processes 8 dependency categories, creating one PR per category when 
 | Maven tool versions | `--maven --tools` | `depup/maven-tools` |
 | npm packageManager versions | `--npm --tools` | `depup/npm-tools` |
 | npm dependencies | `--npm --dependencies` | `depup/npm-dependencies` |
-| npm dev dependencies | `--npm --dev-deps` | `depup/npm-dev-dependencies` |
+| npm dev dependencies | `--npm --dev-dependencies` | `depup/npm-dev-dependencies` |
 
 > **Note:** npm dependency and dev dependency categories require the package manager to be installed on the runner. See [Setup — npm Projects](setup.md#npm-projects).
 

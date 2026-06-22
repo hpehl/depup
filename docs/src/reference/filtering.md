@@ -21,7 +21,7 @@ Filter by the type of dependency:
 |------|-------------|------------|
 | `--dependencies` | Regular dependencies | Maven, npm |
 | `--plugins` | Maven plugins | Maven |
-| `--dev-deps` | Development dependencies | npm |
+| `--dev-dependencies` | Development dependencies | npm |
 | `--tools` | Tool versions (Node.js, package managers) | Maven, npm |
 
 Multiple kind filters can be combined — they act as a union (any match is included).

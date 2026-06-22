@@ -34,7 +34,7 @@ depup check --npm
 # Filter by kind
 depup check --dependencies
 depup check --plugins
-depup check --dev-deps
+depup check --dev-dependencies
 depup check --tools
 
 # Filter by version property (Maven only)

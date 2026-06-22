@@ -87,7 +87,7 @@ impl Filter {
         let kinds: Vec<KindFilter> = [
             ("dependencies", KindFilter::Dependencies),
             ("plugins", KindFilter::Plugins),
-            ("dev-deps", KindFilter::DevDeps),
+            ("dev-dependencies", KindFilter::DevDeps),
             ("tools", KindFilter::Tools),
         ]
         .into_iter()

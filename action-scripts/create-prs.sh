@@ -52,7 +52,7 @@ CATEGORIES=(
   "maven-tools|--maven --tools|Maven tool versions"
   "npm-tools|--npm --tools|npm packageManager versions"
   "npm-dependencies|--npm --dependencies|npm dependencies"
-  "npm-dev-dependencies|--npm --dev-deps|npm dev dependencies"
+  "npm-dev-dependencies|--npm --dev-dependencies|npm dev dependencies"
 )
 
 FOUND_OUTDATED=0
