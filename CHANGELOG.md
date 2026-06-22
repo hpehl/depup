@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-06-22
+
 ### Added
 
 - Add short options for common CLI flags: `-d` (dependencies), `-p` (plugins), `-D` (dev dependencies), `-t` (tools), `-m` (maven), `-n` (npm), `-s` (stable), `-M` (managed), `-U` (unmanaged), `-o` (outdated), `-v` (vulnerable)
@@ -191,7 +193,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/hpehl/depup/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/hpehl/depup/compare/v1.1.6...v1.2.0
 [1.1.6]: https://github.com/hpehl/depup/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/hpehl/depup/compare/v1.1.4...v1.1.5
