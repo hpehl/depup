@@ -62,7 +62,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hpehl/depup@v2
 ```
 
@@ -70,13 +70,11 @@ For npm projects, the package manager must be installed on the runner before the
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
-  - uses: pnpm/action-setup@v4
+  - uses: actions/checkout@v7
+  - uses: pnpm/action-setup@v6
+  - uses: actions/setup-node@v6
     with:
-      version: 10
-  - uses: actions/setup-node@v4
-    with:
-      node-version: '22'
+      node-version: 'lts/*'
   - uses: hpehl/depup@v2
 ```
 

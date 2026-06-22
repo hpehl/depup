@@ -17,7 +17,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hpehl/depup@v2
 ```
 
@@ -38,7 +38,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hpehl/depup@v2
         with:
           stable: true
@@ -62,7 +62,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hpehl/depup@v2
         with:
           include: 'org.wildfly:*,org.jboss:*'
@@ -85,7 +85,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hpehl/depup@v2
         with:
           base-branch: 'develop'
@@ -111,15 +111,15 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+          node-version: 'lts/*'
       - uses: hpehl/depup@v2
 ```
+
+> **Note:** `pnpm/action-setup` reads the pnpm version from the `packageManager` field in `package.json`. If your project doesn't have that field, add `version: 11` to the action's `with` block.
 
 ## Monorepo — Scan a Subdirectory
 
@@ -138,7 +138,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hpehl/depup@v2
         with:
           path: 'services/backend'
@@ -163,7 +163,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hpehl/depup@v2
         with:
           token: ${{ secrets.DEPUP_PAT }}
@@ -186,7 +186,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: hpehl/depup@v2
         id: depup

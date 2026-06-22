@@ -27,7 +27,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hpehl/depup@v2
 ```
 
@@ -41,10 +41,10 @@ npm dependency categories require the package manager to be installed on the run
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
-  - uses: actions/setup-node@v4
+  - uses: actions/checkout@v7
+  - uses: actions/setup-node@v6
     with:
-      node-version: '22'
+      node-version: 'lts/*'
   - uses: hpehl/depup@v2
 ```
 
@@ -52,32 +52,35 @@ steps:
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
-  - uses: pnpm/action-setup@v4
+  - uses: actions/checkout@v7
+  - uses: pnpm/action-setup@v6
+  - uses: actions/setup-node@v6
     with:
-      version: 10
-  - uses: actions/setup-node@v4
-    with:
-      node-version: '22'
+      node-version: 'lts/*'
   - uses: hpehl/depup@v2
 ```
+
+> **Note:** `pnpm/action-setup` reads the pnpm version from the `packageManager` field in `package.json` automatically. If your project doesn't have that field, add `version: 11` (or the version you need) to the action's `with` block.
 
 ### yarn
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
-  - uses: actions/setup-node@v4
+  - uses: actions/checkout@v7
+  - uses: actions/setup-node@v6
     with:
-      node-version: '22'
+      node-version: 'lts/*'
+  - run: corepack enable
   - uses: hpehl/depup@v2
 ```
+
+> **Note:** Yarn (Berry/v4+) is managed via [Corepack](https://nodejs.org/api/corepack.html). Make sure your `package.json` has a `packageManager` field (e.g., `"packageManager": "yarn@4.9.1"`), then `corepack enable` activates the correct version.
 
 ### bun
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v7
   - uses: oven-sh/setup-bun@v2
   - uses: hpehl/depup@v2
 ```
