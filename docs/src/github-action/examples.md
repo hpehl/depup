@@ -92,6 +92,35 @@ jobs:
           labels: 'dependencies,automated'
 ```
 
+## pnpm Project
+
+For npm ecosystem projects, the package manager must be installed on the runner before the depup action:
+
+```yaml
+name: depup
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: hpehl/depup@v1
+```
+
 ## Monorepo — Scan a Subdirectory
 
 ```yaml

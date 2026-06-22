@@ -12,13 +12,18 @@ The action processes 6 dependency categories, creating one PR per category when 
 | Maven unmanaged plugins | `--maven --plugins --unmanaged` | `depup/maven-unmanaged-plugins` |
 | Maven tool versions | `--maven --tools` | `depup/maven-tools` |
 | npm packageManager versions | `--npm --tools` | `depup/npm-tools` |
+| npm dependencies | `--npm --dependencies` | `depup/npm-dependencies` |
+| npm dev dependencies | `--npm --dev-deps` | `depup/npm-dev-dependencies` |
+
+> **Note:** npm dependency and dev dependency categories require the package manager to be installed on the runner. See [Setup — npm Projects](setup.md#npm-projects).
 
 ## Why Separate Categories?
 
 - **Managed vs. unmanaged** — Maven properties affect multiple dependencies across modules. Grouping property-based updates separately from inline version updates helps reviewers understand the impact.
 - **Dependencies vs. plugins** — Plugin updates can affect the build process itself and deserve separate review.
 - **Tools** — Node.js and package manager version updates are infrastructure changes, separate from library updates.
-- **npm** — Package manager version updates in `package.json` are a distinct concern from npm package updates.
+- **npm dependencies vs. dev dependencies** — Production dependencies and dev-only dependencies have different risk profiles and review needs.
+- **npm tools** — Package manager version updates in `package.json` are infrastructure changes, separate from package updates.
 
 ## Branch Naming
 

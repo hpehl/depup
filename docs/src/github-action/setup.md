@@ -6,6 +6,7 @@ This guide walks through setting up the `depup` GitHub Action in your repository
 
 - A GitHub repository with Maven or npm projects
 - GitHub Actions enabled on the repository
+- **For npm dependency updates:** the package manager (npm, pnpm, yarn, or bun) must be installed on the runner. Add the appropriate setup steps before the depup action (see [npm projects](#npm-projects) below).
 
 ## Minimal Workflow
 
@@ -29,6 +30,59 @@ jobs:
       - uses: actions/checkout@v4
       - uses: hpehl/depup@v1
 ```
+
+> **Note:** This minimal setup works for Maven projects out of the box. For npm projects, add the package manager setup steps shown below.
+
+## npm Projects
+
+npm dependency categories require the package manager to be installed on the runner. Add the appropriate setup steps **before** the depup action:
+
+### npm
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-node@v4
+    with:
+      node-version: '22'
+  - uses: hpehl/depup@v1
+```
+
+### pnpm
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: pnpm/action-setup@v4
+    with:
+      version: 10
+  - uses: actions/setup-node@v4
+    with:
+      node-version: '22'
+  - uses: hpehl/depup@v1
+```
+
+### yarn
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-node@v4
+    with:
+      node-version: '22'
+  - uses: hpehl/depup@v1
+```
+
+### bun
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: oven-sh/setup-bun@v2
+  - uses: hpehl/depup@v1
+```
+
+Maven categories work without any additional setup.
 
 This will:
 - Run every Monday at 6am UTC

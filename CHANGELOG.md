@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add npm dependency and dev dependency categories to the GitHub Action — creates separate PRs for outdated npm packages, requires the package manager to be installed on the runner via `actions/setup-node` or similar
+- Document npm prerequisites in README, action docs, and setup guide with examples for npm, pnpm, yarn, and bun
+
 ## [1.1.6] - 2026-06-19
 
 ### Fixed

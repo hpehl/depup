@@ -66,6 +66,20 @@ jobs:
       - uses: hpehl/depup@v1
 ```
 
+For npm projects, the package manager must be installed on the runner before the depup action. For example, with pnpm:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: pnpm/action-setup@v4
+    with:
+      version: 10
+  - uses: actions/setup-node@v4
+    with:
+      node-version: '22'
+  - uses: hpehl/depup@v1
+```
+
 See the [GitHub Action documentation](https://hpehl.github.io/depup/github-action/overview.html) for setup, inputs, and examples.
 
 ## Documentation
