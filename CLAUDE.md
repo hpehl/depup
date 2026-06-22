@@ -118,6 +118,8 @@ Exit codes are granular for CI integration: 0 = clean, 1 = outdated deps or upda
   | Maven unmanaged plugins | `--maven --plugins --unmanaged` | `depup/maven-unmanaged-plugins` |
   | Maven tools | `--maven --tools` | `depup/maven-tools` |
   | npm tools | `--npm --tools` | `depup/npm-tools` |
+  | npm dependencies | `--npm --dependencies` | `depup/npm-dependencies` |
+  | npm dev dependencies | `--npm --dev-deps` | `depup/npm-dev-dependencies` |
 
 - **`action-scripts/create-prs.sh`** — Main orchestration script. Loops over categories, builds category-specific flags, runs check+update, creates branches, commits, pushes, and creates PRs via `gh pr create`. Skips categories with no changes or existing open PRs.
 
