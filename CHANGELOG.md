@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Rename `--dev-deps` to `--dev-dependencies` for consistent naming with `--dependencies` (`--dev-deps` remains as a hidden alias for backward compatibility)
+- Rename `--dev-deps` to `--dev-dependencies` for consistent naming with `--dependencies`
 
 ## [1.2.0] - 2026-06-22
 

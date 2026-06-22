@@ -157,7 +157,6 @@ fn kind_args(cmd: Command, include_tools: bool) -> Command {
             Arg::new("dev-dependencies")
                 .short('D')
                 .long("dev-dependencies")
-                .alias("dev-deps")
                 .action(ArgAction::SetTrue)
                 .help("Only show dev dependencies (combinable with other kind flags)"),
         );
