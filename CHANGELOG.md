@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-23
+
 ### Added
 
 - Add automatic package manager detection and installation to the GitHub Action — scans for lock files and `packageManager` fields, installs pnpm (via corepack or npm) and bun (via npm) so users no longer need manual setup steps
@@ -201,7 +203,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/hpehl/depup/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/hpehl/depup/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/hpehl/depup/compare/v1.1.6...v1.2.0
 [1.1.6]: https://github.com/hpehl/depup/compare/v1.1.5...v1.1.6
