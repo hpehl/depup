@@ -17,6 +17,7 @@ The `depup` action fills these gaps by running the same check and update pipelin
 
 The action loops over 8 dependency categories. For each category:
 
+0. **Setup** — scans for npm ecosystem projects (lock files and `packageManager` fields) and installs any missing package managers (pnpm, bun)
 1. **Check** — runs `depup check --json --outdated` with category-specific flags
 2. **Skip if empty** — moves to the next category if no outdated dependencies
 3. **Skip if PR exists** — checks for open PRs on the category's branch

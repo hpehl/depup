@@ -21,6 +21,8 @@ jobs:
       - uses: hpehl/depup@v2
 ```
 
+> **Note:** This works for all project types — Maven, npm, pnpm, yarn, bun, or any combination. The action auto-detects and installs needed package managers.
+
 ## Stable Versions Only, Exclude Test Libraries
 
 ```yaml
@@ -91,35 +93,6 @@ jobs:
           base-branch: 'develop'
           labels: 'dependencies,automated'
 ```
-
-## pnpm Project
-
-For npm ecosystem projects, the package manager must be installed on the runner before the depup action:
-
-```yaml
-name: depup
-on:
-  schedule:
-    - cron: '0 6 * * 1'
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  pull-requests: write
-
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 'lts/*'
-      - uses: hpehl/depup@v2
-```
-
-> **Note:** `pnpm/action-setup` reads the pnpm version from the `packageManager` field in `package.json`. If your project doesn't have that field, add `version: 11` to the action's `with` block.
 
 ## Monorepo — Scan a Subdirectory
 

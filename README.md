@@ -66,17 +66,7 @@ jobs:
       - uses: hpehl/depup@v2
 ```
 
-For npm projects, the package manager must be installed on the runner before the depup action. For example, with pnpm:
-
-```yaml
-steps:
-  - uses: actions/checkout@v7
-  - uses: pnpm/action-setup@v6
-  - uses: actions/setup-node@v6
-    with:
-      node-version: 'lts/*'
-  - uses: hpehl/depup@v2
-```
+The action auto-detects npm ecosystem projects (by lock file or `packageManager` field) and installs any missing package managers (pnpm, bun) before running. No extra setup steps are needed — the minimal workflow above works for Maven, npm, and mixed projects alike.
 
 See the [GitHub Action documentation](https://hpehl.github.io/depup/github-action/overview.html) for setup, inputs, and examples.
 

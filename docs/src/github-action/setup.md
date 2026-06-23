@@ -6,7 +6,7 @@ This guide walks through setting up the `depup` GitHub Action in your repository
 
 - A GitHub repository with Maven or npm projects
 - GitHub Actions enabled on the repository
-- **For npm dependency updates:** the package manager (npm, pnpm, yarn, or bun) must be installed on the runner. Add the appropriate setup steps before the depup action (see [npm projects](#npm-projects) below).
+- Works for Maven, npm, and mixed projects without additional setup
 
 ## Minimal Workflow
 
@@ -31,61 +31,18 @@ jobs:
       - uses: hpehl/depup@v2
 ```
 
-> **Note:** This minimal setup works for Maven projects out of the box. For npm projects, add the package manager setup steps shown below.
+## Package Manager Setup
 
-## npm Projects
+The action automatically detects npm ecosystem projects in your directory tree and installs any missing package managers before running. Detection uses the same logic as the `depup` CLI: lock files (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lock`) and the `packageManager` field in `package.json`.
 
-npm dependency categories require the package manager to be installed on the runner. Add the appropriate setup steps **before** the depup action:
+| Package Manager | Runner Status | Action Behavior |
+|-----------------|---------------|-----------------|
+| npm | Pre-installed | Nothing to do |
+| yarn (classic) | Pre-installed | Nothing to do |
+| pnpm | Not installed | Auto-installed via corepack (if `packageManager` field exists) or npm |
+| bun | Not installed | Auto-installed via npm |
 
-### npm
-
-```yaml
-steps:
-  - uses: actions/checkout@v7
-  - uses: actions/setup-node@v6
-    with:
-      node-version: 'lts/*'
-  - uses: hpehl/depup@v2
-```
-
-### pnpm
-
-```yaml
-steps:
-  - uses: actions/checkout@v7
-  - uses: pnpm/action-setup@v6
-  - uses: actions/setup-node@v6
-    with:
-      node-version: 'lts/*'
-  - uses: hpehl/depup@v2
-```
-
-> **Note:** `pnpm/action-setup` reads the pnpm version from the `packageManager` field in `package.json` automatically. If your project doesn't have that field, add `version: 11` (or the version you need) to the action's `with` block.
-
-### yarn
-
-```yaml
-steps:
-  - uses: actions/checkout@v7
-  - uses: actions/setup-node@v6
-    with:
-      node-version: 'lts/*'
-  - run: corepack enable
-  - uses: hpehl/depup@v2
-```
-
-> **Note:** Yarn (Berry/v4+) is managed via [Corepack](https://nodejs.org/api/corepack.html). Make sure your `package.json` has a `packageManager` field (e.g., `"packageManager": "yarn@4.9.1"`), then `corepack enable` activates the correct version.
-
-### bun
-
-```yaml
-steps:
-  - uses: actions/checkout@v7
-  - uses: oven-sh/setup-bun@v2
-  - uses: hpehl/depup@v2
-```
-
-Maven categories work without any additional setup.
+No extra setup steps are needed. The minimal workflow works for Maven-only, npm-only, and mixed projects.
 
 This will:
 - Run every Monday at 6am UTC
