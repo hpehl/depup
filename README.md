@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
 ```
 
 The action auto-detects npm ecosystem projects (by lock file or `packageManager` field) and installs any missing package managers (pnpm, bun) before running. No extra setup steps are needed — the minimal workflow above works for Maven, npm, and mixed projects alike.

@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
 ```
 
 ## Package Manager Setup
@@ -66,7 +66,7 @@ These are set at the workflow level via the `permissions` block.
 By default, the action uses the built-in `github.token` (aka `GITHUB_TOKEN`). This works for most cases. If you need PRs to trigger other workflows (e.g., CI checks), you'll need to use a [Personal Access Token (PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) or a [GitHub App token](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/about-authentication-with-a-github-app):
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     token: ${{ secrets.MY_PAT }}
 ```
@@ -78,7 +78,7 @@ By default, the action uses the built-in `github.token` (aka `GITHUB_TOKEN`). Th
 By default, PRs are labeled with `dependencies`. You can customize this:
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     labels: 'dependencies,automated'
 ```
@@ -90,7 +90,7 @@ By default, PRs are labeled with `dependencies`. You can customize this:
 By default, PRs target the repository's default branch. To target a different branch:
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     base-branch: 'develop'
 ```
@@ -100,7 +100,7 @@ By default, PRs target the repository's default branch. To target a different br
 By default, the action installs the latest release. To pin a specific version:
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     version: '0.4.0'
 ```

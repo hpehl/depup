@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
 ```
 
 For complete setup instructions, see [Setup](setup.md).

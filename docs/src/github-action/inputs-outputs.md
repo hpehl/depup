@@ -20,7 +20,7 @@ All inputs are optional.
 The directory to scan for projects. Relative to the repository root.
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     path: 'backend'
 ```
@@ -30,7 +30,7 @@ The directory to scan for projects. Relative to the repository root.
 Pin the depup version instead of using the latest release. Useful for reproducibility.
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     version: '0.4.0'
 ```
@@ -42,7 +42,7 @@ The version can be specified with or without the `v` prefix — both `0.4.0` and
 When set to `true`, excludes pre-release versions (alpha, beta, RC, milestones) from consideration. See [Version Filtering](../reference/version-filtering.md) for details on which patterns are excluded.
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     stable: true
 ```
@@ -52,7 +52,7 @@ When set to `true`, excludes pre-release versions (alpha, beta, RC, milestones) 
 Glob patterns to filter which artifacts are checked and updated. Patterns use `*` wildcards and are comma-separated.
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     include: 'org.wildfly:*,org.jboss:*'
     exclude: '*:test-utils'
@@ -65,7 +65,7 @@ When both are specified, `exclude` takes precedence. See [Filtering](../referenc
 GitHub token used for creating branches, pushing commits, and creating PRs. Defaults to the workflow's `GITHUB_TOKEN`.
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     token: ${{ secrets.MY_PAT }}
 ```
@@ -75,7 +75,7 @@ GitHub token used for creating branches, pushing commits, and creating PRs. Defa
 The branch to create PRs against. If not specified, the repository's default branch is used.
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     base-branch: 'develop'
 ```
@@ -85,7 +85,7 @@ The branch to create PRs against. If not specified, the repository's default bra
 Comma-separated list of labels to apply to created PRs. Labels must already exist in the repository.
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   with:
     labels: 'dependencies,automated,bot'
 ```
@@ -99,7 +99,7 @@ Comma-separated list of labels to apply to created PRs. Labels must already exis
 ### Using the Output
 
 ```yaml
-- uses: hpehl/depup@v2
+- uses: hpehl/depup@v3
   id: depup
 
 - name: Check result

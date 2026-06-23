@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
 ```
 
 > **Note:** This works for all project types — Maven, npm, pnpm, yarn, bun, or any combination. The action auto-detects and installs needed package managers.
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
         with:
           stable: true
           exclude: 'org.junit:*,org.mockito:*'
@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
         with:
           include: 'org.wildfly:*,org.jboss:*'
 ```
@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
         with:
           base-branch: 'develop'
           labels: 'dependencies,automated'
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
         with:
           path: 'services/backend'
 ```
@@ -137,7 +137,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
         with:
           token: ${{ secrets.DEPUP_PAT }}
 ```
@@ -161,7 +161,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: hpehl/depup@v2
+      - uses: hpehl/depup@v3
         id: depup
         with:
           stable: true
