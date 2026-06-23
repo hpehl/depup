@@ -86,6 +86,13 @@ runs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+    - name: Setup package managers
+      shell: bash
+      env:
+        DEPUP_PATH: ${{ inputs.path }}
+      run: |
+        bash "${{ github.action_path }}/action-scripts/setup-pm.sh"
+
     - name: Create PRs for outdated dependencies
       id: create-prs
       shell: bash
