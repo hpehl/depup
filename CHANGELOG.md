@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add automatic package manager detection and installation to the GitHub Action — scans for lock files and `packageManager` fields, installs pnpm (via corepack or npm) and bun (via npm) so users no longer need manual setup steps
+
+### Changed
+
+- Bump GitHub Action major version to v3 (`hpehl/depup@v3`) — the action now handles package manager setup automatically, removing the need for `pnpm/action-setup`, `actions/setup-node`, or `oven-sh/setup-bun` steps
+
 ## [1.2.1] - 2026-06-22
 
 ### Added
