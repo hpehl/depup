@@ -42,7 +42,7 @@ The action automatically detects npm ecosystem projects in your directory tree a
 | pnpm | Not installed | Auto-installed via corepack (if `packageManager` field exists) or npm |
 | bun | Not installed | Auto-installed via npm |
 
-No extra setup steps are needed. The minimal workflow works for Maven-only, npm-only, and mixed projects.
+No extra package manager setup steps are needed. The minimal workflow works for Maven-only, npm-only, and mixed projects. (Node.js and npm are pre-installed on GitHub-hosted runners.)
 
 This will:
 - Run every Monday at 6am UTC
