@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-06-24
+
 ### Fixed
 
 - Preserve `v` prefix on Node.js versions when updating POM properties — previously `v22.4.0` would be updated to `22.5.0`, now correctly updates to `v22.5.0`
@@ -213,7 +215,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/hpehl/depup/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/hpehl/depup/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/hpehl/depup/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/hpehl/depup/compare/v1.2.0...v1.2.1
