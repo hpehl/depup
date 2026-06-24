@@ -81,11 +81,7 @@ impl PackageManager {
 
     /// Installs specific packages at exact versions, updating `package.json`.
     /// Splits into two batches: prod deps and dev deps (with `-D` flag).
-    pub(crate) async fn update(
-        self,
-        dir: &Path,
-        packages: &[(&str, &str, bool)],
-    ) -> Result<()> {
+    pub(crate) async fn update(self, dir: &Path, packages: &[(&str, &str, bool)]) -> Result<()> {
         let (dev, prod): (Vec<_>, Vec<_>) = packages.iter().partition(|(_, _, is_dev)| *is_dev);
 
         if !prod.is_empty() {

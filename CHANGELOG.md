@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-06-24
+
 ### Fixed
 
 - Fix npm update silently skipping cross-major version bumps — replace blanket `<pm> update` commands with targeted `<pm> add <pkg>@<version>` installs that rewrite `package.json` ranges correctly for all four package managers (npm, pnpm, yarn, bun)
@@ -207,7 +209,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/hpehl/depup/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/hpehl/depup/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/hpehl/depup/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/hpehl/depup/compare/v1.1.6...v1.2.0

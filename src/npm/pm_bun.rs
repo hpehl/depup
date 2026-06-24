@@ -54,7 +54,6 @@ impl PackageManagerResolver for Bun {
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>> {
         super::outdated_json("bun", &["outdated", "--format", "json"], dir).await
     }
-
 }
 
 async fn get_installed_version(dir: &Path, package: &str) -> Option<String> {

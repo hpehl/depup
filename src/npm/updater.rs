@@ -32,7 +32,10 @@ pub async fn update_project(
             })
             .collect();
 
-        let result = project.package_manager.update(&project.path, &packages).await;
+        let result = project
+            .package_manager
+            .update(&project.path, &packages)
+            .await;
 
         match result {
             Ok(()) => {

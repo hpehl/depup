@@ -56,7 +56,6 @@ impl PackageManagerResolver for Npm {
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>> {
         super::outdated_json("npm", &["outdated", "--json"], dir).await
     }
-
 }
 
 #[cfg(test)]

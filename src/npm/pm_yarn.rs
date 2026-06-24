@@ -127,7 +127,6 @@ impl PackageManagerResolver for Yarn {
         }
         Ok(result)
     }
-
 }
 
 /// Parse "package@version" from yarn list tree entries
