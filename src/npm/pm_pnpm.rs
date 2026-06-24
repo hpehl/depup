@@ -60,9 +60,6 @@ impl PackageManagerResolver for Pnpm {
         super::outdated_json("pnpm", &["outdated", "--format", "json"], dir).await
     }
 
-    async fn update_packages(&self, dir: &Path) -> Result<String> {
-        super::run_pm_command("pnpm", &["update"], dir).await
-    }
 }
 
 #[cfg(test)]

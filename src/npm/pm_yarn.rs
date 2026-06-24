@@ -128,9 +128,6 @@ impl PackageManagerResolver for Yarn {
         Ok(result)
     }
 
-    async fn update_packages(&self, dir: &Path) -> Result<String> {
-        super::run_pm_command("yarn", &["upgrade"], dir).await
-    }
 }
 
 /// Parse "package@version" from yarn list tree entries

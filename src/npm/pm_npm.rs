@@ -57,9 +57,6 @@ impl PackageManagerResolver for Npm {
         super::outdated_json("npm", &["outdated", "--json"], dir).await
     }
 
-    async fn update_packages(&self, dir: &Path) -> Result<String> {
-        super::run_pm_command("npm", &["update"], dir).await
-    }
 }
 
 #[cfg(test)]

@@ -21,12 +21,21 @@ pub async fn update_project(
 
     let mut results = Vec::new();
 
-    // Update regular package dependencies via the PM's native update command
+    // Update regular package dependencies via targeted installs
     if !package_deps.is_empty() {
-        let result = project.package_manager.update(&project.path).await;
+        let packages: Vec<(&str, &str, bool)> = package_deps
+            .iter()
+            .filter_map(|r| {
+                let version = r.latest_version()?;
+                let is_dev = r.kind() == DependencyKind::NpmDevDep;
+                Some((r.artifact(), version, is_dev))
+            })
+            .collect();
+
+        let result = project.package_manager.update(&project.path, &packages).await;
 
         match result {
-            Ok(_) => {
+            Ok(()) => {
                 results.extend(package_deps.iter().map(|r| {
                     UpdateResult::updated(r, r.latest_version().unwrap_or("").to_string())
                 }))

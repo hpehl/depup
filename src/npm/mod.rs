@@ -71,14 +71,36 @@ impl PackageManager {
         }
     }
 
-    /// Runs the PM's native update command.
-    pub(crate) async fn update(self, dir: &Path) -> Result<String> {
+    /// Returns the subcommand used to add/install packages.
+    fn add_command(self) -> &'static str {
         match self {
-            Self::Npm => pm_npm::Npm.update_packages(dir).await,
-            Self::Pnpm => pm_pnpm::Pnpm.update_packages(dir).await,
-            Self::Yarn => pm_yarn::Yarn.update_packages(dir).await,
-            Self::Bun => pm_bun::Bun.update_packages(dir).await,
+            Self::Npm => "install",
+            Self::Pnpm | Self::Yarn | Self::Bun => "add",
         }
+    }
+
+    /// Installs specific packages at exact versions, updating `package.json`.
+    /// Splits into two batches: prod deps and dev deps (with `-D` flag).
+    pub(crate) async fn update(
+        self,
+        dir: &Path,
+        packages: &[(&str, &str, bool)],
+    ) -> Result<()> {
+        let (dev, prod): (Vec<_>, Vec<_>) = packages.iter().partition(|(_, _, is_dev)| *is_dev);
+
+        if !prod.is_empty() {
+            let specs: Vec<String> = prod.iter().map(|(n, v, _)| format!("{n}@{v}")).collect();
+            let mut args: Vec<&str> = vec![self.add_command()];
+            args.extend(specs.iter().map(|s| s.as_str()));
+            run_pm_command(self.command(), &args, dir).await?;
+        }
+        if !dev.is_empty() {
+            let specs: Vec<String> = dev.iter().map(|(n, v, _)| format!("{n}@{v}")).collect();
+            let mut args: Vec<&str> = vec![self.add_command(), "-D"];
+            args.extend(specs.iter().map(|s| s.as_str()));
+            run_pm_command(self.command(), &args, dir).await?;
+        }
+        Ok(())
     }
 }
 
@@ -113,8 +135,6 @@ pub trait PackageManagerResolver {
     async fn list_packages(&self, dir: &Path) -> Result<Vec<InstalledPackage>>;
     /// Queries for outdated packages, returning a map of package name to outdated info.
     async fn outdated_packages(&self, dir: &Path) -> Result<HashMap<String, OutdatedEntry>>;
-    /// Runs the package manager's native update command, returning stdout.
-    async fn update_packages(&self, dir: &Path) -> Result<String>;
 }
 
 /// Runs a PM's `outdated` command and parses the JSON result into an `OutdatedEntry` map.

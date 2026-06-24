@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix npm update silently skipping cross-major version bumps — replace blanket `<pm> update` commands with targeted `<pm> add <pkg>@<version>` installs that rewrite `package.json` ranges correctly for all four package managers (npm, pnpm, yarn, bun)
+
 ## [1.3.0] - 2026-06-23
 
 ### Added
