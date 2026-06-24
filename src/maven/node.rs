@@ -109,6 +109,11 @@ impl NodeResolver {
 
         let current_normalized = current.strip_prefix('v').unwrap_or(&current);
         let is_outdated = version::is_newer(current_normalized, &latest);
+        let latest = if current.starts_with('v') {
+            format!("v{latest}")
+        } else {
+            latest
+        };
         Ok(CheckResult::checked(id, current, latest, is_outdated))
     }
 }

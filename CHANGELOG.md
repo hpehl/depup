@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve `v` prefix on Node.js versions when updating POM properties — previously `v22.4.0` would be updated to `22.5.0`, now correctly updates to `v22.5.0`
+
 ## [1.3.1] - 2026-06-24
 
 ### Fixed
