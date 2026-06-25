@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix empty current version in npm check results when `pnpm outdated` omits the `current` field — fall back to the installed version from `pnpm list` so PR tables always show the current version
+
 ## [1.3.2] - 2026-06-24
 
 ### Fixed

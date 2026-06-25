@@ -55,8 +55,13 @@ fn merge_results(
                 source.to_string(),
             );
             if let Some(entry) = outdated.get(&id.artifact) {
-                let is_outdated = version::is_newer(&entry.current, &entry.latest);
-                CheckResult::checked(id, entry.current.clone(), entry.latest.clone(), is_outdated)
+                let current = if entry.current.is_empty() {
+                    &pkg.version
+                } else {
+                    &entry.current
+                };
+                let is_outdated = version::is_newer(current, &entry.latest);
+                CheckResult::checked(id, current.clone(), entry.latest.clone(), is_outdated)
             } else {
                 CheckResult::checked(id, pkg.version.clone(), pkg.version, false)
             }
@@ -118,6 +123,29 @@ mod tests {
 
         let results = merge_results(installed, &outdated, "package.json");
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn outdated_with_empty_current_falls_back_to_installed_version() {
+        let installed = vec![make_installed("react", "18.0.0", false)];
+        let mut outdated = HashMap::new();
+        outdated.insert(
+            "react".to_string(),
+            super::super::OutdatedEntry {
+                current: String::new(),
+                latest: "19.0.0".into(),
+            },
+        );
+
+        let results = merge_results(installed, &outdated, "package.json");
+        assert_eq!(results.len(), 1);
+
+        let react = &results[0];
+        assert_eq!(react.current_version, "18.0.0");
+        assert!(react.is_outdated());
+        if let CheckStatus::Outdated { latest } = &react.status {
+            assert_eq!(latest, "19.0.0");
+        }
     }
 
     #[test]
