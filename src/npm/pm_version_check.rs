@@ -58,8 +58,9 @@ pub fn update_pm_version(project_path: &Path, pm_name: &str, new_version: &str) 
     let content = std::fs::read_to_string(&pkg_path)?;
 
     let new_value = format!("{pm_name}@{new_version}");
-    let updated = replace_pm_value(&content, &new_value)
-        .ok_or_else(|| anyhow::anyhow!("packageManager field not found in {}", pkg_path.display()))?;
+    let updated = replace_pm_value(&content, &new_value).ok_or_else(|| {
+        anyhow::anyhow!("packageManager field not found in {}", pkg_path.display())
+    })?;
 
     std::fs::write(&pkg_path, updated)?;
     Ok(())

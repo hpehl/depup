@@ -85,7 +85,12 @@ pub async fn update_project(
 
 /// Runs `<pm> install` to regenerate the lockfile after a packageManager version change.
 async fn regenerate_lockfile(project: &NpmProject) -> Result<()> {
-    run_pm_command(project.package_manager.command(), &["install"], &project.path).await?;
+    run_pm_command(
+        project.package_manager.command(),
+        &["install"],
+        &project.path,
+    )
+    .await?;
     Ok(())
 }
 

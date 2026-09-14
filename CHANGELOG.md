@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-09-14
+
 ### Fixed
 
 - Fix `packageManager` update reordering keys in `package.json` — replace JSON parse-modify-serialize with string-level replacement that preserves original key order and formatting
@@ -226,7 +228,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured error types with machine-parseable error codes and JSON error envelope
 - Exit code 1 when outdated dependencies are found
 
-[Unreleased]: https://github.com/hpehl/depup/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/hpehl/depup/compare/v1.3.4...HEAD
+[1.3.4]: https://github.com/hpehl/depup/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/hpehl/depup/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/hpehl/depup/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/hpehl/depup/compare/v1.3.0...v1.3.1
