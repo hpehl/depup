@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `packageManager` update reordering keys in `package.json` — replace JSON parse-modify-serialize with string-level replacement that preserves original key order and formatting
+- Regenerate lockfile after updating the `packageManager` field in `package.json` — run `<pm> install` to keep the lockfile in sync and prevent CI failures from stale lockfiles
+
 ## [1.3.3] - 2026-06-25
 
 ### Fixed
