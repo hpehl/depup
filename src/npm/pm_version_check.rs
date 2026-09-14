@@ -52,19 +52,40 @@ async fn fetch_and_check(pm_name: &str, current: &str, source: &str) -> CheckRes
 }
 
 /// Rewrites the `packageManager` field in `package.json` to use the new version.
-/// Preserves the `name@` prefix and any existing formatting.
+/// Uses string-level replacement to preserve key order and formatting.
 pub fn update_pm_version(project_path: &Path, pm_name: &str, new_version: &str) -> Result<()> {
     let pkg_path = project_path.join("package.json");
     let content = std::fs::read_to_string(&pkg_path)?;
-    let mut pkg: serde_json::Value = serde_json::from_str(&content)?;
 
-    if let Some(field) = pkg.get_mut("packageManager") {
-        *field = serde_json::Value::String(format!("{pm_name}@{new_version}"));
-    }
+    let new_value = format!("{pm_name}@{new_version}");
+    let updated = replace_pm_value(&content, &new_value)
+        .ok_or_else(|| anyhow::anyhow!("packageManager field not found in {}", pkg_path.display()))?;
 
-    let output = serde_json::to_string_pretty(&pkg)? + "\n";
-    std::fs::write(&pkg_path, output)?;
+    std::fs::write(&pkg_path, updated)?;
     Ok(())
+}
+
+/// Replaces the value of the `"packageManager"` field in raw JSON content,
+/// preserving all other formatting, key order, and whitespace.
+fn replace_pm_value(content: &str, new_value: &str) -> Option<String> {
+    let key = "\"packageManager\"";
+    let key_pos = content.find(key)?;
+    let after_key = key_pos + key.len();
+
+    let colon_offset = content[after_key..].find(':')?;
+    let after_colon = after_key + colon_offset + 1;
+
+    let quote_start_offset = content[after_colon..].find('"')?;
+    let value_start = after_colon + quote_start_offset + 1;
+
+    let quote_end_offset = content[value_start..].find('"')?;
+    let value_end = value_start + quote_end_offset;
+
+    let mut result = String::with_capacity(content.len());
+    result.push_str(&content[..value_start]);
+    result.push_str(new_value);
+    result.push_str(&content[value_end..]);
+    Some(result)
 }
 
 #[cfg(test)]
@@ -124,9 +145,69 @@ mod tests {
     }
 
     #[test]
+    fn update_pm_version_preserves_key_order() {
+        let tmp = TempDir::new().unwrap();
+        let original = r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "dependencies": {
+    "react": "^18.0.0"
+  }
+}
+"#;
+        fs::write(tmp.path().join("package.json"), original).unwrap();
+
+        update_pm_version(tmp.path(), "pnpm", "10.0.0").unwrap();
+
+        let content = fs::read_to_string(tmp.path().join("package.json")).unwrap();
+        let expected = original.replace("pnpm@9.15.0", "pnpm@10.0.0");
+        assert_eq!(content, expected);
+    }
+
+    #[test]
     fn update_pm_version_missing_file_errors() {
         let tmp = TempDir::new().unwrap();
         let result = update_pm_version(tmp.path(), "pnpm", "10.0.0");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn replace_pm_value_basic() {
+        let input = r#"{"packageManager": "pnpm@9.0.0"}"#;
+        let result = replace_pm_value(input, "pnpm@10.0.0").unwrap();
+        assert_eq!(result, r#"{"packageManager": "pnpm@10.0.0"}"#);
+    }
+
+    #[test]
+    fn replace_pm_value_with_hash_suffix() {
+        let input = r#"{"packageManager": "pnpm@9.0.0+sha512.abc"}"#;
+        let result = replace_pm_value(input, "pnpm@10.0.0").unwrap();
+        assert_eq!(result, r#"{"packageManager": "pnpm@10.0.0"}"#);
+    }
+
+    #[test]
+    fn replace_pm_value_preserves_surrounding_content() {
+        let input = r#"{
+  "name": "test",
+  "packageManager": "npm@9.0.0",
+  "version": "1.0.0"
+}"#;
+        let expected = r#"{
+  "name": "test",
+  "packageManager": "npm@10.0.0",
+  "version": "1.0.0"
+}"#;
+        let result = replace_pm_value(input, "npm@10.0.0").unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn replace_pm_value_not_found() {
+        let input = r#"{"name": "test"}"#;
+        assert!(replace_pm_value(input, "npm@10.0.0").is_none());
     }
 }

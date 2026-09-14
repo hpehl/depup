@@ -4,8 +4,11 @@
 
 use std::path::Path;
 
+use anyhow::Result;
+
 use super::discovery::NpmProject;
 use super::pm_version_check;
+use super::run_pm_command;
 use crate::model::{CheckResult, CommandResult, DependencyKind, UpdateResult};
 
 /// Runs the native update command for a single npm project and maps the
@@ -51,7 +54,7 @@ pub async fn update_project(
         }
     }
 
-    // Update the packageManager field in package.json
+    // Update the packageManager field in package.json and regenerate lockfile
     for r in &tool_versions {
         let new_version = r.latest_version().unwrap_or("");
         if new_version.is_empty() {
@@ -63,12 +66,27 @@ pub async fn update_project(
             project.package_manager.command(),
             new_version,
         ) {
-            Ok(()) => results.push(UpdateResult::updated(r, new_version.to_string())),
+            Ok(()) => {
+                if let Err(e) = regenerate_lockfile(project).await {
+                    results.push(UpdateResult::error(
+                        r,
+                        format!("Updated package.json but lockfile regeneration failed: {e}"),
+                    ));
+                } else {
+                    results.push(UpdateResult::updated(r, new_version.to_string()));
+                }
+            }
             Err(e) => results.push(UpdateResult::error(r, e.to_string())),
         }
     }
 
     results
+}
+
+/// Runs `<pm> install` to regenerate the lockfile after a packageManager version change.
+async fn regenerate_lockfile(project: &NpmProject) -> Result<()> {
+    run_pm_command(project.package_manager.command(), &["install"], &project.path).await?;
+    Ok(())
 }
 
 #[cfg(test)]
